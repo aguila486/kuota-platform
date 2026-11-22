@@ -26,3 +26,20 @@ no es una firma: identifica el contenido aprobado mediante los identificadores d
 - **Alcance de implementación autorizado:** **solo el Grupo G1 (T001–T011)**. G2 (T012–T013), G3 (spike T014/T015)
   y las tareas posteriores requieren una autorización expresa nueva. La elección Prisma/Kysely no está aprobada
   (ADR-0004, D-ARC-01).
+
+## Enmienda 1 — 2026-11-22: alcance de T012, T014 y T015
+
+- **Quién:** responsable del proyecto, mediante mensaje explícito en la sesión de trabajo: "Autorizo corregir el alcance
+  documental de T012 y T014".
+- **Motivo:** la migración SQL de G2 se implementó neutral respecto al ORM por instrucción del responsable; crear
+  `schema.prisma` en T012 habría adelantado la elección Prisma/Kysely (D-ARC-01), que depende del spike.
+- **Cambio (IDs conservados; requisitos funcionales sin cambios):**
+  - T012: crear y verificar la migración SQL inicial, neutral al ORM y **referencia canónica** del esquema inicial
+    hasta que una decisión formal determine otra estrategia.
+  - T014: crear `schema.prisma`, `prisma.config.ts`, `migration_lock.toml` y el cliente Prisma del spike, y ejecutar el
+    spike S1–S8.
+  - T015: evaluar los resultados y obtener la aprobación humana de Prisma o Kysely.
+- **Versión vigente de `tasks.md`:** blob `176eb1bd7f5bb5dd746ad1064b2cd733b38f614b` (incluye la casilla de T012 marcada tras verificar la
+  migración: 24 pruebas de G2 + 5 de soporte en verde; `migration.sql` idéntica a la del commit `054c24e`).
+- **Alcance de implementación autorizado:** G1 (T001–T011), G2 (T012–T013) y **T014**. T015 queda como punto de
+  aprobación humana; G4 y posteriores no están autorizados.

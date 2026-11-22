@@ -1,0 +1,334 @@
+---
+
+description: "Task list for 001-platform-foundation"
+---
+
+# Tasks: Platform Foundation
+
+**Input**: Design documents from `/specs/001-platform-foundation/`
+
+**Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/, quickstart.md
+
+**Tests**: OBLIGATORIAS. La Constitución (X. Test-Driven Validation) exige que las pruebas se escriban antes o junto con
+la implementación y fallen primero. En cada historia, las tareas de prueba preceden a las de implementación.
+
+**Organization**: Tareas agrupadas por historia de usuario (spec.md) para implementación y verificación independientes.
+
+**Gate de implementación**: `/speckit-implement` NO se ejecuta sin aprobación humana explícita (Constitución I).
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: Paralelizable (archivos distintos, sin dependencias de tareas incompletas)
+- **[Story]**: Historia de usuario (US1..US7)
+- Rutas relativas a la raíz del repositorio `kuota-platform/`
+
+---
+
+## Phase 1: Setup (Shared Infrastructure)
+
+**Purpose**: Toolchains fijados, workspace raíz y entorno local base (research R-01, R-17, R-18, R-19)
+
+- [ ] T001 Crear `.nvmrc` (Node 26) y `package.json` raíz con `"packageManager": "pnpm@12.x"` fijado, `engines` y scripts agregadores vacíos en `package.json`
+- [ ] T002 Crear `pnpm-workspace.yaml` con el paquete `backend` (sin Nx/Turborepo, ADR-0002) en `pnpm-workspace.yaml`
+- [ ] T003 [P] Crear `.env.example` con todas las variables requeridas, valores ficticios y descripción (`KUOTA_ENV`, `KUOTA_DEV_TENANT_CONTEXT`, `DATABASE_URL_APP`, `DATABASE_URL_MIGRATOR`, `LOG_LEVEL`, `API_VERSION`, `MIN_SUPPORTED_ADMIN/COLLECTOR/CLIENT`) en `.env.example`
+- [ ] T004 [P] Crear `infra/docker/compose.yaml` con `postgres:18` fijado por digest, volumen nombrado y healthcheck `pg_isready` (R-18) en `infra/docker/compose.yaml`
+- [ ] T005 [P] Crear script de roles `kuota_migrator`, `kuota_app` (NOLOGIN, NOBYPASSRLS) y `kuota_app_login`, y la base `kuota_test`, según data-model.md (Roles de base de datos) en `infra/docker/postgres/init/01-roles.sql`
+- [ ] T006 [P] Crear `scripts/dev/doctor.sh`, que verifica Node 26, pnpm 12, Docker, FVM ≥ 3.2 y la versión de Flutter de `.fvmrc`, y falla indicando la versión requerida (US1-4, FR-003), en `scripts/dev/doctor.sh`
+- [ ] T007 Inicializar el backend NestJS 12 con builder SWC, TypeScript 7 en modo `strict` solo para typecheck (R-02) y scripts `dev/build/typecheck/lint/test` en `backend/package.json`, `backend/nest-cli.json` y `backend/tsconfig.json`
+- [ ] T008 [P] Configurar Vitest 5 con `unplugin-swc`, cobertura v8 y umbrales por glob (`src/common/money/**` y `**/domain/**` ≥ 90 %, resto ≥ 80 %, Constitución X) en `backend/vitest.config.ts`
+- [ ] T009 [P] Configurar ESLint (`typescript-eslint`) y Prettier, incluida la regla que prohíbe usar el cliente Prisma fuera de `src/common/tenant-context/` (R-04), en `backend/eslint.config.mjs`
+- [ ] T010 [P] Configurar dependency-cruiser: `domain/` no importa `@nestjs/*`, `@prisma/*`, `pg`, `express`, `infrastructure/` ni `interface/`; los módulos solo importan el `index.ts` público de otros (R-11). En `backend/.dependency-cruiser.cjs`
+- [ ] T011 [P] Configurar Testcontainers (`@testcontainers/postgresql` con `postgres:18`), que aplica roles y migraciones y entrega URLs para `kuota_app_login` y `kuota_migrator`, en `backend/test/support/postgres.ts`
+
+**Checkpoint**: se cumplen `pnpm install`, `pnpm --filter backend typecheck` y `scripts/dev/doctor.sh`. Si TypeScript 7 falla con NestJS 12, se fija la 6.x y se registra en research.md (R-02).
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: Spike RLS (decide D-ARC-01), esquema base, configuración, logging, errores y contrato base
+
+**⚠️ CRITICAL**: Ninguna historia empieza antes de terminar esta fase. Si el spike T014 falla, se DETIENE la feature y se activa el fallback de R-04 (Kysely) con ADR-0004 actualizado antes de continuar.
+
+- [ ] T012 Crear `schema.prisma` (esquema `kuota`, generador con `@prisma/adapter-pg`) y la migración inicial SQL: esquema `kuota`, tablas `dev_probe_items`, `idempotency_keys` y `audit_events` según data-model.md (`dev_probe_items.*`, `idempotency_keys.*`, `audit_events.*`), con `ENABLE` y `FORCE ROW LEVEL SECURITY` y la política estándar de data-model.md. Archivos: `backend/prisma/schema.prisma` y `backend/prisma/migrations/0001_foundation/migration.sql`
+- [ ] T013 Añadir a la misma migración los grants de data-model.md (Roles de base de datos): `kuota_app` con DML en `dev_probe_items`/`idempotency_keys` y solo `SELECT`/`INSERT` en `audit_events`, más el trigger `BEFORE UPDATE OR DELETE` que lanza excepción en `audit_events` (R-07). En `backend/prisma/migrations/0001_foundation/migration.sql`
+- [ ] T014 Implementar el spike RLS con Prisma 7 + `adapter-pg` que evalúa los criterios 1–5 de research R-04 (sin contexto → 0 filas; ≥ 50 solicitudes concurrentes de 2 tenants con pool de 2–5 → 0 cruces; `kuota_app` sin `UPDATE`/`DELETE` en auditoría ni DDL; latencia medida; migraciones con `kuota_migrator`) e imprime PASS/FAIL, en `backend/scripts/spike-rls.ts`
+- [ ] T015 Registrar el resultado del spike (criterios, cifras de latencia, decisión aprobada o fallback) en la sección "Resultado del spike" de `docs/decisions/ADR-0004-database-orm.md` y en `specs/001-platform-foundation/research.md` (R-04). Requiere aprobación humana de D-ARC-01
+- [ ] T016 [P] Implementar el módulo de configuración con validación de variables de entorno y el guard de arranque que aborta si `KUOTA_DEV_TENANT_CONTEXT=enabled` con `KUOTA_ENV ∈ {staging, production}` (R-05), en `backend/src/common/config/`
+- [ ] T017 [P] Escribir la prueba de configuración: el arranque falla con `KUOTA_ENV=production` y dev-tenant habilitado, y es válido con `local`/`testing`, en `backend/test/unit/config/dev-tenant-guard.spec.ts`
+- [ ] T018 [P] Escribir la prueba de redacción de logs: emite teléfono, correo, token, OTP, identificador fiscal y encabezado `authorization` conocidos y verifica que no aparecen en la salida (FR-010, SC-009), en `backend/test/unit/logging/redaction.spec.ts`
+- [ ] T019 Implementar el logging con nestjs-pino: JSON, `correlation_id` desde `X-Correlation-Id` (UUID validado) o UUIDv7 generado, módulo, nivel, tenant y actor desde CLS, `redact.paths` y serializador de patrones (R-15). En `backend/src/common/logging/`
+- [ ] T020 [P] Escribir la prueba del filtro de errores: toda excepción produce `application/problem+json` con `type`, `title`, `status`, `code` y `correlation_id`, sin stack ni datos sensibles (FR-011), en `backend/test/unit/errors/problem-filter.spec.ts`
+- [ ] T021 Implementar el filtro global problem+json (RFC 9457) con los códigos estables del contrato (`Problem.code`), en `backend/src/common/errors/`
+- [ ] T022 Materializar el contrato fuente multiarchivo a partir de `specs/001-platform-foundation/contracts/kuota-core.v1.openapi.yaml`, separando `paths/`, `schemas/`, `parameters/` y `responses/`, en `contracts/openapi/kuota-core.v1.yaml`
+- [ ] T023 [P] Configurar Redocly 2 (preset recommended, excepciones justificadas para health 4xx y servidor localhost) con las reglas propias de R-13: `Idempotency-Key` requerido si `x-kuota-idempotent`, errores `application/problem+json` y montos vía `$ref Money`. En `contracts/openapi/redocly.yaml`
+- [ ] T024 [P] Crear los scripts raíz `contracts:lint`, `contracts:bundle` y `contracts:breaking` (oasdiff 1.39 fijado, contra el bundle de `main`) en `package.json` y `scripts/contracts/breaking.sh`
+- [ ] T025 Crear `AppModule` con el registro condicional de módulos (`dev-probe` solo en `local`/`testing`) y el bootstrap con prefijo de versión `/v1` para rutas versionadas, en `backend/src/app.module.ts` y `backend/src/main.ts`
+
+**Checkpoint**: el spike está en PASS y aprobado, se cumple `pnpm contracts:lint` y las pruebas T017, T018 y T020 pasan.
+
+---
+
+## Phase 3: User Story 1 - Entorno local reproducible y ejecutable (Priority: P1) 🎯 MVP
+
+**Goal**: Un comando levanta el almacén de datos y el servicio central. Los chequeos de vida y disponibilidad responden, la compatibilidad está disponible y un comando corre todas las pruebas.
+
+**Independent Test**: Desde un clon limpio, seguir quickstart.md §1–2. `/health/ready` devuelve `ok`; con la base detenida devuelve 503 mientras `/health/live` sigue en 200; `test-all.sh` termina en verde.
+
+### Tests for User Story 1 ⚠️
+
+- [ ] T026 [P] [US1] Escribir la prueba de integración de health: `live` 200; `ready` 200 con la BD arriba y 503 con `checks.database.status=down` con la BD detenida (US1-1, US1-2), en `backend/test/integration/health.spec.ts`
+- [ ] T027 [P] [US1] Escribir la prueba de integración de compatibilidad: devuelve `CompatibilityInfo` desde la configuración, `client_supported` según `X-App-Version` y 400 problem si el formato del encabezado es inválido, en `backend/test/integration/meta-compatibility.spec.ts`
+
+### Implementation for User Story 1
+
+- [ ] T028 [P] [US1] Implementar el módulo health con `@nestjs/terminus` (`/health/live`, `/health/ready` con indicador PostgreSQL usando `kuota_app_login`) en `backend/src/modules/health/`
+- [ ] T029 [P] [US1] Implementar el módulo meta con `GET /v1/meta/compatibility` (versión de API y mínimas por app desde config, `server_time`, parseo de `X-App-Version`) en `backend/src/modules/meta/`
+- [ ] T030 [US1] Crear `scripts/dev/up.sh` (doctor → compose up → espera de salud de la BD → migraciones con `kuota_migrator` → `pnpm --filter backend dev` → espera de `/health/ready`) y `scripts/dev/down.sh`, con mensajes accionables si el puerto está ocupado o falla la migración (Edge Cases), en `scripts/dev/`
+- [ ] T031 [P] [US1] Crear `Makefile` con los objetivos `up`, `down`, `test`, `test-affected` y `doctor`, que delegan en `scripts/dev/*`, en `Makefile`
+- [ ] T032 [US1] Crear `scripts/dev/test-all.sh` (backend + contratos + Flutter si existe `flutter/`) y `scripts/dev/test-affected.sh <base>`, que detecta componentes con `git diff --name-only` usando los mismos filtros que CI (FR-002), en `scripts/dev/`
+- [ ] T033 [US1] Añadir la guía de inicio para desarrolladores (prerrequisitos, `cp .env.example .env`, `make up`, verificación) al `README.md`, enlazando `specs/001-platform-foundation/quickstart.md`
+
+**Checkpoint**: quickstart.md §1–2 pasa en un clon limpio.
+
+---
+
+## Phase 4: User Story 2 - Aislamiento entre empresas demostrable y reutilizable (Priority: P1)
+
+**Goal**: El contexto de tenant por operación, el RLS forzado verificado automáticamente y una suite reutilizable de acceso cruzado sobre `dev_probe_items`.
+
+**Independent Test**: quickstart.md §3: `test:tenancy` y `db:check-rls` en verde; consultas cruzadas devuelven 404; una consulta sin contexto devuelve 0 filas.
+
+### Tests for User Story 2 ⚠️
+
+- [ ] T034 [P] [US2] Crear el helper reutilizable `describeTenantIsolation(resource)`, que genera casos de lectura por id → 404, listado sin elementos ajenos, update/delete cruzados → 404 sin efecto, body con otro `tenant_id` rechazado o ignorado, y ≥ 50 solicitudes intercaladas de 2 tenants (US2-1, US2-3, US2-6; FR-016), en `backend/test/tenancy/describe-tenant-isolation.ts`
+- [ ] T035 [P] [US2] Escribir la prueba de base de datos: con `kuota_app_login`, una consulta sin `set_config` devuelve 0 filas en cada tabla de tenant; `kuota_app` no es owner ni tiene `BYPASSRLS` y no puede hacer DDL (US2-2, US2-5; FR-013, FR-014), en `backend/test/integration/rls-database.spec.ts`
+- [ ] T036 [P] [US2] Escribir la prueba del verificador de catálogo: crea en un esquema temporal una tabla con `tenant_id` sin `FORCE` y verifica que `check-rls` falla nombrándola (US2-4), en `backend/test/integration/check-rls.spec.ts`
+- [ ] T037 [US2] Aplicar `describeTenantIsolation` a `dev_probe_items` (create/get/list/patch/delete del contrato) en `backend/test/tenancy/dev-probe.tenancy.spec.ts`
+
+### Implementation for User Story 2
+
+- [ ] T038 [US2] Implementar `TenantContext` sobre nestjs-cls (`tenantId`, `actorId`, `actorType`, `correlationId`) y `DevTenantGuard`, que lee `X-Kuota-Dev-Tenant`/`X-Kuota-Dev-Actor` solo cuando la configuración lo permite (R-05) y responde 401 `tenant-context-required` si falta, en `backend/src/common/tenant-context/`
+- [ ] T039 [US2] Implementar `TenantPrismaService.withTenant(fn)`: transacción interactiva con `set_config('app.tenant_id'|'app.actor_id'|'app.correlation_id', …, true)` como primera sentencia, siguiendo el patrón aprobado en T015, en `backend/src/common/tenant-context/tenant-prisma.service.ts`
+- [ ] T040 [P] [US2] Implementar el dominio de `dev-probe`: entidad `DevProbeItem` con las validaciones de data-model.md (`dev_probe_items.label`, `dev_probe_items.sample_amount_minor`/`dev_probe_items.sample_currency` con consistencia monto↔moneda, `dev_probe_items.version`) sin dependencias de framework, en `backend/src/modules/dev-probe/domain/`
+- [ ] T041 [US2] Implementar el repositorio Prisma de `dev-probe` vía `withTenant` (`dev_probe_items.tenant_id` tomado del contexto, nunca del body; FR-012), con paginación por cursor y bloqueo optimista por `dev_probe_items.version`, en `backend/src/modules/dev-probe/infrastructure/`
+- [ ] T042 [US2] Implementar los casos de uso y el controlador de `dev-probe` (`createDevProbeItem`, `listDevProbeItems`, `getDevProbeItem`, `updateDevProbeItem`, `deleteDevProbeItem`) conforme al contrato, con 404 para recursos de otros tenants y 409 `version-conflict`, en `backend/src/modules/dev-probe/application/` y `backend/src/modules/dev-probe/interface/`
+- [ ] T043 [US2] Implementar el verificador de catálogo `db:check-rls`, que falla si hay tablas del esquema `kuota` con `tenant_id` sin `relrowsecurity`, sin `relforcerowsecurity` o sin políticas, con una lista blanca vacía (data-model.md, Verificación automática de RLS), en `backend/scripts/check-rls.ts` y el script `db:check-rls` de `backend/package.json`
+- [ ] T044 [US2] Añadir el script `test:tenancy` y documentar en `docs/security/multi-tenant-isolation.md` cómo una feature futura aplica `describeTenantIsolation` a sus recursos, en `backend/package.json` y `docs/security/multi-tenant-isolation.md`
+
+**Checkpoint**: quickstart.md §3 pasa y SC-002 se cumple.
+
+---
+
+## Phase 5: User Story 3 - Quality gates automáticos en cada Pull Request (Priority: P1)
+
+**Goal**: CI por componente afectado con gates bloqueantes, ejecutable localmente con los mismos scripts, sin publicar en remoto.
+
+**Independent Test**: quickstart.md §8. `scripts/ci/run-local.sh <job>` reproduce cada job y `actionlint` valida los workflows. La prueba de los 6 gates defectuosos se cierra en la Polish phase (T087), cuando existan los gates de US4 y US5.
+
+### Tests for User Story 3 ⚠️
+
+- [ ] T045 [P] [US3] Escribir la prueba del detector de componentes afectados: un cambio solo en `docs/` → solo `general`; `backend/**` → `general` + `backend`; `contracts/**` → `general` + `contracts` + `backend` + `flutter` (US3-1..3), en `scripts/ci/tests/affected.test.sh`
+- [ ] T046 [P] [US3] Escribir la prueba del gate de secretos: un archivo con un secreto ficticio de patrón conocido hace fallar `scripts/ci/general.sh` (US3-4), en `scripts/ci/tests/secrets.test.sh`
+
+### Implementation for User Story 3
+
+- [ ] T047 [US3] Implementar `scripts/ci/general.sh`: gitleaks 8.30 sobre el diff y el historial, editorconfig-checker, validación del nombre de rama (`feature/NNN-*` ↔ `specs/NNN-*` existente, `fix/`, `hotfix/`, `chore/`, `docs/`) y actionlint, en `scripts/ci/general.sh`
+- [ ] T048 [P] [US3] Implementar `scripts/ci/backend.sh`: install con lockfile, lint, typecheck, dependency-cruiser, pruebas unitarias, de integración (Testcontainers), de tenancy y de contrato, cobertura con umbrales, `db:check-rls` y `osv-scanner` sobre `pnpm-lock.yaml` (FR-035), en `scripts/ci/backend.sh`
+- [ ] T049 [P] [US3] Implementar `scripts/ci/contracts.sh`: lint de Redocly, oasdiff breaking contra `main`, validación de los fixtures contra `contracts/fixtures/money/fixture.schema.json` y verificación de que el cliente Dart regenerado no tiene diff, en `scripts/ci/contracts.sh`
+- [ ] T050 [P] [US3] Implementar `scripts/ci/flutter.sh`: `fvm flutter pub get`, `melos run analyze`, `melos run test`, `tool/check_deps.dart`, `check-no-float-dart.sh`, `osv-scanner` sobre `pubspec.lock`, y build de Android y Web (iOS excluido de CI por la Clarification 2026-11-22), en `scripts/ci/flutter.sh`
+- [ ] T051 [US3] Implementar `scripts/ci/run-local.sh <general|backend|contracts|flutter|affected>`, que ejecuta los mismos scripts que CI, en `scripts/ci/run-local.sh`
+- [ ] T052 [US3] Crear el workflow con `dorny/paths-filter` y los jobs `general`, `backend` (servicio Docker para Testcontainers), `contracts` y `flutter` (FVM, Android y Web), que solo invocan `scripts/ci/*.sh`, con acciones fijadas por SHA, permisos mínimos (`contents: read`) y concurrencia por rama (FR-034, FR-037), en `.github/workflows/ci.yml`
+- [ ] T053 [P] [US3] Crear `.github/CODEOWNERS` con el placeholder `<maintainer-handle>`, secciones por área (backend, `common/tenant-context`, `common/money`, migraciones, contracts, Flutter packages, infra, `.specify/memory`) y comentarios para añadir un segundo dueño (R-20, FR-036), en `.github/CODEOWNERS`
+- [ ] T054 [US3] Actualizar `.github/pull_request_template.md` con la regla de mantenedor único de la Constitución v1.1.0 y la referencia obligatoria a `T###`, en `.github/pull_request_template.md`
+- [ ] T055 [US3] Documentar, listas para aplicar al publicar el remoto, las reglas de protección de `main` (checks requeridos por nombre de job, revisión, sin force-push, historial lineal) y la excepción de mantenedor único (FR-038), en `docs/process/git-workflow.md`
+
+**Checkpoint**: `actionlint .github/workflows/ci.yml` no reporta errores, `run-local.sh general` y `run-local.sh backend` están en verde, y T045 y T046 pasan.
+
+---
+
+## Phase 6: User Story 4 - Primitiva monetaria única y exacta (Priority: P2)
+
+**Goal**: `Money` exacto con redondeo obligatorio en TypeScript y Dart, validado con fixtures compartidos, y la regla anti-float.
+
+**Independent Test**: quickstart.md §5. Los mismos fixtures pasan en ambos lados (SC-005) y la regla anti-float detecta un archivo defectuoso.
+
+### Tests for User Story 4 ⚠️
+
+- [ ] T056 [P] [US4] Crear el esquema y los fixtures de referencia: suma y resta en la misma moneda, `CURRENCY_MISMATCH`, multiplicación con cada modo de redondeo (incluidos casos .5 positivos y negativos), `ROUNDING_REQUIRED`, `allocate` en 3 partes con suma exacta, montos mayores que 2^53, `parse` con `TOO_MANY_DECIMALS` e `INVALID_AMOUNT`, y `format`. Esquema copiado de `specs/001-platform-foundation/contracts/money-fixture.schema.json`; archivos `contracts/fixtures/money/fixture.schema.json` y `contracts/fixtures/money/core.json`
+- [ ] T057 [P] [US4] Escribir el runner TypeScript de fixtures, que ejecuta cada caso de `contracts/fixtures/money/*.json`, en `backend/test/unit/money/fixtures.spec.ts`
+- [ ] T058 [P] [US4] Escribir las pruebas de propiedades con fast-check: `allocate` conserva la suma, `add`/`subtract` son inversas y `multiply` por 1 es identidad (US4-5), en `backend/test/property/money.property.spec.ts`
+- [ ] T059 [US4] Escribir el runner Dart de los mismos fixtures en `flutter/packages/financial_domain/test/money_fixtures_test.dart` (depende de T080)
+- [ ] T060 [P] [US4] Crear un archivo defectuoso de referencia para la regla anti-float (tipo `number` en un campo `amount`, `parseFloat`, `toFixed`), excluido del build, en `backend/test/fixtures/float-violation.ts.txt`
+
+### Implementation for User Story 4
+
+- [ ] T061 [US4] Implementar `Money` y `RoundingMode` en TypeScript (`bigint` en unidades mínimas, catálogo ISO 4217 con `minorUnits`, instancia `Decimal.clone({precision: 40})`, `add/subtract/multiply/allocate/parse/format`, errores tipados; data-model.md Objetos de valor) en `backend/src/common/money/`
+- [ ] T062 [US4] Implementar la serialización JSON de `Money` (`{amount_minor: string, currency}`) y su validación en la frontera (FR-022), y usarla en `dev_probe_items.sample_amount_minor`/`dev_probe_items.sample_currency` (data-model.md), en `backend/src/common/money/money.json.ts` y `backend/src/modules/dev-probe/interface/`
+- [ ] T063 [US4] Implementar `Money` y `RoundingMode` en Dart con `BigInt` y el paquete `decimal` 3.x, con la misma API y los mismos errores que la versión TypeScript, en `flutter/packages/financial_domain/lib/src/money/` (depende de T080)
+- [ ] T064 [US4] Implementar la regla anti-float de TypeScript (`no-restricted-syntax` y restricción de tipos en las rutas `src/common/money/**` y `src/**/domain/**`, R-10) en `backend/eslint.config.mjs`
+- [ ] T065 [US4] Implementar `scripts/ci/check-no-float.sh` (ejecuta ESLint sobre el archivo defectuoso y espera que falle, y el lint real que debe pasar) y `scripts/ci/check-no-float-dart.sh` (`double`/`num` prohibidos en `financial_domain/lib`), en `scripts/ci/`
+
+**Checkpoint**: quickstart.md §5 pasa y se cumple SC-005.
+
+---
+
+## Phase 7: User Story 5 - Contrato de API como fuente de verdad (Priority: P2)
+
+**Goal**: El cliente Dart se genera desde el contrato, las respuestas reales se validan contra él y los cambios incompatibles se detectan.
+
+**Independent Test**: quickstart.md §6. La regeneración no produce diff, las pruebas de contrato pasan y un cambio incompatible es detectado por oasdiff.
+
+### Tests for User Story 5 ⚠️
+
+- [ ] T066 [P] [US5] Crear el helper `expectToMatchContract(res, operationId)` con Ajv 2020 sobre el bundle de Redocly (R-14) en `backend/test/contract/support/contract-matcher.ts`
+- [ ] T067 [US5] Escribir las pruebas de contrato para `getLiveness`, `getReadiness` (200 y 503), `getCompatibility`, las 5 operaciones de `dev-probe` y todas sus respuestas de error problem+json (US5-2, US5-4), en `backend/test/contract/kuota-core.contract.spec.ts`
+- [ ] T068 [P] [US5] Escribir la prueba de detección de cambios incompatibles: eliminar un campo requerido de `CompatibilityInfo` en una copia temporal hace fallar `scripts/contracts/breaking.sh`, en `scripts/ci/tests/breaking.test.sh`
+
+### Implementation for User Story 5
+
+- [ ] T069 [US5] Ejecutar el spike del generador: openapi-generator `dart-dio` desde la imagen Docker fijada por digest sobre el bundle 3.1; compilar el resultado y registrar en research.md (R-12) si es aprobado o si se activa el fallback (swagger_parser o contrato 3.0.3). Archivos: `scripts/contracts/generate-dart-client.sh` y `specs/001-platform-foundation/research.md`
+- [ ] T070 [US5] Generar el cliente en `flutter/packages/api_client/lib/src/generated/`, con la API pública envuelta en `flutter/packages/api_client/lib/api_client.dart` e interceptores dio para `X-Correlation-Id` y `X-App-Version` (depende de T080)
+- [ ] T071 [US5] Añadir la verificación "regenerado == versionado" (`git diff --exit-code`) a `scripts/ci/contracts.sh` y el script `test:contract` a `backend/package.json` (FR-029, FR-030)
+
+**Checkpoint**: quickstart.md §6 pasa.
+
+---
+
+## Phase 8: User Story 6 - Idempotencia y auditoría como bloques reutilizables (Priority: P2)
+
+**Goal**: El interceptor `@Idempotent()` y `AuditService`, reutilizables y demostrados sobre `createDevProbeItem`. Depende de US2 (dev-probe y `withTenant`).
+
+**Independent Test**: quickstart.md §4: 10 envíos (5 concurrentes) producen 1 efecto y 1 `audit_event`, en 100 de 100 repeticiones (SC-006).
+
+### Tests for User Story 6 ⚠️
+
+- [ ] T072 [P] [US6] Escribir la prueba de integración de idempotencia (US6-1..3):
+  - 10 envíos con la misma clave, 5 de ellos en paralelo, producen 1 fila y respuestas equivalentes con `Idempotent-Replayed`.
+  - Misma clave con otro body → 422 `idempotency-key-reused`.
+  - Primera solicitud aún en curso → 409 con `Retry-After`.
+  - La misma clave en 2 tenants produce 2 efectos.
+  - Una clave con formato inválido → 400 (data-model.md `idempotency_keys.key`).
+  - Archivo: `backend/test/integration/idempotency.spec.ts`.
+- [ ] T073 [P] [US6] Escribir la prueba de auditoría (US6-4, US6-5): cada escritura de dev-probe crea un `audit_event` con los campos de data-model.md (`audit_events.actor_id`, `audit_events.actor_type`, `audit_events.action`, `audit_events.entity_type`, `audit_events.entity_id`, `audit_events.occurred_at`, `audit_events.correlation_id`, `audit_events.idempotency_key`) y sin PII en `audit_events.changes`; un `UPDATE`/`DELETE` con `kuota_app_login` falla, y también lo bloquea el trigger. Archivo: `backend/test/integration/audit.spec.ts`
+- [ ] T074 [P] [US6] Escribir la prueba de hash canónico: el mismo JSON con distinto orden de claves produce el mismo `idempotency_keys.request_hash` (data-model.md), en `backend/test/unit/idempotency/request-hash.spec.ts`
+
+### Implementation for User Story 6
+
+- [ ] T075 [US6] Implementar el repositorio de idempotencia vía `withTenant`: `INSERT … ON CONFLICT DO NOTHING`, la máquina de estados `idempotency_keys.status` (`IN_PROGRESS` → `COMPLETED`, o eliminación en rollback), `idempotency_keys.expires_at` a 30 días, y que solo almacena respuestas 2xx/4xx deterministas (data-model.md), en `backend/src/common/idempotency/`
+- [ ] T076 [US6] Implementar el decorador e interceptor `@Idempotent()`: valida `Idempotency-Key`, calcula `idempotency_keys.request_hash` y devuelve la respuesta reproducida, 409 o 422 según data-model.md, en `backend/src/common/idempotency/idempotent.interceptor.ts`
+- [ ] T077 [US6] Implementar `AuditService.record()`, que escribe en la misma transacción de `withTenant` con lista permitida de campos para `audit_events.changes` (data-model.md), en `backend/src/common/audit/`
+- [ ] T078 [US6] Aplicar `@Idempotent()` a `createDevProbeItem` y `AuditService` a create, update y delete de dev-probe, en `backend/src/modules/dev-probe/`
+- [ ] T079 [US6] Añadir el script manual de purga de claves expiradas (sin job programado, R-16) y el script `test:idempotency` (con 100 repeticiones), en `backend/scripts/purge-idempotency.ts` y `backend/package.json`
+
+**Checkpoint**: quickstart.md §4 pasa y se cumple SC-006.
+
+---
+
+## Phase 9: User Story 7 - Shells de aplicaciones y paquetes compartidos (Priority: P3)
+
+**Goal**: Workspace Flutter fijado con FVM, con 3 apps mínimas y 4 paquetes, resolución única de dependencias y reglas de dependencias.
+
+**Independent Test**: quickstart.md §7. `analyze`, `test` y `check_deps` pasan, y cada app muestra nombre, entorno, versión y compatibilidad.
+
+**Nota de orden**: T080–T082 pueden adelantarse en paralelo a US4 y US5, porque T059, T063 y T070 dependen de T080.
+
+### Implementation & Tests for User Story 7
+
+- [ ] T080 [US7] Crear `flutter/.fvmrc` (Flutter 3.50.1, D-ENV-01) y el `flutter/pubspec.yaml` raíz del workspace (`workspace:` con 3 apps y 4 paquetes, `environment.sdk ^3.14.0`, sección `melos:` con scripts `analyze`, `test`, `test:financial`, `format` y `generate`, R-19), además de `flutter/analysis_options.yaml`
+- [ ] T081 [P] [US7] Crear el paquete `shared_core` (`AppConfig` por entorno desde `--dart-define-from-file`, `Result`, logger sin PII; sin dependencia de `flutter`) con sus pruebas, en `flutter/packages/shared_core/`
+- [ ] T082 [P] [US7] Crear el paquete `financial_domain` (Dart puro, `resolution: workspace`, dependencia `decimal`) con la estructura `lib/src/money/` para T063, en `flutter/packages/financial_domain/`
+- [ ] T083 [P] [US7] Crear el paquete `design_system` (tema claro/oscuro y variante `highContrastReceipt`) con prueba de widget del tema (US7-3), en `flutter/packages/design_system/`
+- [ ] T084 [P] [US7] Crear `flutter/tool/check_deps.dart` y su prueba con un `pubspec` defectuoso de referencia. Debe fallar si una app depende de otra app, si un paquete depende de una app, o si `financial_domain` o `shared_core` dependen de `flutter` (US7-4, FR-033). Archivos: `flutter/tool/check_deps.dart` y `flutter/tool/test/check_deps_test.dart`
+- [ ] T085 [US7] Crear las apps `admin_web` (web), `collector_mobile` y `client_mobile` (Android e iOS). Cada una muestra una pantalla de inicio con nombre, entorno, versión y el resultado de `getCompatibility` vía `api_client`, usa un `ProviderScope` Riverpod mínimo, configs `flutter/config/{local,testing,staging,production}.json` y una prueba de widget (US7-2, FR-032). En `flutter/apps/*/`
+- [ ] T086 [US7] Verificar la resolución única del workspace: un solo `flutter/pubspec.lock` y ningún `pubspec.lock` por paquete (US7-1). Documentar los comandos móviles en `flutter/README.md`
+
+**Checkpoint**: quickstart.md §7 pasa y se cumple SC-008 (iOS verificado localmente).
+
+---
+
+## Phase 10: Polish & Cross-Cutting Concerns
+
+- [ ] T087 Implementar `scripts/ci/prove-gates.sh`, que en un `git worktree` temporal aplica los 6 cambios defectuosos de referencia (secreto, float monetario, tabla con `tenant_id` sin `FORCE`, contrato incompatible, import prohibido en `domain/`, cobertura bajo umbral) y verifica que cada gate falla (SC-003, US3-5..7), en `scripts/ci/prove-gates.sh`
+- [ ] T088 [P] Medir la duración de CI para un cambio solo de documentación (objetivo ≤ 3 min, SC-004) con `run-local.sh affected` y registrar el resultado en `specs/001-platform-foundation/quickstart.md`
+- [ ] T089 [P] Actualizar `CLAUDE.md` §6 (comandos reales: `make up`, `run-local.sh`, `test:tenancy`) y el estado de las carpetas existentes, en `CLAUDE.md`
+- [ ] T090 [P] Actualizar el estado de los ADR-0002, 0003 y 0004 (`Propuesto` → `Aceptado` o con ajustes) según los resultados de T015, T069 y R-02, previa aprobación humana, en `docs/decisions/`
+- [ ] T091 Ejecutar quickstart.md completo en un clon limpio, con validación por el mantenedor (SC-001), y registrar evidencia (comandos, resultados y tiempos) en `specs/001-platform-foundation/validation-report.md`
+- [ ] T092 Ejecutar `/speckit-analyze` y `/speckit-converge` sobre el estado implementado y resolver todo hallazgo CRITICAL antes de abrir el PR de `feature/001-platform-foundation`
+
+---
+
+## Dependencies & Execution Order
+
+### Phase Dependencies
+
+- **Setup (Phase 1)**: no tiene dependencias.
+- **Foundational (Phase 2)**: depende de Setup y **bloquea todo**. T014 y T015 (spike y aprobación de D-ARC-01) son un gate duro.
+- **US1 (P1)**: depende de Foundational. Es el MVP.
+- **US2 (P1)**: depende de Foundational. Es independiente de US1 (comparte solo la infraestructura base).
+- **US3 (P1)**: depende de Foundational. Sus gates se completan a medida que existen US2, US4 y US5; la prueba integral de gates está en T087.
+- **US4 (P2)**:
+  - La parte TypeScript (T056–T058, T060–T062, T064–T065) solo depende de Foundational.
+  - La parte Dart (T059, T063) depende de T080 y T082.
+- **US5 (P2)**: depende de Foundational (T022–T024). T070 depende de T080.
+- **US6 (P2)**: depende de US2 (dev-probe, `withTenant`).
+- **US7 (P3)**: depende de Foundational y de D-ENV-01 (aprobada). T085 depende de T070 (`api_client`).
+- **Polish**: depende de todas las historias.
+
+### Grafo de historias
+
+```mermaid
+flowchart LR
+  S[Setup] --> F[Foundational<br/>spike RLS gate]
+  F --> US1 & US2 & US3 & US4 & US5
+  US2 --> US6
+  F --> US7a[US7: T080-T084]
+  US7a --> US4d[US4 Dart: T059,T063]
+  US7a --> T070[US5: T070]
+  T070 --> T085[US7: T085]
+  US1 & US2 & US3 & US4 & US5 & US6 & T085 --> P[Polish T087-T092]
+```
+
+### Within Each User Story
+
+- Las pruebas se escriben primero y deben FALLAR antes de implementar (Constitución X).
+- Orden: dominio y modelos → infraestructura → casos de uso → interfaz.
+- Cada checkpoint se valida con la sección correspondiente de quickstart.md.
+
+## Parallel Opportunities
+
+```bash
+# Setup:
+T003, T004, T005, T006  ·  T008, T009, T010, T011 (tras T007)
+# Foundational (tras T012–T015):
+T016+T017 · T018→T019 · T020→T021 · T022→T023+T024
+# Con Foundational listo, en paralelo por personas/agentes:
+US1 (T026–T033) | US2 (T034–T044) | US3 (T045–T055) | US4-TS (T056–T058, T060–T062, T064–T065) | US7a (T080–T084)
+# US2: T034, T035, T036 en paralelo; T040 en paralelo con T038/T039
+# US6 tras US2: T072, T073, T074 en paralelo
+```
+
+## Implementation Strategy
+
+### MVP First (User Story 1)
+
+1. Phase 1 Setup.
+2. Phase 2 Foundational, incluido el **spike RLS aprobado**.
+3. Phase 3 US1. **Detenerse y validar** quickstart.md §1–2.
+
+### Incremental Delivery
+
+1. MVP (US1).
+2. US2, aislamiento. Es el mayor riesgo constitucional y se valida temprano.
+3. US3, gates de CI.
+4. US4, US5 y US6, bloques reutilizables.
+5. US7, shells Flutter.
+6. Polish: prueba de gates, validación con quickstart y análisis.
+
+Cada incremento se integra mediante commits Conventional en `feature/001-platform-foundation`. Los PR solo se abren al existir un remoto aprobado.
+
+## Notes
+
+- Total: 92 tareas. Toda tarea cita rutas exactas, y los campos restringidos citan data-model.md (`Entity.field`).
+- No se crean carpetas fuera de las listadas en plan.md (FR-005).
+- Ninguna tarea crea entidades de negocio, autenticación real (002) ni sincronización offline (011).

@@ -52,13 +52,19 @@ function connectionUrl(user: string, password: string, host: string, port: numbe
   return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${DATABASE}`;
 }
 
-async function applyMigrations(migratorUrl: string): Promise<string[]> {
+/** Carpetas de migración en orden de aplicación. */
+export function migrationFolders(): string[] {
   if (!existsSync(MIGRATIONS_DIR)) return [];
-  const folders = readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
+  return readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && existsSync(join(MIGRATIONS_DIR, entry.name, 'migration.sql')))
     .map((entry) => entry.name)
     .sort();
-  const client = new Client({ connectionString: migratorUrl });
+}
+
+/** Aplica cada migration.sql en su propia transacción con la URL dada (atómico por migración). */
+export async function applyMigrations(url: string): Promise<string[]> {
+  const folders = migrationFolders();
+  const client = new Client({ connectionString: url });
   await client.connect();
   try {
     for (const folder of folders) {
@@ -77,7 +83,12 @@ async function applyMigrations(migratorUrl: string): Promise<string[]> {
   return folders;
 }
 
-export async function startTestDatabase(): Promise<TestDatabase> {
+export interface StartOptions {
+  /** false: deja la base sin migrar (p. ej. para probar migraciones con roles distintos). */
+  readonly applyMigrations?: boolean;
+}
+
+export async function startTestDatabase(options: StartOptions = {}): Promise<TestDatabase> {
   const migratorPassword = randomPassword();
   const appLoginPassword = randomPassword();
   const container: StartedPostgreSqlContainer = await new PostgreSqlContainer(postgresImage())
@@ -94,7 +105,7 @@ export async function startTestDatabase(): Promise<TestDatabase> {
   const appUrl = connectionUrl('kuota_app_login', appLoginPassword, host, port);
 
   try {
-    const appliedMigrations = await applyMigrations(migratorUrl);
+    const appliedMigrations = options.applyMigrations === false ? [] : await applyMigrations(migratorUrl);
     return { appUrl, migratorUrl, appliedMigrations, stop: async () => void (await container.stop()) };
   } catch (error) {
     await container.stop();

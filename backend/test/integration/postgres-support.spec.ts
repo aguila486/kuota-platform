@@ -1,6 +1,6 @@
 import { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { postgresImage, startTestDatabase, type TestDatabase } from '../support/postgres.js';
+import { migrationFolders, postgresImage, startTestDatabase, type TestDatabase } from '../support/postgres.js';
 
 // Verifica el soporte de Testcontainers (T011) y los roles de T005 sobre la imagen fijada de compose.yaml.
 describe('Testcontainers PostgreSQL (T011)', () => {
@@ -82,7 +82,7 @@ describe('Testcontainers PostgreSQL (T011)', () => {
     });
   });
 
-  it('kuota_migrator es propietario de la base y no hay migraciones en G1', async () => {
+  it('kuota_migrator es propietario de la base y se aplican todas las migraciones del repositorio', async () => {
     const owner = await withClient(
       db.migratorUrl,
       async (c) =>
@@ -93,6 +93,6 @@ describe('Testcontainers PostgreSQL (T011)', () => {
         ).rows[0]?.o,
     );
     expect(owner).toBe('kuota_migrator');
-    expect(db.appliedMigrations).toEqual([]);
+    expect(db.appliedMigrations).toEqual(migrationFolders());
   });
 });

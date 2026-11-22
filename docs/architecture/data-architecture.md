@@ -19,11 +19,14 @@ Política estándar aplicada a cada tabla con datos de tenant:
 ALTER TABLE loans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE loans FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON loans
-  USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+  USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)
+  WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid);
 ```
 
-CI verifica (consulta a `pg_class`/`pg_policies`) que toda tabla con columna `tenant_id` tiene RLS habilitado,
+`nullif` es obligatorio: si la conexión ya usó `set_config(..., true)` en una transacción anterior, la variable vale
+`''` (no `NULL`) y un cast directo a `uuid` fallaría en vez de devolver 0 filas (ADR-0004, criterio S1).
+
+CI verifica en el esquema `kuota` (consulta a `pg_class`/`pg_policies`) que toda tabla con columna `tenant_id` tiene RLS habilitado,
 forzado y con política. Claves foráneas compuestas `(tenant_id, id)` en relaciones entre tablas de tenant para
 impedir referencias cruzadas.
 
@@ -32,8 +35,9 @@ impedir referencias cruzadas.
 | Rol | Uso | Privilegios |
 |---|---|---|
 | `kuota_migrator` | Pipeline de migraciones | Owner de esquemas/tablas. Nunca usado por la app |
-| `kuota_app` | API | DML limitado; **sin** `BYPASSRLS`; sin `UPDATE/DELETE` en ledger y auditoría |
-| `kuota_worker` | Worker | Igual que `kuota_app` + tablas de cola |
+| `kuota_app` | API (`NOLOGIN`) | DML limitado; **sin** `BYPASSRLS`; sin `UPDATE/DELETE` en ledger y auditoría |
+| `kuota_app_login` | Credencial de la API | `LOGIN`, miembro de `kuota_app` |
+| `kuota_worker` | Worker (ADR-0002, C2-3) | Igual que `kuota_app` + tablas de cola; se crea con la primera feature con jobs |
 | `kuota_platform` | platform-admin | Acceso a `tenants`/`memberships`; acceso cross-tenant solo vía funciones `SECURITY DEFINER` auditadas |
 | `kuota_readonly` | Reportes/soporte | `SELECT` con RLS |
 
@@ -110,7 +114,7 @@ ledger_accounts(tenant_id, id, code, name, type[ASSET|LIABILITY|INCOME|EXPENSE|E
                 owner_type, owner_id)           -- p.ej. cartera del préstamo X, ahorro del cliente Y, caja del cobrador Z
 journal_entries(tenant_id, id, entry_type, effective_date, posted_at, idempotency_key UNIQUE per tenant,
                 reverses_entry_id NULL, source_type, source_id, actor_id, correlation_id)
-journal_lines(tenant_id, id, entry_id, account_id, side[DEBIT|CREDIT], amount_minor BIGINT CHECK (>0), currency)
+journal_lines(tenant_id, id, entry_id, account_id, direction[DEBIT|CREDIT], amount_minor BIGINT CHECK (>0), currency)
 account_balances(tenant_id, account_id, balance_minor, last_entry_id)  -- proyección reconstruible
 ```
 
@@ -122,28 +126,29 @@ account_balances(tenant_id, account_id, balance_minor, last_entry_id)  -- proyec
 
 | Concepto | Tipo PostgreSQL | TypeScript | Dart |
 |---|---|---|---|
-| Montos | `BIGINT` unidades mínimas + `CHAR(3)` moneda | `bigint` | `int` (64-bit nativo) / `BigInt` en web* |
-| Tasas, factores | `NUMERIC(18,10)` + `rate_basis` | `Decimal` (decimal.js) | `Decimal` (paquete `decimal`) |
+| Montos | `BIGINT` unidades mínimas + `CHAR(3)` moneda | `bigint` | `BigInt` (móvil y web; nunca `int`)* |
+| Tasas, factores | `NUMERIC(18,10)` + `rate_basis` (D-FIN-03) | `Decimal` (decimal.js) | `Decimal` (paquete `decimal`) |
 | Fechas de negocio | `DATE` + zona horaria del tenant | `Temporal`/lib de fechas sin hora | `DateTime` fecha pura |
 | Instantes | `TIMESTAMPTZ` | — | UTC |
 | IDs | `UUID` (v7 para ordenabilidad) | string | string |
 
-\* En Flutter Web `int` es double de JS: montos se manejan como `BigInt`/`Decimal` en el paquete `financial_domain`,
-nunca como `int` crudo. En JSON se transportan como string (ver [api-contracts.md](api-contracts.md)).
+\* Representación, rangos, escalas, forma canónica en JSON y conversión de presentación: **ADR-0007** (D-FIN-01,
+aprobada). En Flutter Web `int` es un número de JavaScript; por eso los montos son `BigInt` en todas las plataformas.
 
 ## 7. Auditoría
 
-`audit_log(tenant_id, id, occurred_at, actor_id, actor_role, action, entity_type, entity_id, before JSONB, after JSONB,
-device_id, device_time, ip_hash, correlation_id)` — append-only (mismos controles que el ledger). `before/after` excluyen
-secretos y minimizan PII.
+`audit_events` — append-only (mismos controles que el ledger), escrita por `common/audit` en la misma transacción del
+caso de uso. Definición canónica en `specs/001-platform-foundation/data-model.md` (incluye `actor_role`, nulo en 001 y
+derivado del contexto de autorización desde 002). `changes` excluye secretos y minimiza PII. El módulo `audit` (015)
+solo la consulta (ADR-0002).
 
 ## 8. Migraciones
 
 - Prisma Migrate genera SQL; RLS, grants, triggers y funciones se agregan como SQL manual en la misma migración.
 - Patrón **expand → migrate → contract**: agregar columnas nullable/tablas nuevas, desplegar código compatible,
   backfill, y solo en un release posterior eliminar lo viejo. Cambios destructivos requieren fase de contract aprobada.
-- Migraciones se aplican en pipeline con `kuota_migrator` antes de desplegar la nueva versión; `/health/ready`
-  falla si el esquema esperado no está aplicado.
+- Migraciones se aplican en pipeline con `kuota_migrator` antes de desplegar la nueva versión. Si `/health/ready`
+  también verifica las migraciones aplicadas es la decisión pendiente D-ARC-06; en 001 solo verifica la base de datos.
 - Prueba de CI: aplicar todas las migraciones sobre BD vacía + sobre snapshot del esquema de `main`.
 
 ## 9. Respaldos y retención

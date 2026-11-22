@@ -77,7 +77,7 @@ Ningún módulo lee o escribe tablas de otro módulo (Constitución IX). `ledger
 | **receipts** | Folios, recibos provisionales y confirmados, firma, verificación pública | `receipts`, `device_receipt_sequences`, `receipt_signing_keys` | `issueReceipt()`, `verify(token)` | No expone PII en verificación |
 | **cash-reconciliation** | Cortes de caja: esperado vs declarado vs entregado, diferencias, aprobación | `cash_counts`, `cash_handovers`, `cash_differences` | `closeShift()`, `approveCount()` | No borra ni edita cobros |
 | **reporting** | Reportes operativos y regulatorios (cuando se definan) sobre proyecciones | vistas / tablas de lectura | consultas | No escribe en tablas de negocio |
-| **audit** | Bitácora inmutable de acciones | `audit_log` | consumidor de eventos + `record()` | No es editable por tenants |
+| **audit** (015) | Consulta y exportación de la bitácora | — (lee `audit_events` vía `common/audit`) | consultas | No escribe; la escritura es `common/audit` (`AuditService.record()`, tabla `audit_events`, desde 001) |
 | **idempotency** | Registro de claves y respuestas | `idempotency_keys` | interceptor HTTP | — |
 | **notifications** | OTP, push, plantillas | `outbound_messages` | consumidor de eventos | No incluye montos/PII sensible en push |
 | **platform-admin** | Alta/suspensión de tenants, soporte | (usa `tenancy`) | rol `kuota_platform` | Sin acceso a datos de negocio salvo procedimiento auditado |

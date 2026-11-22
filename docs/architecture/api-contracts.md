@@ -20,7 +20,7 @@ contracts/
     │   ├── schemas/              # Money, Rate, Problem, Cursor…
     │   ├── parameters/           # IdempotencyKey, AppVersion…
     │   └── responses/
-    └── .spectral.yaml            # reglas de estilo propias
+    └── redocly.yaml              # lint (reglas propias) y bundles; research R-13 de 001
 ```
 
 ## 3. Convenciones
@@ -32,14 +32,14 @@ contracts/
 | IDs | UUID string |
 | Fechas | `date` (`YYYY-MM-DD`, fecha de negocio en zona del tenant) y `date-time` (RFC 3339 UTC) |
 | Dinero | Objeto `Money` (ver §4) |
-| Idempotencia | Header `Idempotency-Key` (UUID) **obligatorio** en toda escritura financiera; comandos offline usan `operation_id` en el body |
+| Idempotencia | Header `Idempotency-Key` (8–128 caracteres `[A-Za-z0-9_-]`, recomendado UUIDv7) **obligatorio** en toda escritura financiera; lo genera el cliente al crear la operación y lo reutiliza en cada reintento (ADR-0003). Comandos offline usan `operation_id` en el body. Clave reutilizada con otro contenido → `422`; en proceso → `409` + `Retry-After` |
 | Errores | RFC 9457 `application/problem+json` con `type`, `title`, `status`, `detail`, `code`, `correlation_id`, `errors[]` (validación) |
 | Paginación | Por cursor: `?limit=50&cursor=<opaco>` → `{ "data": [...], "next_cursor": "..." }`. Sin offset |
-| Correlación | `X-Request-Id` (cliente o generado), devuelto en respuesta y logs |
+| Correlación | `X-Correlation-Id` (UUID del cliente o generado), devuelto en la respuesta, en logs y en `correlation_id` de problem+json |
 | Versión de app | Header `X-App-Version` (`collector/1.4.2+120`). Si es menor que la mínima soportada → `426 Upgrade Required` con problem `app-version-unsupported` |
 | Concurrencia | `ETag`/`If-Match` en configuraciones editables (productos, planes) |
 | Tenant | Implícito en el token. Nunca como parámetro de ruta en la API de tenants |
-| Seguridad | Esquema `bearerAuth` (JWT); cada operación declara permiso requerido con extensión `x-kuota-permission` |
+| Seguridad | Esquema `bearerAuth` (JWT, desde 002); cada operación declara `security` explícitamente y su permiso con `x-kuota-permission`. No hay `security` global; `security: []` solo en excepciones públicas registradas en *Endpoint Access* (Constitución §II) |
 
 ## 4. Representación del dinero
 
@@ -47,11 +47,12 @@ contracts/
 { "amount_minor": "150000", "currency": "MXN" }
 ```
 
-- `amount_minor`: **string** de dígitos (con signo opcional) en unidades mínimas de la moneda. Se usa string porque
-  JavaScript/Flutter Web pierden precisión en enteros > 2^53 y para impedir que cualquier capa lo trate como float.
+- `amount_minor`: **string** en forma canónica (`^(0|-?[1-9][0-9]{0,18})$`, dentro del rango de `BIGINT`) en unidades
+  mínimas de la moneda. Se usa string porque JavaScript/Flutter Web pierden precisión en enteros > 2^53 y para impedir
+  que cualquier capa lo trate como float. Reglas completas: ADR-0007.
 - `currency`: ISO 4217. El número de decimales de la moneda se obtiene de la tabla ISO, no del payload.
 - Tasas: `{ "value": "0.0900000000", "basis": "TOTAL" }` con `value` string decimal y `basis` de D-FIN-03.
-- Prohibido en el contrato: `type: number` para montos o tasas (regla Spectral `kuota-no-number-money`).
+- Prohibido en el contrato: `type: number` para montos o tasas (regla de Redocly, research R-13 de 001).
 
 ## 5. Generación del cliente Dart
 
@@ -74,7 +75,7 @@ Se valida en el spike de 001; si `dart-dio` no maneja bien 3.1, se emite el cont
 
 | Verificación | Herramienta | Bloquea PR |
 |---|---|---|
-| Lint y reglas de estilo | Spectral (`.spectral.yaml`) | Sí |
+| Lint y reglas de estilo | Redocly CLI 2 (`contracts/openapi/redocly.yaml`, research R-13) | Sí |
 | Cambios incompatibles vs `main` | `oasdiff breaking` | Sí (salvo nueva versión mayor aprobada) |
 | Backend cumple el contrato | Pruebas de contrato (validación de requests/responses con ajv contra el bundle) | Sí |
 | Cliente Dart actualizado | Regenerar y `git diff --exit-code` | Sí |

@@ -30,7 +30,7 @@ flowchart TB
     AW -->|HTTPS JSON, JWT| API
     CM -->|HTTPS JSON, JWT ligado a dispositivo<br/>push de comandos / pull incremental| API
     CA -->|HTTPS JSON, JWT| API
-    API -->|SQL, rol kuota_app sin BYPASSRLS| PG
+    API -->|SQL, kuota_app_login sin BYPASSRLS| PG
     WK -->|SQL, rol kuota_worker| PG
     API -->|URLs prefirmadas| OS
     WK --> OS
@@ -68,7 +68,7 @@ flowchart TB
   todos los módulos, registro en ledger, idempotencia, auditoría, endpoint público de verificación de recibos,
   health checks.
 - **Datos:** no tiene estado propio fuera de PostgreSQL y object storage (stateless, escalable horizontalmente).
-- **Protocolos:** HTTPS REST JSON `/v1`; headers `Authorization`, `Idempotency-Key`, `X-Request-Id`,
+- **Protocolos:** HTTPS REST JSON `/v1`; headers `Authorization`, `Idempotency-Key`, `X-Correlation-Id`,
   `X-App-Version`. Ver [api-contracts.md](api-contracts.md).
 - **Límites:** sin llamadas síncronas a proveedores externos en la ruta de operaciones financieras (OTP y push se
   despachan vía worker).
@@ -78,13 +78,14 @@ flowchart TB
   cuando aplique, cierres de ciclo de ahorro, reconciliación del ledger, expiración de idempotencias), envío de OTP
   y push, generación de PDFs y reportes.
 - **Implementación:** mismo paquete `backend`, punto de entrada distinto (`main.worker.ts`). Cola en PostgreSQL
-  (pg-boss o tabla outbox propia; se decide en el plan de 001). Sin Redis en v1.
+  (pg-boss o tabla outbox propia; se decide con la primera feature que tenga jobs, research R-16 de 001). Sin Redis en
+  v1. Rol `kuota_worker` (ADR-0002, C2-3).
 - **Límites:** cada job ejecuta en contexto de un tenant explícito; los jobs son idempotentes.
 
 ### PostgreSQL 18
 - **Responsable de:** todo el estado de negocio, ledger, auditoría, idempotencia, cola de jobs.
 - **Aislamiento:** RLS habilitado y forzado en tablas con `tenant_id`; roles `kuota_migrator` (owner),
-  `kuota_app`, `kuota_worker`, `kuota_platform`, `kuota_readonly`. Ver [data-architecture.md](data-architecture.md).
+  `kuota_app` (+ `kuota_app_login`), `kuota_worker`, `kuota_platform`, `kuota_readonly` (fuente única: ADR-0004). Ver [data-architecture.md](data-architecture.md).
 
 ### Object storage (S3-compatible; MinIO en local)
 - **Responsable de:** documentos KYC, PDFs de recibos, exportaciones. Claves con prefijo `tenant/{tenant_id}/...`.

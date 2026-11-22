@@ -1,12 +1,12 @@
 # Arquitectura Flutter
 
-> Estado: Propuesto (2026-11-22). ADR-0003. Decisiones abiertas: D-ENV-01 (versión Flutter/FVM),
-> D-ARC-02 (Riverpod), D-ARC-03 (admin en Flutter Web).
+> Estado: ADR-0003 aceptado (2026-11-22). Decisiones cerradas: D-ENV-01 (FVM, Flutter 3.50.1 / Dart 3.14) y D-ARC-02
+> (Riverpod). Abierta: D-ARC-03 (admin en Flutter Web).
 
 ## 1. Prerrequisito de entorno
 
-Dart **pub workspaces** requiere Dart ≥ 3.6. El entorno diagnosticado tiene Flutter 3.24.3 / Dart 3.5.3
-(incompatible). Antes de crear `flutter/` se resuelve D-ENV-01 (recomendado: FVM con versión fijada en `.fvmrc`).
+Dart **pub workspaces** requiere Dart ≥ 3.6. La instalación global (3.24.3 / Dart 3.5.3) no se modifica: el proyecto
+fija Flutter 3.50.1 / Dart 3.14 con FVM en `flutter/.fvmrc` (lo crea T080 de 001).
 
 ## 2. Workspace
 
@@ -36,8 +36,8 @@ flutter/
 |---|---|---|---|
 | `shared_core` | `Result/Failure`, logging con redacción, `Clock`, utilidades de fechas/zonas, almacenamiento seguro (wrapper `flutter_secure_storage`), `DeviceKeyStore`, config de entornos | UI, DTOs, reglas financieras | — |
 | `design_system` | Tema, tokens, tipografía, componentes (botones, tarjetas, tablas, montos formateados), recibo de alto contraste, estados de frescura/sync | Lógica de negocio, llamadas HTTP | `shared_core` |
-| `api_client` | Código **generado** (DTOs + cliente HTTP), interceptores (auth, `Idempotency-Key`, `X-App-Version`, `X-Request-Id`), mapeo de problem+json | Modelos de dominio, lógica | `shared_core` |
-| `financial_domain` | Modelos de dominio (`Money` con `Decimal`/enteros, `Rate`, `Loan`, `Installment`, `SavingsAccount`), **simuladores puros** (calendario de amortización, aplicación de pago, rendimiento proyectado) con los mismos casos golden que el backend | Persistencia, HTTP, UI, Flutter SDK (Dart puro) | `shared_core` |
+| `api_client` | Código **generado** (DTOs + cliente HTTP, sin operaciones no productivas), interceptores (auth, `X-App-Version`, `X-Correlation-Id`), mapeo de problem+json | Modelos de dominio, lógica; **generación de `Idempotency-Key`** (la clave se crea con la operación y se reutiliza en reintentos, ADR-0003) | `shared_core` |
+| `financial_domain` | Modelos de dominio (`Money` con `BigInt` según ADR-0007, `Rate`, `Loan`, `Installment`, `SavingsAccount`), **simuladores puros** (calendario de amortización, aplicación de pago, rendimiento proyectado) con los mismos casos golden que el backend | Persistencia, HTTP, UI, Flutter SDK (Dart puro) | `shared_core` |
 | `offline_sync` | Esquema Drift de outbox/snapshot, `CommandOutbox`, `SyncEngine`, máquina de estados, cifrado de BD (SQLCipher) | Pantallas | `shared_core`, `api_client`, `financial_domain` |
 
 Reglas:
@@ -50,7 +50,7 @@ Reglas:
 
 ```text
 apps/collector_mobile/lib/
-├── main_dev.dart  main_staging.dart  main_prod.dart   # flavors
+├── main.dart           # entorno por --dart-define-from-file=config/<entorno>.json
 ├── app/                # router, tema, providers raíz
 └── features/
     └── payments/
@@ -61,8 +61,9 @@ apps/collector_mobile/lib/
 
 ## 5. Estado y navegación
 
-- **Riverpod** (D-ARC-02) con generación de código: providers para repositorios, `AsyncNotifier` para flujos.
-  Motivo: inyección de dependencias + estado reactivo en un solo modelo, fácil de sobrescribir en pruebas.
+- **Riverpod** (D-ARC-02, aprobada) con generación de código: providers para repositorios, `AsyncNotifier` para flujos.
+  Los providers orquestan estado de UI; las reglas viven en `financial_domain` y el estado de sincronización en
+  `offline_sync` (ADR-0003).
 - Navegación con `go_router`; guards de sesión y de bloqueo (PIN, sin sync > 72 h).
 
 ## 6. Persistencia local y seguridad
@@ -77,16 +78,17 @@ apps/collector_mobile/lib/
 
 admin_web no persiste datos de negocio; usa memoria y refresh vía cookie `HttpOnly` (ver `docs/security/authentication.md`).
 
-## 7. Entornos (flavors)
+## 7. Entornos (FR-032 de 001)
 
-| Flavor | API | Uso |
+| Entorno | API | Uso |
 |---|---|---|
-| `dev` | Docker Compose local | desarrollo |
+| `local` | Docker Compose local | desarrollo |
+| `testing` | servicios efímeros de CI | pruebas automatizadas |
 | `staging` | staging | QA y UAT |
-| `prod` | producción | tiendas |
+| `production` | producción | tiendas |
 
-Configuración por `--dart-define-from-file=config/<flavor>.json` (sin secretos: los móviles no guardan secretos de servidor).
-Identificadores de app distintos por flavor para instalar en paralelo.
+Configuración por `--dart-define-from-file=config/<entorno>.json` (sin secretos: los móviles no guardan secretos de
+servidor). Los identificadores de app por entorno se definen al distribuir (D-ARC-04).
 
 ## 8. Pruebas
 

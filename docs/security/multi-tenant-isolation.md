@@ -34,9 +34,13 @@ aislamiento físico (contrato o regulación, ver D-BIZ-02) podría migrarse a un
 | Rol | Uso | Privilegios |
 |---|---|---|
 | `kuota_migrator` | CI/CD de migraciones | Propietario de esquema; DDL. Credencial solo en pipeline de despliegue |
-| `kuota_app` | API Kuota Core | DML en tablas de negocio sujeto a RLS; sin `UPDATE`/`DELETE` en tablas de ledger y auditoría |
-| `kuota_platform` | Módulo `platform-admin` (operaciones cross-tenant) | Políticas específicas, uso auditado; conexión separada |
-| `kuota_readonly_reporting` | Réplicas/reportes (futuro) | `SELECT` sujeto a RLS |
+| `kuota_app` | Privilegios de la API (`NOLOGIN`) | DML en tablas de negocio sujeto a RLS; sin `UPDATE`/`DELETE` en tablas de ledger y auditoría |
+| `kuota_app_login` | Credencial de la API Kuota Core | `LOGIN`, miembro de `kuota_app` |
+| `kuota_worker` | Proceso worker (ADR-0002, C2-3) | Como `kuota_app` + tablas de cola/outbox; sujeto a RLS |
+| `kuota_platform` | Módulo `platform-admin` (operaciones cross-tenant) | Funciones `SECURITY DEFINER` auditadas; conexión separada |
+| `kuota_readonly` | Réplicas/reportes (futuro) | `SELECT` sujeto a RLS |
+
+Fuente única de roles: ADR-0004.
 
 ## 4. Políticas SQL de ejemplo
 
@@ -64,12 +68,14 @@ CREATE POLICY tenant_isolation ON journal_entries
 Verificación automatizada en CI (consulta al catálogo):
 
 ```sql
--- Debe devolver 0 filas: tablas con columna tenant_id sin RLS habilitado y forzado
+-- Debe devolver 0 filas: tablas con columna tenant_id sin RLS habilitado, forzado o sin política
 SELECT c.relname
 FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
-JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'tenant_id'
-WHERE c.relkind = 'r' AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity);
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'kuota'
+JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'tenant_id' AND NOT a.attisdropped
+WHERE c.relkind IN ('r', 'p')
+  AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity
+       OR NOT EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname = n.nspname AND p.tablename = c.relname));
 ```
 
 ## 5. Flujo de contexto en NestJS
@@ -80,7 +86,7 @@ sequenceDiagram
     participant App as App Flutter
     participant API as NestJS (Guard + Interceptor)
     participant ALS as TenantContext (AsyncLocalStorage)
-    participant Repo as Repositorio (Prisma extension)
+    participant Repo as Repositorio (withTenant)
     participant PG as PostgreSQL (RLS)
 
     App->>API: HTTPS + Bearer JWT (sub, tenant_id, roles, device_id)
@@ -101,8 +107,9 @@ Puntos clave:
 - `set_config(..., true)` es **local a la transacción**: al terminar, la conexión vuelve al pool sin contexto.
 - Si una consulta se ejecuta fuera del wrapper transaccional, `app_current_tenant()` es `NULL` → **0 filas** (falla segura).
 - Los jobs en segundo plano (outbox, conciliación) reciben `tenant_id` del registro que procesan y abren su propio contexto.
-- Un guard global rechaza cualquier ruta de negocio sin `TenantContext`; las rutas sin tenant (health, verificación pública
-  de recibos, login) se declaran explícitamente con un decorador `@PublicRoute()` y revisión obligatoria.
+- Un guard global rechaza cualquier ruta de negocio sin `TenantContext`. Toda ruta sin autenticación es una excepción de
+  la Constitución §II: pertenece a una categoría admisible y figura en la tabla *Endpoint Access* de su spec. El login
+  (002) y la verificación pública de recibos (012) **no** están hoy en esa lista cerrada: se resuelven con D-AUTH-03.
 
 ## 6. Riesgos con pooling de conexiones
 
@@ -110,7 +117,7 @@ Puntos clave:
 |---|---|---|
 | Fuga de contexto entre solicitudes | `SET` de sesión (no local) que persiste en la conexión reutilizada | Solo `set_config(..., true)` dentro de transacción; prueba que reutiliza una conexión y verifica contexto vacío |
 | PgBouncer en modo *transaction* | Variables de sesión no son confiables entre sentencias fuera de transacción | Todo acceso de negocio dentro de transacción explícita; prohibido `SET` de sesión |
-| Consultas fuera de transacción por el ORM | Llamadas directas al cliente base | El cliente base no se exporta; solo el cliente extendido con contexto (regla de lint) — validado en spike D-ARC-01 |
+| Consultas fuera de transacción por el ORM | Llamadas directas al cliente base | Solo `common/tenant-context` usa el cliente base; los repositorios reciben el cliente transaccional de `withTenant` (regla de lint; spike D-ARC-01, criterios S1–S5 de ADR-0004) |
 | Prepared statements cacheados | Compartidos entre tenants | Las políticas usan `current_setting` evaluado en ejecución; prueba de regresión |
 
 ## 7. Identidad global vs cliente por tenant

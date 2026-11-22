@@ -72,6 +72,9 @@ flowchart LR
 | `constitution` | `.specify/memory/constitution.md` |
 | `speckit` | `.specify/` (excepto memory), `.claude/skills/` |
 
+Solo se usan los scopes de esta tabla. En particular, el scope de especificaciones es `specs` (no `spec`): el commit
+histórico `002b28e` usó `spec` y no se reescribe; los commits nuevos deben respetar la tabla.
+
 Ejemplos: `feat(backend): add tenant context middleware`, `fix(collector): retry sync with same operation id`,
 `feat(contracts)!: rename payment amount field` (el `!` marca breaking change).
 

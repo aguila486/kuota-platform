@@ -1,6 +1,8 @@
 # ADR-0003: Flutter — Dart pub workspaces, Melos 8 y Riverpod
 
-- **Estado:** Aceptado (2026-11-22, responsable del proyecto). D-ARC-02 cerrada: Riverpod
+- **Estado:** Aceptado con condiciones (2026-11-22, responsable del proyecto). D-ARC-02 cerrada (Riverpod).
+  **Condición: D-ARC-03 (tecnología definitiva de `admin_web`) sigue pendiente**; Flutter Web solo está autorizado de
+  forma provisional para el shell de 001
 - **Fecha:** 2026-11-22
 - **Decisores:** Responsable técnico, líder Flutter
 - **Relacionado:** Constitución IX, XI, XII; D-ENV-01, D-ARC-02, D-ARC-03; ADR-0006
@@ -41,7 +43,8 @@ código entre apps (IX) y exige que el cliente HTTP se genere desde OpenAPI (XII
   `melos bootstrap` para enlazar paquetes (lo hace pub workspaces) ni `pubspec_overrides.yaml`.
 - **Riverpod** como gestión de estado e inyección de dependencias (**D-ARC-02 aprobada el 2026-11-22**). Bloc queda
   descartado; reevaluarlo requiere un ADR nuevo (ver *Revisión*).
-- **admin_web en Flutter Web** inicialmente (D-ARC-03), reevaluar tras el MVP por SEO irrelevante pero rendimiento de
+- **admin_web en Flutter Web, de forma provisional** (D-ARC-03 pendiente; ver *Condición D-ARC-03*). Reevaluar
+  por SEO irrelevante pero rendimiento de
   tablas grandes y accesibilidad.
 
 ### Paquetes
@@ -88,6 +91,30 @@ Reglas de separación:
 - Dinero en Dart: paquete `decimal` o enteros en centavos; prohibido `double` (Constitución IV).
 - Persistencia local: Drift/SQLite con cifrado (SQLCipher o equivalente evaluado en la spec de 011).
 - Credenciales: `flutter_secure_storage` (Keychain/Keystore).
+
+### Condición D-ARC-03: tecnología de `admin_web`
+
+**Autorización provisional (2026-11-22, responsable del proyecto), exclusiva para 001:** Flutter Web para el
+scaffolding, la configuración de entorno, el arranque, la validación del build Web y la integración con el monorepo
+(T085, T050, T052). **No** aprueba la tecnología definitiva del administrador funcional. D-ARC-03 debe decidirse
+**antes de construir pantallas administrativas complejas** (tablas de cartera, formularios de originación, reportes).
+No se realiza ninguna migración tecnológica hasta entonces.
+
+Criterios de la decisión definitiva (evaluación con prototipos medibles, no por popularidad):
+
+| Criterio | Flutter Web | Angular | React | Cómo se mide |
+|---|---|---|---|---|
+| Tablas de datos grandes | Requiere virtualización propia o paquetes de terceros; el render en canvas complica copiar, buscar y seleccionar | Componentes de tabla maduros con virtualización (CDK) | Ecosistema amplio de grids virtualizados | Tabla de 10 000 filas: tiempo de render, scroll sin saltos, ordenar y filtrar |
+| Formularios administrativos | Correctos, con validación en Dart compartida con el dominio | Formularios reactivos maduros y tipados | Librerías maduras de formularios | Formulario de originación representativo: tiempo de construcción y defectos |
+| Accesibilidad | Árbol semántico generado; el soporte de lectores de pantalla y teclado debe verificarse | DOM nativo; buen soporte | DOM nativo; buen soporte | Auditoría WCAG 2.2 AA con lector de pantalla y teclado |
+| Rendimiento web | Carga inicial más pesada (motor de render) | Bundles más ligeros | Bundles más ligeros | Tiempo de carga e interactividad en un equipo de oficina de gama media |
+| Reportes | Exportación e impresión requieren trabajo adicional | Impresión y HTML nativos | Impresión y HTML nativos | Reporte de cartera exportado a PDF/CSV e impreso |
+| Mantenibilidad | Un lenguaje y un equipo para las 3 apps | Segundo lenguaje y segunda cadena de herramientas | Segundo lenguaje y segunda cadena de herramientas | Habilidades del equipo y costo de CI |
+| Reutilización de dominio | Total: `financial_domain`, `design_system`, `api_client` | Ninguna directa: cliente TS generado; simuladores duplicados o en el backend | Igual que Angular | Número de reglas duplicadas (Constitución IX) |
+| Costo de migración | Ninguno si se mantiene | Alto si se cambia tarde: reescritura de pantallas | Igual que Angular | Pantallas construidas al decidir: decidir antes de las complejas lo mantiene bajo |
+
+Regla de reevaluación: si Flutter Web no cumple las metas de tablas, accesibilidad o reportes que fije la spec del
+primer administrador funcional, se abre un ADR nuevo para el administrador.
 
 ### Estado de UI frente a lógica de negocio
 

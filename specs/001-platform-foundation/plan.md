@@ -92,10 +92,8 @@ Tracking queda vacía.
 > **Decisiones cerradas el 2026-11-22**: D-FIN-01 (ADR-0007) y D-ARC-02 (Riverpod, ADR-0003). ADR-0004 sigue
 > condicionado al spike T014/T015 (criterios S1–S8); `withTenant` anidado sigue ADR-0002 (C2-1).
 
-> **Dependencia de rama**: la Constitución v1.2.0 está confirmada en `docs/constitution-endpoint-access` (`b63f9a4`).
-> Hasta integrarla, el árbol de esta rama conserva la v1.1.0 en `.specify/memory/constitution.md`; debe integrarse
-> antes de `/speckit-implement` y de cualquier nueva ejecución de `/speckit-analyze` (orden en
-> `docs/process/constitution-amendments.md` de esa rama).
+> **Constitución**: la v1.2.0 está integrada en esta rama (merge `8e2182f`; contenido idéntico a `b63f9a4`).
+> D-ARC-03 sigue pendiente: `admin_web` en Flutter Web solo de forma provisional para el shell (ADR-0003).
 
 ## Glosario (spec ↔ plan)
 

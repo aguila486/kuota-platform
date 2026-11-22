@@ -8,7 +8,7 @@ Registro de decisiones arquitectónicas de Kuota. Formato basado en **MADR** (Ma
 |---|---|---|---|---|
 | [ADR-0001](ADR-0001-monorepo-strategy.md) | Estrategia de repositorio: monorepo único | Aceptado | 2026-11-22 | — |
 | [ADR-0002](ADR-0002-backend-architecture.md) | Backend: NestJS monolito modular + pnpm workspaces | Aceptado con condiciones (C2-2 antes de 002) | 2026-11-22 | D-ARC-04, D-ARC-07 |
-| [ADR-0003](ADR-0003-flutter-workspace.md) | Flutter: pub workspaces + Melos 8 + Riverpod | Aceptado | 2026-11-22 | D-ARC-03 |
+| [ADR-0003](ADR-0003-flutter-workspace.md) | Flutter: pub workspaces + Melos 8 + Riverpod | Aceptado con condiciones (D-ARC-03; Flutter Web provisional en 001) | 2026-11-22 | D-ARC-03 |
 | [ADR-0004](ADR-0004-database-orm.md) | PostgreSQL 18 + Prisma con RLS | Propuesto (condicionado al spike T014/T015) | 2026-11-22 | D-ARC-01 |
 | [ADR-0005](ADR-0005-financial-ledger.md) | Ledger de partida doble append-only | Aceptado (dirección; C5-1…C5-6 en 006) | 2026-11-22 | D-FIN-02, D-LED-01, D-LED-02, D-LED-03 |
 | [ADR-0006](ADR-0006-offline-sync.md) | Sincronización offline por comandos idempotentes | Aceptado (dirección; C6-1…C6-6 en 011) | 2026-11-22 | D-SYNC-01, D-SYNC-02, D-SYNC-03 |

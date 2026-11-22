@@ -1,7 +1,8 @@
 # Arquitectura Flutter
 
 > Estado: ADR-0003 aceptado (2026-11-22). Decisiones cerradas: D-ENV-01 (FVM, Flutter 3.50.1 / Dart 3.14) y D-ARC-02
-> (Riverpod). Abierta: D-ARC-03 (admin en Flutter Web).
+> (Riverpod). Abierta: D-ARC-03 (tecnología definitiva de `admin_web`; Flutter Web solo provisional para el shell de
+> 001, criterios en ADR-0003).
 
 ## 1. Prerrequisito de entorno
 

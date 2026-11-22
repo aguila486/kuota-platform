@@ -503,6 +503,8 @@ personales (002, 003) MUST declarar su propio inventario.
   decimales exactas; reglas en ADR-0007. Sustenta FR-019..FR-022 (US4). Las reglas de redondeo de negocio (D-FIN-02)
   siguen pendientes y no se implementan aquí: cada operación recibe el modo de redondeo explícitamente.
 - **D-ARC-02** (estado de las apps): **aprobada** — Riverpod (ADR-0003); los shells de US7 lo usan.
+- **D-ARC-03** (tecnología del administrador web): **pendiente**. Para esta feature se autoriza Flutter Web solo de forma
+  provisional para el shell de administración (arranque, entorno y build web); no aprueba la tecnología definitiva.
 - **D-ARC-01** (herramienta de acceso a datos): se asume la recomendación (Prisma) condicionada al spike de FR-018; si
   el spike falla, se replanifica con la alternativa documentada en ADR-0004 antes de continuar con US2.
 - La identidad real de usuarios y empresas pertenece a 002; aquí el contexto de empresa se fija con un mecanismo

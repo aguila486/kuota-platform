@@ -33,7 +33,7 @@
       "properties": {
         "id": { "type": "string", "pattern": "^[A-Z]+-[0-9]{3}$" },
         "description": { "type": "string" },
-        "operation": { "enum": ["add", "subtract", "multiply", "allocate", "parse", "format"] },
+        "operation": { "enum": ["add", "subtract", "multiply", "allocate", "parse", "format", "from_json"] },
         "inputs": {
           "type": "object",
           "properties": {
@@ -42,7 +42,14 @@
             "factor": { "type": "string", "pattern": "^-?\\d+(\\.\\d+)?$" },
             "parts": { "type": "integer", "minimum": 1 },
             "ratios": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
-            "text": { "type": "string" }
+            "text": { "type": "string" },
+            "json": {
+              "description": "Solo para from_json: objeto JSON crudo, sin patrón, para probar el rechazo de valores no canónicos o fuera de dominio.",
+              "type": "object",
+              "required": ["amount_minor", "currency"],
+              "properties": { "amount_minor": { "type": "string" }, "currency": { "type": "string" } },
+              "additionalProperties": false
+            }
           },
           "additionalProperties": false
         },

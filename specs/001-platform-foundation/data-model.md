@@ -145,11 +145,12 @@ stateDiagram-v2
   `BigInt` en Dart) + `currency` (ISO 4217 del catálogo). Invariantes: operaciones solo entre la misma moneda; escala =
   `minorUnits` de la moneda; redondeo explícito obligatorio; resultado fuera de rango → `AMOUNT_OUT_OF_RANGE`. JSON:
   `{ "amount_minor": "<string canónico>", "currency": "XXX" }`. Errores: `CURRENCY_MISMATCH`, `ROUNDING_REQUIRED`,
-  `INVALID_AMOUNT`, `TOO_MANY_DECIMALS`, `AMOUNT_OUT_OF_RANGE`, `UNSUPPORTED_CURRENCY`.
+  `INVALID_AMOUNT`, `TOO_MANY_DECIMALS`, `AMOUNT_OUT_OF_RANGE`, `UNSUPPORTED_CURRENCY`. Dominio simétrico:
+  −9223372036854775807 … 9223372036854775807 (−9223372036854775808 queda fuera, aunque `BIGINT` lo admita).
 - **RoundingMode**: `HALF_UP | HALF_EVEN | DOWN | UP | FLOOR | CEILING`.
 - **CompatibilityInfo**: `api_version` (semver), `min_supported` por app (`admin`, `collector`, `client`) en semver,
   `server_time` (para detección de desfase de reloj en apps futuras).
-- **Money fixture**: `id`, `operation` (`add|subtract|multiply|allocate|parse|format`), `inputs`, `rounding`,
+- **Money fixture**: `id`, `operation` (`add|subtract|multiply|allocate|parse|format|from_json`), `inputs`, `rounding`,
   `expected` | `expected_error`. Esquema en [contracts/money-fixture.schema.json](contracts/money-fixture.schema.json).
 
 ## Verificación automática de RLS (FR-015)

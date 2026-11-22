@@ -43,16 +43,20 @@ redondeo de cuotas (D-FIN-02), la base de tasas (D-FIN-03) y la amortización se
 
 ### Límites de representación
 
-- Rango válido de `amountMinor`: −9 223 372 036 854 775 807 … 9 223 372 036 854 775 807 (rango de `BIGINT`, sin
-  usar el mínimo absoluto). Es un invariante de `Money` en TypeScript y Dart: toda operación cuyo resultado salga del
-  rango falla con `AMOUNT_OUT_OF_RANGE`. Nunca se trunca ni se satura.
+- Dominio de `amountMinor` (**rango simétrico**, confirmado el 2026-11-22): mínimo −9223372036854775807 y máximo
+  9223372036854775807. El valor −9223372036854775808, aunque `BIGINT` lo admite, **está fuera del dominio de Kuota**:
+  así la negación y el valor absoluto de cualquier monto válido siempre son representables.
+- Es un invariante de `Money` en TypeScript y Dart, verificado con comparación numérica exacta (`bigint`/`BigInt`), no
+  con la expresión regular. Todo valor o resultado fuera del dominio falla con `AMOUNT_OUT_OF_RANGE`. Nunca se trunca
+  ni se satura.
 - Los montos pueden ser negativos (diferencias, saldos). Cada operación de dominio valida el signo que admite; por
   ejemplo, las líneas del ledger son siempre > 0 con dirección (ADR-0005).
 
 ### Serialización JSON sin pérdida
 
 - `amount_minor` es **siempre string** y en forma canónica: `0`, o un signo `-` opcional seguido de 1 a 19 dígitos sin
-  ceros a la izquierda (patrón `^(0|-?[1-9][0-9]{0,18})$`); además debe estar dentro del rango anterior. `-0`, `007`,
+  ceros a la izquierda (patrón `^(0|-?[1-9][0-9]{0,18})$`). El patrón solo valida la **forma**: admite valores fuera
+  del dominio (p. ej. `-9223372036854775808`, `9999999999999999999`), que la comprobación numérica rechaza. `-0`, `007`,
   exponentes, espacios, separadores y decimales se rechazan con `INVALID_AMOUNT` (400 `validation-error`).
 - La forma canónica garantiza que el mismo monto produzca el mismo JSON, lo que importa para el hash de idempotencia.
 - Prohibido `type: number` para montos o tasas en el contrato.
@@ -86,8 +90,10 @@ redondeo de cuotas (D-FIN-02), la base de tasas (D-FIN-03) y la amortización se
 
 Fixtures compartidos (`contracts/fixtures/money/*.json`, T056) ejecutados en backend (T057) y en Dart sobre la VM y
 sobre web (T059). Incluyen: límites del rango y desbordamiento, valores > 2^53, forma canónica, monedas de escala 0, 2,
-3 y 4, moneda no soportada, cada modo de redondeo con .5 positivo y negativo, y `allocate` con residuos. Pruebas de
-propiedades (T058). Regla anti punto flotante (T064, T065).
+3 y 4, moneda no soportada, cada modo de redondeo con .5 positivo y negativo, y `allocate` con residuos. Los cuatro
+bordes del dominio (mínimo y máximo aceptados; −9223372036854775808 y 9223372036854775808 rechazados). Ida y vuelta
+**Money → JSON → Money** en Node.js, Dart VM y Flutter Web, con rechazo de JSON no canónico (operación `from_json`).
+Pruebas de propiedades (T058). Regla anti punto flotante (T064, T065).
 
 ## Revisión
 

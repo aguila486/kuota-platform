@@ -47,7 +47,7 @@ contracts/
 { "amount_minor": "150000", "currency": "MXN" }
 ```
 
-- `amount_minor`: **string** en forma canónica (`^(0|-?[1-9][0-9]{0,18})$`, dentro del rango de `BIGINT`) en unidades
+- `amount_minor`: **string** en forma canónica (`^(0|-?[1-9][0-9]{0,18})$`; el rango simétrico se comprueba aparte) en unidades
   mínimas de la moneda. Se usa string porque JavaScript/Flutter Web pierden precisión en enteros > 2^53 y para impedir
   que cualquier capa lo trate como float. Reglas completas: ADR-0007.
 - `currency`: ISO 4217. El número de decimales de la moneda se obtiene de la tabla ISO, no del payload.

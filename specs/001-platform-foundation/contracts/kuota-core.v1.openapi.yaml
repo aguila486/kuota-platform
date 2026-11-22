@@ -308,8 +308,9 @@ components:
       type: object
       description: |
         Monto exacto en unidades mínimas de la moneda (ADR-0007). `amount_minor` es un string canónico (sin ceros a la
-        izquierda ni `-0`) dentro del rango de BIGINT; fuera de rango o con una moneda no soportada → 400
-        `validation-error`.
+        izquierda ni `-0`) dentro del dominio simétrico de Money (−9223372036854775807 … 9223372036854775807). El
+        patrón solo valida la forma; el servidor rechaza fuera de dominio (incluido −9223372036854775808) o con moneda
+        no soportada → 400 `validation-error`.
       required: [amount_minor, currency]
       additionalProperties: false
       properties:

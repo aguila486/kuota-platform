@@ -242,13 +242,16 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
   variante `highContrastReceipt`; `api_client` generado; `financial_domain` con `Money` y fixtures. Melos 8 se configura en
   la sección `melos:` del `flutter/pubspec.yaml` raíz del workspace, solo para scripts.
 - **Note**: los providers solo orquestan estado de UI; reglas en `financial_domain`, sincronización en `offline_sync`.
+- **`admin_web` (D-ARC-03, pendiente)**: Flutter Web **provisional**, autorizado solo para el shell de 001 (scaffolding,
+  entorno, arranque, build Web, integración en el monorepo). La tecnología definitiva se decide con los criterios de
+  ADR-0003 antes de las pantallas administrativas complejas; el shell es descartable sin afectar a los paquetes.
 
 ## R-20 · CODEOWNERS con mantenedor único
 
 - **Decision**: `.github/CODEOWNERS` con el handle del mantenedor como placeholder `<maintainer-handle>`
   (a reemplazar al crear el remoto) y secciones por área listas para agregar un segundo dueño. Reglas de protección de
   `main` documentadas en `docs/process/git-workflow.md` (FR-038) para aplicarse al publicar, con la excepción de
-  mantenedor único (Constitución v1.1.0).
+  mantenedor único (introducida en la Constitución v1.1.0, vigente en v1.2.0).
 
 ## R-21 · Métricas técnicas (FR-039) y su acceso (FR-040)
 

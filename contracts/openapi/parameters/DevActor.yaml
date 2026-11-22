@@ -1,0 +1,9 @@
+# Contrato fuente de Kuota Core v1 — parameter DevActor. Editar aquí; los bundles son derivados (T022, R-13).
+name: X-Kuota-Dev-Actor
+in: header
+required: false
+description: SOLO local/testing. Identificador técnico del actor para auditoría.
+schema:
+  type: string
+  maxLength: 64
+  pattern: ^[A-Za-z0-9_.:-]+$

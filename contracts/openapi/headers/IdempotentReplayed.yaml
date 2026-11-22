@@ -1,0 +1,6 @@
+# Contrato fuente de Kuota Core v1 — header IdempotentReplayed. Editar aquí; los bundles son derivados (T022, R-13).
+description: '`true` si la respuesta proviene de una ejecución previa con la misma clave.'
+schema:
+  type: string
+  enum:
+  - 'true'

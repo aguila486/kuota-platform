@@ -1,0 +1,34 @@
+# Contrato fuente de Kuota Core v1 — schema CompatibilityInfo. Editar aquí; los bundles son derivados (T022, R-13).
+type: object
+required:
+- api_version
+- min_supported
+- server_time
+additionalProperties: false
+properties:
+  api_version:
+    type: string
+    examples:
+    - 1.0.0
+  min_supported:
+    type: object
+    required:
+    - admin
+    - collector
+    - client
+    additionalProperties: false
+    properties:
+      admin:
+        type: string
+      collector:
+        type: string
+      client:
+        type: string
+  client_supported:
+    type:
+    - boolean
+    - 'null'
+    description: Si se envió `X-App-Version`, indica si esa versión está soportada.
+  server_time:
+    type: string
+    format: date-time

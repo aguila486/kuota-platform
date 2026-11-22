@@ -1,0 +1,20 @@
+# Contrato fuente de Kuota Core v1 — schema ReadinessStatus. Editar aquí; los bundles son derivados (T022, R-13).
+type: object
+required:
+- status
+- checks
+additionalProperties: false
+properties:
+  status:
+    type: string
+    enum:
+    - ok
+    - error
+  checks:
+    type: object
+    required:
+    - database
+    additionalProperties: false
+    properties:
+      database:
+        $ref: ./DependencyStatus.yaml

@@ -173,7 +173,11 @@ settings:
 
 importers:
 
-  .: {}
+  .:
+    devDependencies:
+      '@redocly/cli':
+        specifier: 2.82.0
+        version: 2.82.0
 
   backend:
     dependencies:
@@ -995,6 +999,11 @@ packages:
     peerDependenciesMeta:
       '@types/react':
         optional: true
+
+  '@redocly/cli@2.82.0':
+    resolution: {integrity: sha512-yyd53xbJgLRa1qyFhaxf9PxOnccjfWJmVRC7uqY7lRUhSq7Zo0id8lHLblpJKMjj4fE2t5zKDF3xml3hnBscJw==}
+    engines: {node: '>=22.12.0 || >=20.19.0 <21.0.0', npm: '>=10'}
+    hasBin: true
 
   '@rolldown/binding-android-arm-eabi@1.2.19':
     resolution: {integrity: sha512-e+Ebe0WT+9tbXmNKPIiC8YrWAHYwug3m6i4p3rZGGulfZri1jtI4HslT+OZnFf/OIHowWF71DTlHwXBP2SiA7A==}
@@ -4434,6 +4443,8 @@ snapshots:
       react: 19.3.1
     optionalDependencies:
       '@types/react': 19.3.0
+
+  '@redocly/cli@2.82.0': {}
 
   '@rolldown/binding-android-arm-eabi@1.2.19':
     optional: true

@@ -1,0 +1,118 @@
+# Contrato fuente de Kuota Core v1 (raíz). Generado desde specs/001-platform-foundation/contracts/ en T022.
+openapi: 3.1.0
+info:
+  title: Kuota Core API
+  version: 1.0.0-foundation
+  summary: Contrato inicial de la plataforma (feature 001-platform-foundation).
+  description: 'Contrato fuente versionado (Constitución XII; T022). Multiarchivo: `paths/`, `schemas/`, `parameters/`,
+
+    `responses/` y `headers/`. El bundle es un artefacto derivado (`pnpm contracts:bundle`).
+
+    Convenciones transversales: errores RFC 9457 (problem+json), `X-Correlation-Id`,
+
+    `Idempotency-Key` en escrituras, dinero como `{amount_minor: string, currency}`,
+
+    `X-App-Version` para compatibilidad de apps.
+
+
+    Acceso (Constitución §II, tabla Endpoint Access de spec.md): solo `getLiveness`, `getReadiness` y
+
+    `getCompatibility` son públicos (`security: []`). Las operaciones `dev-probe` usan `devTenantContext`, un contexto
+
+    técnico de empresa que NO es autenticación y solo existe en `local`/`testing`. No hay esquema global de seguridad:
+
+    toda operación nueva DEBE declarar `security` explícitamente. Las métricas no forman parte de este contrato
+
+    (research R-21).
+
+    '
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Kuota-Proprietary
+servers:
+- url: http://localhost:3000
+  description: Local
+tags:
+- name: health
+  description: Chequeos de vida y disponibilidad (sin versión de API).
+- name: meta
+  description: Metadatos de la API y compatibilidad de apps.
+- name: dev-probe
+  description: Recurso técnico NO productivo (solo KUOTA_ENV local/testing). Valida aislamiento, idempotencia y auditoría.
+paths:
+  /health/live:
+    $ref: ./paths/health-live.yaml
+  /health/ready:
+    $ref: ./paths/health-ready.yaml
+  /v1/meta/compatibility:
+    $ref: ./paths/v1-meta-compatibility.yaml
+  /v1/dev/probe-items:
+    $ref: ./paths/v1-dev-probe-items.yaml
+  /v1/dev/probe-items/{id}:
+    $ref: ./paths/v1-dev-probe-items-by-id.yaml
+components:
+  securitySchemes:
+    devTenantContext:
+      type: apiKey
+      in: header
+      name: X-Kuota-Dev-Tenant
+      description: 'Contexto técnico de empresa (UUID). NO es autenticación: no prueba identidad ni permisos. Solo existe
+        en
+
+        `local`/`testing` (R-05); fuera de ellos el módulo no se registra y el arranque aborta si el mecanismo está
+
+        habilitado. Se reemplaza por la identidad real en 002.
+
+        '
+  schemas:
+    Problem:
+      $ref: ./schemas/Problem.yaml
+    Money:
+      $ref: ./schemas/Money.yaml
+    LivenessStatus:
+      $ref: ./schemas/LivenessStatus.yaml
+    ReadinessStatus:
+      $ref: ./schemas/ReadinessStatus.yaml
+    DependencyStatus:
+      $ref: ./schemas/DependencyStatus.yaml
+    CompatibilityInfo:
+      $ref: ./schemas/CompatibilityInfo.yaml
+    DevProbeItemCreate:
+      $ref: ./schemas/DevProbeItemCreate.yaml
+    DevProbeItemUpdate:
+      $ref: ./schemas/DevProbeItemUpdate.yaml
+    DevProbeItem:
+      $ref: ./schemas/DevProbeItem.yaml
+    DevProbeItemPage:
+      $ref: ./schemas/DevProbeItemPage.yaml
+  parameters:
+    CorrelationId:
+      $ref: ./parameters/CorrelationId.yaml
+    IdempotencyKey:
+      $ref: ./parameters/IdempotencyKey.yaml
+    AppVersion:
+      $ref: ./parameters/AppVersion.yaml
+    DevActor:
+      $ref: ./parameters/DevActor.yaml
+    Limit:
+      $ref: ./parameters/Limit.yaml
+    Cursor:
+      $ref: ./parameters/Cursor.yaml
+  responses:
+    BadRequest:
+      $ref: ./responses/BadRequest.yaml
+    MissingTenantContext:
+      $ref: ./responses/MissingTenantContext.yaml
+    NotFound:
+      $ref: ./responses/NotFound.yaml
+    IdempotencyInProgress:
+      $ref: ./responses/IdempotencyInProgress.yaml
+    IdempotencyKeyReused:
+      $ref: ./responses/IdempotencyKeyReused.yaml
+    VersionConflict:
+      $ref: ./responses/VersionConflict.yaml
+  headers:
+    CorrelationId:
+      $ref: ./headers/CorrelationId.yaml
+    IdempotentReplayed:
+      $ref: ./headers/IdempotentReplayed.yaml

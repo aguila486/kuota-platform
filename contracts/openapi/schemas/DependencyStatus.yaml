@@ -1,0 +1,11 @@
+# Contrato fuente de Kuota Core v1 — schema DependencyStatus. Editar aquí; los bundles son derivados (T022, R-13).
+type: object
+required:
+- status
+additionalProperties: false
+properties:
+  status:
+    type: string
+    enum:
+    - up
+    - down

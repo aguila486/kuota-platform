@@ -1,0 +1,11 @@
+# Contrato fuente de Kuota Core v1 — parameter IdempotencyKey. Editar aquí; los bundles son derivados (T022, R-13).
+name: Idempotency-Key
+in: header
+required: true
+description: Clave generada por el cliente, única por tenant (recomendado UUID). Se conserva 30 días; una clave expirada se
+  trata como nueva (política de 001).
+schema:
+  type: string
+  minLength: 8
+  maxLength: 128
+  pattern: ^[A-Za-z0-9_-]+$

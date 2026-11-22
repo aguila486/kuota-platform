@@ -1,0 +1,6 @@
+# Contrato fuente de Kuota Core v1 — response BadRequest. Editar aquí; los bundles son derivados (T022, R-13).
+description: Error de validación.
+content:
+  application/problem+json:
+    schema:
+      $ref: ../schemas/Problem.yaml

@@ -1,0 +1,16 @@
+# Excepciones justificadas del preset `recommended` de Redocly (T023). Cada una está acotada a una ubicación concreta:
+# la regla sigue activa en el resto del contrato. Toda excepción nueva requiere justificación en esta cabecera.
+#
+# - no-server-example.com (#/servers/0/url): el contrato de 001 solo declara el servidor local http://localhost:3000;
+#   los servidores de staging/producción se añadirán con D-ARC-04.
+# - operation-4xx-response (health-live, health-ready): sondas operativas públicas sin entrada del cliente
+#   (Constitución §II, Endpoint Access de spec.md); no tienen errores 4xx que declarar. readiness declara 503.
+kuota-core.v1.yaml:
+  no-server-example.com:
+    - '#/servers/0/url'
+paths/health-live.yaml:
+  operation-4xx-response:
+    - '#/get/responses'
+paths/health-ready.yaml:
+  operation-4xx-response:
+    - '#/get/responses'

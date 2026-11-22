@@ -1,0 +1,15 @@
+# Contrato fuente de Kuota Core v1 — path /health/live. Editar aquí; los bundles son derivados (T022, R-13).
+get:
+  tags:
+  - health
+  operationId: getLiveness
+  summary: Proceso vivo.
+  description: Público (excepción registrada). Solo indica que el proceso responde; no consulta dependencias.
+  security: []
+  responses:
+    '200':
+      description: Vivo.
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/LivenessStatus.yaml

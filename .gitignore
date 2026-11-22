@@ -72,3 +72,6 @@ reports/
 
 # Cliente Prisma generado (spike T014): se regenera con `prisma generate`; nunca se versiona.
 backend/generated/
+
+# Bundles del contrato OpenAPI (derivados de contracts/openapi; se regeneran con pnpm contracts:bundle).
+contracts/openapi/dist/

@@ -74,7 +74,8 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 
 ## R-04 · ORM y RLS — spike D-ARC-01 (Prisma)
 
-- **Decision**: **Prisma 7.10.x con `@prisma/adapter-pg`** (driver `pg` nativo), *condicionado a spike* (tarea dedicada).
+- **Decision**: **Prisma 7.10.1 con `@prisma/adapter-pg`** (driver `pg` nativo). **Aceptado con condiciones en T015**
+  (2026-11-22, D-ARC-01; ADR-0004 §Condiciones de la aceptación) tras superar S1–S6 en el spike T014.
   Patrón: `TenantPrismaService.withTenant(fn)` abre `$transaction` interactiva y ejecuta como primera sentencia
   `SELECT set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true)`; todo acceso a tablas de tenant pasa
   por `withTenant`. Una regla de lint prohíbe usar el cliente Prisma "crudo" fuera de `common/tenant-context`.

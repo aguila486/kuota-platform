@@ -1,7 +1,7 @@
 # Informe del spike T014 — Prisma 7 + PostgreSQL 18 RLS (insumo para T015)
 
-> **Estado: borrador para la decisión humana de T015 (D-ARC-01).** Este informe no aprueba Prisma ni modifica
-> ADR-0004. La sección "Resultado del spike" de ADR-0004 se completa en T015, tras la decisión del responsable.
+> **Estado: decidido en T015 (2026-11-22).** El responsable aprobó Prisma 7 **con condiciones** (D-ARC-01). El resultado
+> y el estado de las condiciones P1–P8 están en ADR-0004 (§Resultado del spike y §Condiciones de la aceptación).
 
 ## 1. Qué se ejecutó
 

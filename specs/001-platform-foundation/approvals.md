@@ -43,3 +43,22 @@ no es una firma: identifica el contenido aprobado mediante los identificadores d
   migración: 24 pruebas de G2 + 5 de soporte en verde; `migration.sql` idéntica a la del commit `054c24e`).
 - **Alcance de implementación autorizado:** G1 (T001–T011), G2 (T012–T013) y **T014**. T015 queda como punto de
   aprobación humana; G4 y posteriores no están autorizados.
+
+## Aprobación 2 — 2026-11-22: D-ARC-01 (ORM), cierre de T015
+
+- **Quién:** responsable del proyecto, mediante mensaje explícito en la sesión de trabajo: "APRUEBO PRISMA 7 COMO ORM
+  PRINCIPAL DE KUOTA, CON CONDICIONES".
+- **Evidencia revisada:** spike T014 (`specs/001-platform-foundation/spike-t014-report.md`), con S1–S6 en PASS en tres
+  ejecuciones; la evidencia del repositorio coincide con el informe.
+- **Decisión:** Prisma 7.10.1 con `@prisma/adapter-pg`. Kysely queda documentado como alternativa ante una limitación
+  obligatoria futura. Registro: ADR-0004 (*Aceptado con condiciones*), D-ARC-01 en `docs/business/decisions-register.md`
+  y research R-04.
+- **Condiciones P1–P8:** su estado, severidad, prueba e hito están en ADR-0004 §Condiciones de la aceptación. La
+  aprobación **no** las da por mitigadas. Autorizaciones concretas incluidas:
+  - P1: modificar `0001_foundation` para añadir `BEGIN`/`COMMIT`, verificado antes que no estaba desplegada en ningún
+    entorno persistente (sin remoto; bases `kuota` y `kuota_test` del Compose sin esquema `kuota` ni historial).
+  - P3: conservar `_prisma_migrations` en `public` tras verificar propietario y privilegios.
+  - P5: solo documentar el procedimiento; **no** se autoriza una política de mantenimiento ni BYPASSRLS.
+  - P6 y P7: dirección aprobada o fuera de alcance; nada implementado.
+- **Alcance de implementación autorizado tras esta aprobación:** hasta T015 inclusive. **G4 y posteriores no están
+  autorizados**; requieren una autorización expresa nueva tras revisar P1–P4.

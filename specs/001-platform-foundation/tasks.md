@@ -62,10 +62,10 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 - [X] T019 Implementar el logging con nestjs-pino: JSON, `correlation_id` desde `X-Correlation-Id` (UUID validado) o UUIDv7 generado, módulo, nivel, tenant y actor desde CLS, `redact.paths` y serializador de patrones (R-15). En `backend/src/common/logging/`
 - [X] T020 [P] Escribir la prueba del filtro de errores: toda excepción produce `application/problem+json` con `type`, `title`, `status`, `code` y `correlation_id`, sin stack ni datos sensibles (FR-011), en `backend/test/unit/errors/problem-filter.spec.ts`
 - [X] T021 Implementar el filtro global problem+json (RFC 9457) con los códigos estables del contrato (`Problem.code`), en `backend/src/common/errors/`
-- [ ] T022 Materializar el contrato fuente multiarchivo a partir de `specs/001-platform-foundation/contracts/kuota-core.v1.openapi.yaml`, separando `paths/`, `schemas/`, `parameters/` y `responses/`, en `contracts/openapi/kuota-core.v1.yaml`
-- [ ] T023 [P] Configurar Redocly 2 (preset recommended, excepciones justificadas para health 4xx y servidor localhost) con las reglas propias de R-13: `Idempotency-Key` requerido si `x-kuota-idempotent`, errores `application/problem+json` y montos vía `$ref Money`. En `contracts/openapi/redocly.yaml`
-- [ ] T024 [P] Crear los scripts raíz `contracts:lint`, `contracts:bundle` y `contracts:breaking` (oasdiff 1.39 fijado, contra el bundle de `main`) en `package.json` y `scripts/contracts/breaking.sh`
-- [ ] T025 Crear `AppModule` con el registro condicional de módulos (`dev-probe` solo si `KUOTA_ENV ∈ {local, testing}` y `KUOTA_DEV_TENANT_CONTEXT=enabled`; FR-040) y el bootstrap con prefijo de versión `/v1` para rutas versionadas, en `backend/src/app.module.ts` y `backend/src/main.ts`
+- [X] T022 Materializar el contrato fuente multiarchivo a partir de `specs/001-platform-foundation/contracts/kuota-core.v1.openapi.yaml`, separando `paths/`, `schemas/`, `parameters/` y `responses/`, en `contracts/openapi/kuota-core.v1.yaml`
+- [X] T023 [P] Configurar Redocly 2 (preset recommended, excepciones justificadas para health 4xx y servidor localhost) con las reglas propias de R-13: `Idempotency-Key` requerido si `x-kuota-idempotent`, errores `application/problem+json` y montos vía `$ref Money`. En `contracts/openapi/redocly.yaml`
+- [X] T024 [P] Crear los scripts raíz `contracts:lint`, `contracts:bundle` y `contracts:breaking` (oasdiff 1.39 fijado, contra el bundle de `main`) en `package.json` y `scripts/contracts/breaking.sh`
+- [X] T025 Crear `AppModule` con el registro condicional de módulos (`dev-probe` solo si `KUOTA_ENV ∈ {local, testing}` y `KUOTA_DEV_TENANT_CONTEXT=enabled`; FR-040) y el bootstrap con prefijo de versión `/v1` para rutas versionadas, en `backend/src/app.module.ts` y `backend/src/main.ts`
 
 **Checkpoint**: el spike está en PASS y aprobado, se cumple `pnpm contracts:lint` y las pruebas T017, T018 y T020 pasan.
 

@@ -210,6 +210,28 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 - **Rationale**: Redocly cubre lint y bundle con una sola herramienta; Spectral queda como alternativa si se requieren
   reglas más complejas (se evita doble configuración).
 - **Alternatives considered**: Spectral + otro bundler (dos herramientas para lo mismo).
+- **Implementación (G5: T022–T024, 2026-11-22)**:
+  - Fuente multiarchivo en `contracts/openapi/` (`paths/`, `schemas/`, `parameters/`, `responses/` y `headers/`, este
+    último porque el borrador ya declaraba `components.headers`). Su bundle desreferenciado es idéntico al del borrador
+    aprobado salvo `info.description`. Sin endpoints nuevos ni cambios al contrato financiero.
+  - Redocly CLI **2.82.0** (devDependency raíz, versión exacta, sin scripts de instalación). Las `configurable rules`
+    no pueden exigir un parámetro según una extensión de la operación, así que las reglas propias son un plugin local
+    (`contracts/openapi/plugins/kuota-rules.mjs`): `kuota/idempotency-key-required`, `kuota/problem-json-errors` (exime
+    las operaciones `health`, cuyo 503 es estado) y `kuota/money-via-ref`. Excepciones del preset acotadas por
+    ubicación y justificadas en `contracts/openapi/.redocly.lint-ignore.yaml`.
+  - **Discrepancia resuelta sin cambiar el contrato**: esta decisión nombraba `x-kuota-financial: true` y T023/el
+    contrato usan `x-kuota-idempotent`. La regla exige `Idempotency-Key` en ambos casos (`x-kuota-idempotent` en
+    cualquier método; `x-kuota-financial` en POST/PUT/PATCH). Unificar la nomenclatura queda para la gobernanza del
+    contrato (antes de la primera operación financiera).
+  - oasdiff **v1.39.0** vía imagen oficial `tufin/oasdiff:v1.39.0@sha256:004bef22058ace818b61f0eb2f05efb89fc6a3882f68bf4db0b6a86f40723fe0`
+    (índice multiarquitectura: amd64 `sha256:d552b750…`, arm64 `sha256:26e46ff2…`), verificada con `docker buildx
+    imagetools inspect` y `oasdiff --version`. Montajes de solo lectura y `--network none`; `--fail-on ERR`.
+  - **Base**: `contracts:breaking [REF]` empaqueta el contrato de `REF` (por defecto `main`) con `git archive`. Si
+    `REF` no contiene el contrato (caso actual: `main` aún no lo tiene) lo informa y sale con 0: no se inventa una base.
+    La primera comparación real ocurrirá cuando el contrato llegue a `main`. La integración en CI es de G12.
+  - Pruebas (`pnpm contracts:test`): fixtures que cada regla debe rechazar, y variantes del contrato real que oasdiff
+    debe aceptar (sin cambios, cambio compatible) o rechazar (endpoint eliminado, tipo cambiado, propiedad de petición
+    que pasa a requerida, propiedad de respuesta que deja de ser requerida, propiedad de respuesta que pasa a nullable).
 
 ## R-14 · Pruebas de contrato (respuestas reales vs contrato)
 
@@ -241,6 +263,18 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
     nunca se exponen; solo los de validación, en `errors[]`.
   - Los componentes existen y están probados, pero **no están conectados al proceso real** hasta T025 (`AppModule`,
     filtro global, `app.useLogger`).
+- **Implementación (G5: T025, 2026-11-22)**:
+  - Conectados al proceso real: `AppModule.forRoot(config)` (configuración ya validada, `LoggingModule`, filtro global
+    `APP_FILTER`), `createApp` en `src/bootstrap.ts` (`app.useLogger`, `bufferLogs`, prefijo `/v1` salvo `health/*`,
+    sin `X-Powered-By`) y `main.ts`, que valida la configuración antes de crear Nest y, si es inválida, sale con 1 y una
+    línea JSON que nombra variables y reglas, nunca valores.
+  - Registro condicional (FR-040): `src/dev-modules.ts` (`DEV_ONLY_MODULES`, **vacío** hasta G7) solo se importa si
+    `KUOTA_ENV ∈ {local, testing}` y `KUOTA_DEV_TENANT_CONTEXT=enabled`. Fuera de eso las rutas no existen (404).
+  - **Corrige la regla de G4 sobre 403/405** (fase 6 de G5): el contrato no tiene códigos para 401/403/405/426 genéricos,
+    y convertir un 403 en `validation-error` mezclaba autorización con validación. Ahora solo 400/413/415/422 →
+    `validation-error` y 404 → `not-found`; 401 y 426 se producen únicamente con `KuotaProblemError`; cualquier otra
+    `HttpException` (403, 405…) es un error de programación → 500 `internal-error` con log de error. Los códigos para
+    403/405 siguen **pendientes para 002**.
 
 ## R-16 · Cola de jobs
 

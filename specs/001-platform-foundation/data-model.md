@@ -158,3 +158,32 @@ stateDiagram-v2
 Consulta de catálogo ejecutada en CI tras migrar: falla si existe alguna tabla del esquema `kuota` con columna
 `tenant_id` donde `relrowsecurity = false` o `relforcerowsecurity = false`, o sin al menos una política. Lista blanca
 explícita y vacía en 001 (tablas globales futuras deben declararse en ella con justificación).
+
+## Implementación en `0001_foundation` (G2, 2026-11-22)
+
+Migración `backend/prisma/migrations/0001_foundation/migration.sql`, verificada con
+`backend/test/integration/foundation-schema.spec.ts` (24 pruebas sobre PostgreSQL 18.7). Concreta las reglas de este
+documento así:
+
+| Regla del modelo | Forma en SQL |
+|---|---|
+| `id` UUIDv7 del servidor | `DEFAULT uuidv7()` (nativo de PostgreSQL 18) en `dev_probe_items.id` y `audit_events.id` |
+| `tenant_id` del contexto, nunca del body | `DEFAULT nullif(current_setting('app.tenant_id', true), '')::uuid` + `NOT NULL` + política `WITH CHECK` |
+| `label` 1–120 · `version` ≥ 1 · monto con moneda | `CHECK` de longitud, `version >= 1` y `(sample_amount_minor IS NULL) = (sample_currency IS NULL)`; `sample_currency ~ '^[A-Z]{3}$'` |
+| Dominio simétrico de Money (ADR-0007) | `CHECK (sample_amount_minor <> -9223372036854775808)` |
+| `key` 8–128 `[A-Za-z0-9_-]` · `request_hash` SHA-256 · `status` | `CHECK` de formato; hash `^[0-9a-f]{64}$`; `status IN ('IN_PROGRESS','COMPLETED')`; `method ~ '^[A-Z]+$'` |
+| Solo respuestas 2xx/4xx deterministas | `response_status` nulo o en 200–299 / 400–499; `COMPLETED` exige `response_status` |
+| `expires_at = created_at + 30d` | Ambos con `now()` por defecto (hora de inicio de la transacción) + `CHECK (expires_at > created_at)` |
+| Auditoría: actor, acción, entidad, origen y correlación (FR-025) | `NOT NULL` en `actor_id`, `actor_type`, `action`, `entity_type`, `entity_id`, `origin`, `correlation_id`; `actor_id` y `correlation_id` toman su valor por defecto de `app.actor_id` y `app.correlation_id`; `actor_role`, `device_time` e `idempotency_key` admiten nulo; `changes` debe ser un objeto JSON |
+| Append-only (R-07) | Grants (`kuota_app`: solo `SELECT`, `INSERT`) + trigger por fila `BEFORE UPDATE OR DELETE` + trigger por sentencia `BEFORE TRUNCATE` |
+| Índices | PK; `UNIQUE (tenant_id, id)` en `dev_probe_items` (FK compuestas y cursor por tenant); `(tenant_id, occurred_at)` en `audit_events`; `(expires_at)` en `idempotency_keys` (purga, T079) |
+
+**Decisión de implementación — rol de la política RLS.** Este documento no fija a qué rol aplica la política estándar.
+Se declaró `FOR ALL TO kuota_app` (mínimo privilegio). Consecuencia verificada: con `FORCE ROW LEVEL SECURITY`,
+`kuota_migrator` (propietario) **no ve ni modifica filas** por DML aunque fije el contexto. Una migración de datos
+futura (backfill) necesitará una política explícita para el migrador o un `NO FORCE` temporal dentro de una migración
+revisada. Un rol futuro como `kuota_worker` solo quedará cubierto si es miembro de `kuota_app` o si se le añade una
+política propia (ADR-0002, C2-3).
+
+**Comportamiento observado — inserción sin contexto.** Falla con `42501` (violación de `WITH CHECK` de RLS) y no con
+`23502` (`NOT NULL`): PostgreSQL evalúa la política primero. En ambos casos se rechaza (fail-closed).

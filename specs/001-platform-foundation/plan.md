@@ -18,7 +18,7 @@ Construir la fundación técnica verificable del monorepo `kuota-platform`, sin 
 - Docker Compose local;
 - CI en GitHub Actions con gates bloqueantes por componente afectado, todo reproducible localmente y sin publicar en remoto.
 
-El enfoque técnico y las decisiones están en [research.md](research.md) (R-01..R-20).
+El enfoque técnico y las decisiones están en [research.md](research.md) (R-01..R-21).
 
 ## Technical Context
 
@@ -26,7 +26,7 @@ El enfoque técnico y las decisiones están en [research.md](research.md) (R-01.
 
 **Primary Dependencies**:
 
-- **Backend:** NestJS 12, Prisma 7.10 + `@prisma/adapter-pg`, nestjs-cls 7, nestjs-pino 5, `@nestjs/terminus`, decimal.js 10.
+- **Backend:** NestJS 12, Prisma 7.10 + `@prisma/adapter-pg`, nestjs-cls 7, nestjs-pino 5, `@nestjs/terminus`, `@prometheus-io/client` 0.16 (R-21), decimal.js 10.
 - **Calidad y contrato:** dependency-cruiser 18, Redocly CLI 2, oasdiff 1.39, openapi-generator (`dart-dio`, Docker), gitleaks 8.30, osv-scanner.
 - **Dart:** Melos 8, Riverpod 3, `decimal` 3, dio 5.
 
@@ -68,20 +68,20 @@ El enfoque técnico y las decisiones están en [research.md](research.md) (R-01.
 | # | Principio | Cómo lo cumple el plan | Estado |
 |---|---|---|---|
 | I | Spec-Driven Development | Spec + clarificaciones aprobables; tareas trazables a FR/US; CI valida rama `feature/NNN-*` ↔ `specs/NNN-*` | ✅ |
-| II | Seguridad por diseño | Riesgos en spec (edge cases); guard de dev bloquea arranque en staging/prod; gitleaks + osv-scanner bloqueantes | ✅ |
+| II | Seguridad por diseño | Sección Security Risks en spec; guard de dev bloquea arranque en staging/prod; gitleaks + osv-scanner bloqueantes | ✅ |
 | III | Aislamiento multi-tenant | RLS forzado, `set_config` local, rol sin BYPASSRLS, verificación de catálogo, suite de acceso cruzado y prueba concurrente | ✅ |
 | IV | Precisión financiera | `Money` bigint + decimal.js / `decimal` Dart, redondeo obligatorio, fixtures compartidos, regla anti-float | ✅ |
 | V | Inmutabilidad del ledger | Ledger fuera de alcance (006); 001 provee el patrón append-only (audit_events: REVOKE + trigger) reutilizable | ✅ N/A parcial |
 | VI | Idempotencia | `idempotency_keys` (PK tenant+key), interceptor `@Idempotent()`, prueba concurrente | ✅ |
-| VII | Auditoría | `audit_events` en la misma transacción; prueba por comando de escritura | ✅ |
+| VII | Auditoría | Eventos auditables listados en spec (Auditable Events); `audit_events` en la misma transacción; prueba por comando de escritura | ✅ |
 | VIII | Clean Architecture | Capas por módulo; dependency-cruiser bloqueante; `financial_domain` sin Flutter | ✅ |
 | IX | Modularidad | Monolito modular; reglas de módulo; apps solo comparten vía paquetes (check_deps) | ✅ |
 | X | Test-Driven Validation | Tareas de prueba preceden a implementación; umbrales 90/80 bloqueantes | ✅ |
 | XI | Offline Resilience | Fuera de alcance (011); 001 deja `server_time` y compatibilidad para apps | ✅ N/A |
 | XII | API Contract-First | Contrato antes del código; lint + oasdiff + cliente generado + pruebas de contrato | ✅ |
-| XIII | Observabilidad | Logs JSON con correlation id/tenant, redacción PII probada, health live/ready | ✅ |
+| XIII | Observabilidad | Logs JSON con correlation id/tenant, redacción PII probada, health live/ready, métricas técnicas en puerto separado (FR-039, R-21); señales declaradas en spec (Observability Signals); alertas financieras diferidas a 006/013 | ✅ |
 | XIV | Evolución compatible | Migraciones forward-only; oasdiff; endpoint de compatibilidad y versión mínima por app | ✅ |
-| XV | Protección de datos | Sin PII en 001; redacción en logs; `.env.example` sin secretos | ✅ |
+| XV | Protección de datos | Inventario de datos personales en spec: ninguno; redacción en logs; `.env.example` sin secretos | ✅ |
 | Gob. | Quality gates / mantenedor único | Gates de CI = lista de la Constitución; excepción de mantenedor único v1.1.0 aplicada | ✅ |
 
 **Resultado pre-research**: PASA sin violaciones. **Re-check post-diseño (Phase 1)**: PASA. `data-model.md`, el contrato y
@@ -95,7 +95,7 @@ El enfoque técnico y las decisiones están en [research.md](research.md) (R-01.
 specs/001-platform-foundation/
 ├── spec.md                 # Especificación (+ Clarifications 2026-11-22)
 ├── plan.md                 # Este archivo
-├── research.md             # R-01..R-20, versiones verificadas
+├── research.md             # R-01..R-21, versiones verificadas
 ├── data-model.md           # Roles BD, RLS, dev_probe_items, idempotency_keys, audit_events, Money
 ├── quickstart.md           # Guía de validación end-to-end
 ├── contracts/

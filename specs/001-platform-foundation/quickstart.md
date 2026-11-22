@@ -26,6 +26,8 @@ curl -s localhost:3000/health/ready  # → {"status":"ok","checks":{"database":{
 docker compose -f infra/docker/compose.yaml stop postgres
 curl -s -o /dev/null -w '%{http_code}' localhost:3000/health/ready   # → 503, checks.database.status = down (US1-2)
 curl -s localhost:3000/health/live   # → sigue 200
+curl -s localhost:9464/metrics | grep -E 'http_server_request_duration_seconds|kuota_http_errors_total'   # métricas (FR-039)
+curl -s -o /dev/null -w '%{http_code}' localhost:3000/metrics   # → 404 (no se expone en el puerto de la API)
 ```
 
 ## 2. Pruebas de todo el monorepo (US1, FR-002)

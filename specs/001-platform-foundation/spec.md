@@ -48,6 +48,9 @@ verificar que el chequeo de salud responde "listo" y que la ejecución completa 
    entorno con valores ficticios documentados y ningún secreto real versionado.
 4. **Given** una versión de herramienta incompatible (p. ej. SDK móvil inferior al mínimo), **When** se ejecuta el
    arranque o la verificación de entorno, **Then** el proceso falla con un mensaje que indica la versión requerida.
+5. **Given** el servicio central en ejecución y algunas solicitudes atendidas, **When** se consultan sus métricas
+   técnicas, **Then** incluyen el conteo y la latencia de esas solicitudes por ruta y código de estado, el estado de las
+   conexiones al almacén de datos y las métricas del proceso, sin datos personales ni identificadores de empresa.
 
 ---
 
@@ -263,6 +266,13 @@ verificando que muestra su pantalla de inicio con el nombre de la app, el entorn
   contraseñas, tokens, códigos de un solo uso, encabezados de autorización) y esto MUST estar cubierto por pruebas.
 - **FR-011**: Toda respuesta de error MUST usar el formato estándar de errores definido en el contrato e incluir el
   identificador de correlación.
+- **FR-039**: El servicio central MUST exponer métricas técnicas básicas en un formato estándar de extracción:
+  solicitudes y latencia por ruta (plantilla, no ruta concreta), método y código de estado; errores por código estable
+  del formato de errores; estado del pool de conexiones al almacén de datos; y métricas del proceso. Las métricas MUST
+  servirse en un puerto separado del tráfico de la API y MUST NOT incluir datos personales, valores de encabezados ni
+  identificadores de empresa como etiqueta. Las métricas de negocio y las alertas por errores financieros (desbalance,
+  falla de conciliación) se difieren a las features que introducen esas operaciones (006 ledger, 013 conciliación de
+  caja), porque 001 no tiene operaciones financieras.
 
 **Aislamiento multi-tenant**
 
@@ -358,6 +368,31 @@ verificando que muestra su pantalla de inicio con el nombre de la app, el entorn
   apps.
 - **Información de compatibilidad**: Versión de API y versión mínima soportada por app.
 
+### Auditable Events
+
+Eventos que MUST registrarse en la bitácora de auditoría (Constitución VII), todos con `actor_type = DEV` en 001:
+
+| Acción | Cuándo | Entidad | Valores relevantes registrados |
+|---|---|---|---|
+| `dev_probe.created` | Creación confirmada (no en reproducciones idempotentes) | Recurso técnico | `label`, monto de muestra, `version` |
+| `dev_probe.updated` | Actualización confirmada | Recurso técnico | `label` antes/después, `version` antes/después |
+| `dev_probe.deleted` | Eliminación confirmada | Recurso técnico | `label` y `version` al eliminar |
+
+- Una reproducción idempotente (misma clave y contenido) MUST NOT generar un nuevo evento.
+- Las solicitudes rechazadas (validación, conflicto, acceso a recursos de otra empresa) no se auditan en 001; los
+  eventos de seguridad (inicios de sesión, fallos de autorización) pertenecen a 002.
+
+### Observability Signals
+
+Métricas y eventos de log relevantes de esta feature (Constitución XIII):
+
+- **Métricas** (FR-039): solicitudes y latencia por ruta/método/estado, errores por código estable, pool de conexiones
+  al almacén de datos, métricas del proceso.
+- **Eventos de log**: arranque y apagado (entorno, versión, módulos habilitados), arranque abortado por el guard de
+  contexto técnico, cambio de estado del chequeo de disponibilidad, una línea por solicitud (ruta, estado, duración,
+  correlación, empresa y actor si existen), errores no controlados (sin stack en la respuesta; con stack solo en log),
+  conflictos de idempotencia (409/422) y conflictos de versión.
+
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
@@ -380,6 +415,29 @@ verificando que muestra su pantalla de inicio con el nombre de la app, el entorn
 - **SC-008**: Las tres apps inician y muestran su pantalla de inicio con información de compatibilidad obtenida del
   servicio local.
 - **SC-009**: 0 ocurrencias de datos sensibles de prueba en los logs generados durante la suite completa.
+
+## Security Risks *(Constitución II)*
+
+| Riesgo | Actor / vector | Activo afectado | Mitigación en 001 | Verificación |
+|---|---|---|---|---|
+| Mecanismo técnico de contexto de empresa activo en producción | Configuración errónea o maliciosa | Aislamiento entre empresas | El servicio aborta el arranque si el mecanismo está habilitado en staging/producción; el recurso técnico no se registra fuera de local/testing | Prueba de arranque (FR-012, FR-017) |
+| Fuga de contexto de empresa entre solicitudes por reutilización de conexiones | Concurrencia | Datos por empresa | Contexto fijado por transacción, nunca por sesión; aislamiento forzado en el almacén | Prueba concurrente ≥ 50 solicitudes (US2-6, SC-002) |
+| Estructura nueva sin aislamiento | Error humano en futuras features | Datos por empresa | Verificación automática de catálogo bloqueante en CI | FR-015, US2-4 |
+| Cuenta de aplicación con privilegios excesivos | Compromiso de la aplicación | Integridad de datos y bitácora | Cuenta sin omisión de aislamiento, sin cambios de estructura y sin modificar auditoría | FR-014, US2-5, US6-5 |
+| Secretos versionados | Error humano | Credenciales | Solo archivo de ejemplo con valores ficticios; escáner de secretos sobre todo el historial | FR-004, SC-007 |
+| Datos sensibles en logs o métricas | Error humano | Datos personales futuros | Redacción probada en logs; métricas sin etiquetas de empresa, encabezados ni datos personales, en puerto separado | FR-010, FR-039, SC-009 |
+| Cadena de suministro (dependencias, acciones de CI, imágenes) | Paquete o imagen comprometidos | Código y CI | Escaneo de dependencias bloqueante; acciones de CI fijadas por hash; imágenes de contenedor fijadas por digest | FR-035 |
+| Duplicación de efectos por reintentos | Red inestable, reintentos del cliente | Integridad de operaciones | Idempotencia por empresa con manejo concurrente | FR-023, SC-006 |
+
+Riesgos fuera de alcance (pertenecen a 002+): autenticación real, gestión de sesiones, fuerza bruta, exposición
+pública de endpoints y cifrado en reposo en infraestructura gestionada (D-ARC-04).
+
+## Personal Data Inventory *(Constitución XV)*
+
+**Ninguno.** Esta feature no recolecta, almacena ni procesa datos personales. Los datos del recurso técnico, de la
+bitácora y de las pruebas son sintéticos; los identificadores de actor son técnicos (no personas). La redacción de logs
+(FR-010) se prueba con datos sensibles ficticios para preparar features futuras. Las features que introduzcan datos
+personales (002, 003) MUST declarar su propio inventario.
 
 ## Assumptions
 

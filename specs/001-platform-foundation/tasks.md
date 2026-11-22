@@ -21,6 +21,8 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 - **[P]**: Paralelizable (archivos distintos, sin dependencias de tareas incompletas)
 - **[Story]**: Historia de usuario (US1..US7)
 - Rutas relativas a la raíz del repositorio `kuota-platform/`
+- T093–T095 se añadieron tras `/speckit-analyze` (2026-11-22) y se ubican en su fase; no se renumeró para conservar las
+  referencias existentes a T001–T092
 
 ---
 
@@ -50,7 +52,7 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 
 **⚠️ CRITICAL**: Ninguna historia empieza antes de terminar esta fase. Si el spike T014 falla, se DETIENE la feature y se activa el fallback de R-04 (Kysely) con ADR-0004 actualizado antes de continuar.
 
-- [ ] T012 Crear `schema.prisma` (esquema `kuota`, generador con `@prisma/adapter-pg`) y la migración inicial SQL: esquema `kuota`, tablas `dev_probe_items`, `idempotency_keys` y `audit_events` según data-model.md (`dev_probe_items.*`, `idempotency_keys.*`, `audit_events.*`), con `ENABLE` y `FORCE ROW LEVEL SECURITY` y la política estándar de data-model.md. Archivos: `backend/prisma/schema.prisma` y `backend/prisma/migrations/0001_foundation/migration.sql`
+- [ ] T012 Crear `schema.prisma` (esquema `kuota`, generador con `@prisma/adapter-pg`) y la migración inicial SQL: esquema `kuota`, tablas `dev_probe_items`, `idempotency_keys` y `audit_events` con los campos, tipos y `CHECK` de data-model.md: `dev_probe_items.id`, `dev_probe_items.tenant_id`, `dev_probe_items.label`, `dev_probe_items.sample_amount_minor`, `dev_probe_items.sample_currency`, `dev_probe_items.version`, `dev_probe_items.created_at`, `dev_probe_items.updated_at`; `idempotency_keys.tenant_id`, `idempotency_keys.key`, `idempotency_keys.request_hash`, `idempotency_keys.method`, `idempotency_keys.path`, `idempotency_keys.status`, `idempotency_keys.response_status`, `idempotency_keys.response_body`, `idempotency_keys.created_at`, `idempotency_keys.expires_at`; `audit_events.id`, `audit_events.tenant_id`, `audit_events.actor_id`, `audit_events.actor_type`, `audit_events.action`, `audit_events.entity_type`, `audit_events.entity_id`, `audit_events.changes`, `audit_events.occurred_at`, `audit_events.device_time`, `audit_events.origin`, `audit_events.correlation_id`, `audit_events.idempotency_key`. Incluye `ENABLE` y `FORCE ROW LEVEL SECURITY` y la política estándar de data-model.md. Archivos: `backend/prisma/schema.prisma` y `backend/prisma/migrations/0001_foundation/migration.sql`
 - [ ] T013 Añadir a la misma migración los grants de data-model.md (Roles de base de datos): `kuota_app` con DML en `dev_probe_items`/`idempotency_keys` y solo `SELECT`/`INSERT` en `audit_events`, más el trigger `BEFORE UPDATE OR DELETE` que lanza excepción en `audit_events` (R-07). En `backend/prisma/migrations/0001_foundation/migration.sql`
 - [ ] T014 Implementar el spike RLS con Prisma 7 + `adapter-pg` que evalúa los criterios 1–5 de research R-04 (sin contexto → 0 filas; ≥ 50 solicitudes concurrentes de 2 tenants con pool de 2–5 → 0 cruces; `kuota_app` sin `UPDATE`/`DELETE` en auditoría ni DDL; latencia medida; migraciones con `kuota_migrator`) e imprime PASS/FAIL, en `backend/scripts/spike-rls.ts`
 - [ ] T015 Registrar el resultado del spike (criterios, cifras de latencia, decisión aprobada o fallback) en la sección "Resultado del spike" de `docs/decisions/ADR-0004-database-orm.md` y en `specs/001-platform-foundation/research.md` (R-04). Requiere aprobación humana de D-ARC-01
@@ -79,10 +81,12 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 
 - [ ] T026 [P] [US1] Escribir la prueba de integración de health: `live` 200; `ready` 200 con la BD arriba y 503 con `checks.database.status=down` con la BD detenida (US1-1, US1-2), en `backend/test/integration/health.spec.ts`
 - [ ] T027 [P] [US1] Escribir la prueba de integración de compatibilidad: devuelve `CompatibilityInfo` desde la configuración, `client_supported` según `X-App-Version` y 400 problem si el formato del encabezado es inválido, en `backend/test/integration/meta-compatibility.spec.ts`
+- [ ] T093 [P] [US1] Escribir la prueba de integración de métricas (US1-5, FR-039): tras solicitudes a `/health/live`, `/v1/meta/compatibility` y una ruta inexistente, el endpoint de métricas en `KUOTA_METRICS_PORT` expone `http_server_request_duration_seconds` con etiquetas `route` (plantilla), `method` y `status`, `kuota_http_errors_total` por `code`, métricas del pool de PostgreSQL y del proceso; ninguna etiqueta contiene UUIDs de tenant, valores de encabezados ni rutas concretas con ids; el puerto de la API no sirve `/metrics`. En `backend/test/integration/metrics.spec.ts`
 
 ### Implementation for User Story 1
 
 - [ ] T028 [P] [US1] Implementar el módulo health con `@nestjs/terminus` (`/health/live`, `/health/ready` con indicador PostgreSQL usando `kuota_app_login`) en `backend/src/modules/health/`
+- [ ] T094 [US1] Implementar el módulo de métricas con `@prometheus-io/client` 0.16 (R-21): registro propio, métricas por defecto del proceso, interceptor HTTP que etiqueta por plantilla de ruta, contador de errores alimentado por el filtro problem+json (T021), gauges del pool de `adapter-pg` y servidor HTTP separado en `KUOTA_METRICS_PORT` (variables añadidas a la validación de T016 y a `.env.example`), en `backend/src/common/metrics/`
 - [ ] T029 [P] [US1] Implementar el módulo meta con `GET /v1/meta/compatibility` (versión de API y mínimas por app desde config, `server_time`, parseo de `X-App-Version`) en `backend/src/modules/meta/`
 - [ ] T030 [US1] Crear `scripts/dev/up.sh` (doctor → compose up → espera de salud de la BD → migraciones con `kuota_migrator` → `pnpm --filter backend dev` → espera de `/health/ready`) y `scripts/dev/down.sh`, con mensajes accionables si el puerto está ocupado o falla la migración (Edge Cases), en `scripts/dev/`
 - [ ] T031 [P] [US1] Crear `Makefile` con los objetivos `up`, `down`, `test`, `test-affected` y `doctor`, que delegan en `scripts/dev/*`, en `Makefile`
@@ -111,8 +115,8 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 - [ ] T038 [US2] Implementar `TenantContext` sobre nestjs-cls (`tenantId`, `actorId`, `actorType`, `correlationId`) y `DevTenantGuard`, que lee `X-Kuota-Dev-Tenant`/`X-Kuota-Dev-Actor` solo cuando la configuración lo permite (R-05) y responde 401 `tenant-context-required` si falta, en `backend/src/common/tenant-context/`
 - [ ] T039 [US2] Implementar `TenantPrismaService.withTenant(fn)`: transacción interactiva con `set_config('app.tenant_id'|'app.actor_id'|'app.correlation_id', …, true)` como primera sentencia, siguiendo el patrón aprobado en T015, en `backend/src/common/tenant-context/tenant-prisma.service.ts`
 - [ ] T040 [P] [US2] Implementar el dominio de `dev-probe`: entidad `DevProbeItem` con las validaciones de data-model.md (`dev_probe_items.label`, `dev_probe_items.sample_amount_minor`/`dev_probe_items.sample_currency` con consistencia monto↔moneda, `dev_probe_items.version`) sin dependencias de framework, en `backend/src/modules/dev-probe/domain/`
-- [ ] T041 [US2] Implementar el repositorio Prisma de `dev-probe` vía `withTenant` (`dev_probe_items.tenant_id` tomado del contexto, nunca del body; FR-012), con paginación por cursor y bloqueo optimista por `dev_probe_items.version`, en `backend/src/modules/dev-probe/infrastructure/`
-- [ ] T042 [US2] Implementar los casos de uso y el controlador de `dev-probe` (`createDevProbeItem`, `listDevProbeItems`, `getDevProbeItem`, `updateDevProbeItem`, `deleteDevProbeItem`) conforme al contrato, con 404 para recursos de otros tenants y 409 `version-conflict`, en `backend/src/modules/dev-probe/application/` y `backend/src/modules/dev-probe/interface/`
+- [ ] T041 [US2] Implementar el repositorio Prisma de `dev-probe` vía `withTenant` (`dev_probe_items.id` como UUIDv7 generado por el servidor según data-model.md; `dev_probe_items.tenant_id` tomado del contexto, nunca del body; FR-012), con paginación por cursor y bloqueo optimista por `dev_probe_items.version`, en `backend/src/modules/dev-probe/infrastructure/`
+- [ ] T042 [US2] Implementar los casos de uso y el controlador de `dev-probe` (`createDevProbeItem`, `listDevProbeItems`, `getDevProbeItem`, `updateDevProbeItem`, `deleteDevProbeItem`) conforme al contrato, con 404 para recursos de otros tenants y 409 `version-conflict`. `createDevProbeItem` exige `Idempotency-Key` desde US2 mediante `IdempotencyKeyPipe`, que valida presencia y formato según data-model.md `idempotency_keys.key` y responde 400 `validation-error`; la deduplicación (reproducción, 409 y 422) llega en US6 (T076). Archivos: `backend/src/modules/dev-probe/application/`, `backend/src/modules/dev-probe/interface/` y `backend/src/common/idempotency/idempotency-key.pipe.ts`
 - [ ] T043 [US2] Implementar el verificador de catálogo `db:check-rls`, que falla si hay tablas del esquema `kuota` con `tenant_id` sin `relrowsecurity`, sin `relforcerowsecurity` o sin políticas, con una lista blanca vacía (data-model.md, Verificación automática de RLS), en `backend/scripts/check-rls.ts` y el script `db:check-rls` de `backend/package.json`
 - [ ] T044 [US2] Añadir el script `test:tenancy` y documentar en `docs/security/multi-tenant-isolation.md` cómo una feature futura aplica `describeTenantIsolation` a sus recursos, en `backend/package.json` y `docs/security/multi-tenant-isolation.md`
 
@@ -182,7 +186,7 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 ### Tests for User Story 5 ⚠️
 
 - [ ] T066 [P] [US5] Crear el helper `expectToMatchContract(res, operationId)` con Ajv 2020 sobre el bundle de Redocly (R-14) en `backend/test/contract/support/contract-matcher.ts`
-- [ ] T067 [US5] Escribir las pruebas de contrato para `getLiveness`, `getReadiness` (200 y 503), `getCompatibility`, las 5 operaciones de `dev-probe` y todas sus respuestas de error problem+json (US5-2, US5-4), en `backend/test/contract/kuota-core.contract.spec.ts`
+- [ ] T067 [US5] Escribir las pruebas de contrato para `getLiveness`, `getReadiness` (200 y 503), `getCompatibility`, las 5 operaciones de `dev-probe` y sus respuestas de error problem+json (US5-2, US5-4), excepto 409 `idempotency-request-in-progress` y 422 `idempotency-key-reused` de `createDevProbeItem`, que se prueban en T095 (US6), en `backend/test/contract/kuota-core.contract.spec.ts`
 - [ ] T068 [P] [US5] Escribir la prueba de detección de cambios incompatibles: eliminar un campo requerido de `CompatibilityInfo` en una copia temporal hace fallar `scripts/contracts/breaking.sh`, en `scripts/ci/tests/breaking.test.sh`
 
 ### Implementation for User Story 5
@@ -211,13 +215,14 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
   - Una clave con formato inválido → 400 (data-model.md `idempotency_keys.key`).
   - Archivo: `backend/test/integration/idempotency.spec.ts`.
 - [ ] T073 [P] [US6] Escribir la prueba de auditoría (US6-4, US6-5): cada escritura de dev-probe crea un `audit_event` con los campos de data-model.md (`audit_events.actor_id`, `audit_events.actor_type`, `audit_events.action`, `audit_events.entity_type`, `audit_events.entity_id`, `audit_events.occurred_at`, `audit_events.correlation_id`, `audit_events.idempotency_key`) y sin PII en `audit_events.changes`; un `UPDATE`/`DELETE` con `kuota_app_login` falla, y también lo bloquea el trigger. Archivo: `backend/test/integration/audit.spec.ts`
+- [ ] T095 [P] [US6] Escribir las pruebas de contrato de idempotencia de `createDevProbeItem` con `expectToMatchContract` (T066): 201 reproducido con `Idempotent-Replayed: true`, 409 `idempotency-request-in-progress` con `Retry-After` y 422 `idempotency-key-reused` cumplen el contrato (US5-2 aplicado a US6), en `backend/test/contract/idempotency.contract.spec.ts`
 - [ ] T074 [P] [US6] Escribir la prueba de hash canónico: el mismo JSON con distinto orden de claves produce el mismo `idempotency_keys.request_hash` (data-model.md), en `backend/test/unit/idempotency/request-hash.spec.ts`
 
 ### Implementation for User Story 6
 
-- [ ] T075 [US6] Implementar el repositorio de idempotencia vía `withTenant`: `INSERT … ON CONFLICT DO NOTHING`, la máquina de estados `idempotency_keys.status` (`IN_PROGRESS` → `COMPLETED`, o eliminación en rollback), `idempotency_keys.expires_at` a 30 días, y que solo almacena respuestas 2xx/4xx deterministas (data-model.md), en `backend/src/common/idempotency/`
-- [ ] T076 [US6] Implementar el decorador e interceptor `@Idempotent()`: valida `Idempotency-Key`, calcula `idempotency_keys.request_hash` y devuelve la respuesta reproducida, 409 o 422 según data-model.md, en `backend/src/common/idempotency/idempotent.interceptor.ts`
-- [ ] T077 [US6] Implementar `AuditService.record()`, que escribe en la misma transacción de `withTenant` con lista permitida de campos para `audit_events.changes` (data-model.md), en `backend/src/common/audit/`
+- [ ] T075 [US6] Implementar el repositorio de idempotencia vía `withTenant`: `INSERT … ON CONFLICT DO NOTHING`, la máquina de estados `idempotency_keys.status` (`IN_PROGRESS` → `COMPLETED`, o eliminación en rollback), `idempotency_keys.expires_at` a 30 días, `idempotency_keys.method` e `idempotency_keys.path` de la solicitud, y que solo almacena en `idempotency_keys.response_status`/`idempotency_keys.response_body` respuestas 2xx/4xx deterministas (data-model.md), en `backend/src/common/idempotency/`
+- [ ] T076 [US6] Implementar el decorador e interceptor `@Idempotent()`: reutiliza `IdempotencyKeyPipe` de T042 (data-model.md `idempotency_keys.key`), calcula `idempotency_keys.request_hash` y devuelve la respuesta reproducida, 409 o 422 según data-model.md, en `backend/src/common/idempotency/idempotent.interceptor.ts`
+- [ ] T077 [US6] Implementar `AuditService.record()`, que escribe en la misma transacción de `withTenant` los campos de data-model.md: `audit_events.id` (UUIDv7), `audit_events.actor_id` y `audit_events.actor_type` (`DEV` en 001) desde `TenantContext`, `audit_events.action` según la tabla Auditable Events de spec.md, `audit_events.entity_type`, `audit_events.entity_id`, `audit_events.changes` con lista permitida de campos, `audit_events.occurred_at` (hora del servidor), `audit_events.device_time` (nulo en 001), `audit_events.origin`, `audit_events.correlation_id` y `audit_events.idempotency_key`, en `backend/src/common/audit/`
 - [ ] T078 [US6] Aplicar `@Idempotent()` a `createDevProbeItem` y `AuditService` a create, update y delete de dev-probe, en `backend/src/modules/dev-probe/`
 - [ ] T079 [US6] Añadir el script manual de purga de claves expiradas (sin job programado, R-16) y el script `test:idempotency` (con 100 repeticiones), en `backend/scripts/purge-idempotency.ts` y `backend/package.json`
 
@@ -264,14 +269,14 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 
 - **Setup (Phase 1)**: no tiene dependencias.
 - **Foundational (Phase 2)**: depende de Setup y **bloquea todo**. T014 y T015 (spike y aprobación de D-ARC-01) son un gate duro.
-- **US1 (P1)**: depende de Foundational. Es el MVP.
+- **US1 (P1)**: depende de Foundational. Es el MVP. T094 depende de T016 (config) y T021 (filtro de errores).
 - **US2 (P1)**: depende de Foundational. Es independiente de US1 (comparte solo la infraestructura base).
 - **US3 (P1)**: depende de Foundational. Sus gates se completan a medida que existen US2, US4 y US5; la prueba integral de gates está en T087.
 - **US4 (P2)**:
   - La parte TypeScript (T056–T058, T060–T062, T064–T065) solo depende de Foundational.
   - La parte Dart (T059, T063) depende de T080 y T082.
-- **US5 (P2)**: depende de Foundational (T022–T024). T070 depende de T080.
-- **US6 (P2)**: depende de US2 (dev-probe, `withTenant`).
+- **US5 (P2)**: depende de Foundational (T022–T024). T070 depende de T080. T067 depende de los controladores existentes (T028, T029, T042); no requiere US6.
+- **US6 (P2)**: depende de US2 (dev-probe, `withTenant`, `IdempotencyKeyPipe`). T095 depende de T066 (helper de contrato).
 - **US7 (P3)**: depende de Foundational y de D-ENV-01 (aprobada). T085 depende de T070 (`api_client`).
 - **Polish**: depende de todas las historias.
 
@@ -303,9 +308,9 @@ T003, T004, T005, T006  ·  T008, T009, T010, T011 (tras T007)
 # Foundational (tras T012–T015):
 T016+T017 · T018→T019 · T020→T021 · T022→T023+T024
 # Con Foundational listo, en paralelo por personas/agentes:
-US1 (T026–T033) | US2 (T034–T044) | US3 (T045–T055) | US4-TS (T056–T058, T060–T062, T064–T065) | US7a (T080–T084)
+US1 (T026–T033, T093–T094) | US2 (T034–T044) | US3 (T045–T055) | US4-TS (T056–T058, T060–T062, T064–T065) | US7a (T080–T084)
 # US2: T034, T035, T036 en paralelo; T040 en paralelo con T038/T039
-# US6 tras US2: T072, T073, T074 en paralelo
+# US6 tras US2: T072, T073, T074, T095 en paralelo
 ```
 
 ## Implementation Strategy
@@ -329,6 +334,6 @@ Cada incremento se integra mediante commits Conventional en `feature/001-platfor
 
 ## Notes
 
-- Total: 92 tareas. Toda tarea cita rutas exactas, y los campos restringidos citan data-model.md (`Entity.field`).
+- Total: 95 tareas (92 originales + T093–T095 por `/speckit-analyze`). Toda tarea cita rutas exactas, y los campos restringidos citan data-model.md (`Entity.field`).
 - No se crean carpetas fuera de las listadas en plan.md (FR-005).
 - Ninguna tarea crea entidades de negocio, autenticación real (002) ni sincronización offline (011).

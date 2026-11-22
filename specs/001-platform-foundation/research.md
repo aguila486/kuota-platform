@@ -234,6 +234,22 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
   `main` documentadas en `docs/process/git-workflow.md` (FR-038) para aplicarse al publicar, con la excepción de
   mantenedor único (Constitución v1.1.0).
 
+## R-21 · Métricas técnicas (FR-039)
+
+- **Decision**: `@prometheus-io/client` **0.16.x** (cliente oficial de Prometheus para Node; sucesor de `prom-client`,
+  que npm marca como reemplazado), usado directamente desde un módulo `common/metrics` propio, sin wrapper de NestJS.
+  Expone en un servidor HTTP **separado** (`KUOTA_METRICS_PORT`, por defecto 9464) el formato de texto de Prometheus:
+  métricas por defecto del proceso, histograma `http_server_request_duration_seconds{route,method,status}` (ruta como
+  plantilla), `kuota_http_errors_total{code}` y gauges del pool de `adapter-pg`. Sin etiquetas de tenant (privacidad y
+  cardinalidad). No se aprovisiona servidor Prometheus ni alertas (D-ARC-04); las alertas financieras se especifican
+  en 006/013.
+- **Rationale**: Constitución XIII exige métricas técnicas básicas. El puerto separado evita exponerlas en el listener
+  público sin depender de decisiones de despliegue.
+- **Alternatives considered**: `@willsoto/nestjs-prometheus` 7 (wrapper; dependencia adicional sin valor en 001);
+  OpenTelemetry metrics SDK + exportador Prometheus (más piezas; candidato cuando se adopte tracing distribuido).
+- **Verificado**: `npm view @prometheus-io/client version` → 0.16.1; `npm view prom-client deprecated` → "replaced by
+  @prometheus-io/client" (2026-11-22).
+
 ## Incógnitas restantes
 
 Ninguna bloqueante para el plan. Dependencias de decisión en ejecución: **D-ARC-01** (resultado del spike R-04) y

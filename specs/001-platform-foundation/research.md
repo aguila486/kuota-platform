@@ -98,6 +98,11 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
   ADR-0004 actualizado antes de continuar con US2; debe superar los mismos criterios. TypedSQL no se usa sin S7.
 - **Alternatives considered**: Drizzle (viable; menor madurez en migraciones con SQL personalizado), Kysely (fallback),
   TypeORM (descartado).
+- **Ejecución del spike (T014, 2026-11-22)**: Prisma **7.10.1** (último estable de la serie 7; la etiqueta `latest` del CLI
+  apunta a `8.0.0-rc.34`) y `@prisma/adapter-pg` 7.10.1, en `devDependencies` hasta T015. `prisma` (preinstall) y
+  `@prisma/engines` (postinstall, descarga `schema-engine` para `migrate`) quedan permitidos en `allowBuilds`; se
+  retiran si T015 elige Kysely. Resultado: S1–S8 en PASS; `prisma migrate deploy` no es transaccional por migración
+  (MIG-TX). Detalle, cifras y condiciones en `specs/001-platform-foundation/spike-t014-report.md`. La decisión es de T015.
 
 ## R-05 · Mecanismo técnico (no productivo) de contexto de tenant
 

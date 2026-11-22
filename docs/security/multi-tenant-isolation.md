@@ -1,0 +1,175 @@
+# Aislamiento multi-tenant
+
+> Estado: **Propuesto** · 2026-11-22 · Principio constitucional: **III. Aislamiento multi-tenant (NO NEGOCIABLE)**
+> Relacionado: ADR-0002, ADR-0004, `docs/security/authentication.md`, `docs/security/threat-model.md`.
+
+## 1. Modelo seleccionado
+
+| Opción | Descripción | Aislamiento | Costo operativo | Decisión |
+|---|---|---|---|---|
+| Base de datos por tenant | Una BD PostgreSQL por empresa | Máximo | Alto (migraciones × N, conexiones × N) | Descartada para v1 |
+| Esquema por tenant | Un `schema` por empresa | Alto | Medio-alto (migraciones × N, catálogos grandes) | Descartada para v1 |
+| **Esquema compartido + `tenant_id` + RLS** | Todas las tablas de negocio con `tenant_id`; PostgreSQL filtra por política | Alto si RLS es **forzado** y el rol de app no lo evita | Bajo | **Seleccionada** |
+
+Razón: Kuota espera muchos tenants pequeños y medianos; el modelo compartido escala operativamente y RLS proporciona
+una **segunda barrera** independiente del código de aplicación (defensa en profundidad). Un tenant con requisitos de
+aislamiento físico (contrato o regulación, ver D-BIZ-02) podría migrarse a una instancia dedicada con el mismo esquema.
+
+## 2. Reglas obligatorias
+
+1. Toda tabla con datos de negocio tiene `tenant_id UUID NOT NULL` con FK a `tenants(id)`.
+2. Toda tabla de negocio tiene `ENABLE ROW LEVEL SECURITY` **y** `FORCE ROW LEVEL SECURITY`.
+3. La aplicación se conecta con el rol `kuota_app`: `NOLOGIN` heredado por `kuota_app_login`, **sin** `BYPASSRLS`,
+   **no** propietario de las tablas, sin `SUPERUSER`.
+4. Las migraciones usan un rol distinto (`kuota_migrator`, propietario de las tablas). Nunca se usa en runtime.
+5. El `tenant_id` del contexto se obtiene **exclusivamente** de la identidad autenticada (JWT validado), nunca de
+   path/query/body/headers enviados por el cliente.
+6. Las claves únicas de negocio incluyen `tenant_id` (p. ej. `UNIQUE (tenant_id, idempotency_key)`, `UNIQUE (tenant_id, folio)`).
+7. Las FKs entre tablas de tenant incluyen `tenant_id` (FK compuesta `(tenant_id, loan_id)`) para impedir referencias
+   cruzadas entre empresas incluso por error de aplicación.
+8. Las respuestas a recursos de otro tenant devuelven **404** (no 403), para no revelar existencia.
+
+## 3. Roles de base de datos
+
+| Rol | Uso | Privilegios |
+|---|---|---|
+| `kuota_migrator` | CI/CD de migraciones | Propietario de esquema; DDL. Credencial solo en pipeline de despliegue |
+| `kuota_app` | API Kuota Core | DML en tablas de negocio sujeto a RLS; sin `UPDATE`/`DELETE` en tablas de ledger y auditoría |
+| `kuota_platform` | Módulo `platform-admin` (operaciones cross-tenant) | Políticas específicas, uso auditado; conexión separada |
+| `kuota_readonly_reporting` | Réplicas/reportes (futuro) | `SELECT` sujeto a RLS |
+
+## 4. Políticas SQL de ejemplo
+
+```sql
+-- Helper: tenant del contexto actual (NULL si no se fijó → ninguna fila visible)
+CREATE FUNCTION app_current_tenant() RETURNS uuid
+LANGUAGE sql STABLE AS $$
+  SELECT nullif(current_setting('app.tenant_id', true), '')::uuid
+$$;
+
+ALTER TABLE loans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE loans FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON loans
+  USING (tenant_id = app_current_tenant())
+  WITH CHECK (tenant_id = app_current_tenant());
+
+-- Ledger: solo lectura e inserción para la app
+REVOKE UPDATE, DELETE ON journal_entries, journal_lines FROM kuota_app;
+CREATE POLICY tenant_isolation ON journal_entries
+  USING (tenant_id = app_current_tenant())
+  WITH CHECK (tenant_id = app_current_tenant());
+```
+
+Verificación automatizada en CI (consulta al catálogo):
+
+```sql
+-- Debe devolver 0 filas: tablas con columna tenant_id sin RLS habilitado y forzado
+SELECT c.relname
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = 'tenant_id'
+WHERE c.relkind = 'r' AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity);
+```
+
+## 5. Flujo de contexto en NestJS
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App as App Flutter
+    participant API as NestJS (Guard + Interceptor)
+    participant ALS as TenantContext (AsyncLocalStorage)
+    participant Repo as Repositorio (Prisma extension)
+    participant PG as PostgreSQL (RLS)
+
+    App->>API: HTTPS + Bearer JWT (sub, tenant_id, roles, device_id)
+    API->>API: Valida firma, expiración, revocación, membresía activa
+    API->>ALS: run({tenantId, actorId, roles, correlationId})
+    API->>Repo: caso de uso → operación
+    Repo->>PG: BEGIN
+    Repo->>PG: SELECT set_config('app.tenant_id', $tenantId, true)
+    Repo->>PG: SELECT set_config('app.actor_id', $actorId, true)
+    Repo->>PG: consultas / inserciones
+    PG-->>Repo: solo filas con tenant_id = contexto
+    Repo->>PG: COMMIT (set_config local se descarta)
+    API-->>App: respuesta
+```
+
+Puntos clave:
+
+- `set_config(..., true)` es **local a la transacción**: al terminar, la conexión vuelve al pool sin contexto.
+- Si una consulta se ejecuta fuera del wrapper transaccional, `app_current_tenant()` es `NULL` → **0 filas** (falla segura).
+- Los jobs en segundo plano (outbox, conciliación) reciben `tenant_id` del registro que procesan y abren su propio contexto.
+- Un guard global rechaza cualquier ruta de negocio sin `TenantContext`; las rutas sin tenant (health, verificación pública
+  de recibos, login) se declaran explícitamente con un decorador `@PublicRoute()` y revisión obligatoria.
+
+## 6. Riesgos con pooling de conexiones
+
+| Riesgo | Causa | Mitigación |
+|---|---|---|
+| Fuga de contexto entre solicitudes | `SET` de sesión (no local) que persiste en la conexión reutilizada | Solo `set_config(..., true)` dentro de transacción; prueba que reutiliza una conexión y verifica contexto vacío |
+| PgBouncer en modo *transaction* | Variables de sesión no son confiables entre sentencias fuera de transacción | Todo acceso de negocio dentro de transacción explícita; prohibido `SET` de sesión |
+| Consultas fuera de transacción por el ORM | Llamadas directas al cliente base | El cliente base no se exporta; solo el cliente extendido con contexto (regla de lint) — validado en spike D-ARC-01 |
+| Prepared statements cacheados | Compartidos entre tenants | Las políticas usan `current_setting` evaluado en ejecución; prueba de regresión |
+
+## 7. Identidad global vs cliente por tenant
+
+Una misma persona puede ser cliente de varias empresas (y además usuaria de la app Kuota Client).
+
+```mermaid
+erDiagram
+    IDENTITY ||--o{ TENANT_MEMBERSHIP : "tiene"
+    IDENTITY ||--o{ CUSTOMER_LINK : "vinculada a"
+    TENANT ||--o{ CUSTOMER : "posee"
+    CUSTOMER_LINK }o--|| CUSTOMER : "apunta a"
+    IDENTITY {
+        uuid id
+        string phone_e164_hash
+        string credential_refs
+    }
+    CUSTOMER {
+        uuid id
+        uuid tenant_id
+        string full_name
+        string kyc_data
+    }
+```
+
+- `identities` (global, **sin datos de negocio**): teléfono verificado, credenciales, dispositivos vinculados.
+- `customers` (por tenant): nombre, domicilio, KYC, documentos, préstamos, ahorro. **Cada tenant tiene su propio registro**,
+  aunque sea la misma persona. No se comparten documentos ni KYC entre tenants.
+- `customer_links`: relación identidad → cliente por tenant, creada solo por invitación/enrolamiento del tenant y aceptada
+  por la persona (OTP). Visible solo para la propia identidad autenticada y para el módulo de plataforma.
+
+Controles para no compartir datos indebidamente:
+
+1. Un tenant **no puede** buscar personas por teléfono/CURP en otros tenants ni saber si existen en Kuota.
+2. El alta de cliente en un tenant nunca autocompleta datos de otro tenant.
+3. Kuota Client muestra a la persona sus relaciones con varias empresas, pero cada consulta se ejecuta con el contexto del
+   tenant seleccionado (token con `tenant_id` activo; cambio de tenant = nuevo token de alcance).
+4. La deduplicación o scoring entre empresas (buró interno) está **fuera de alcance** y requeriría consentimiento y
+   validación legal (D-LEG-02).
+
+## 8. Operaciones de plataforma (cross-tenant)
+
+- Solo el módulo `platform-admin`, con rol de BD `kuota_platform`, endpoints en un prefijo separado y no expuestos a apps de tenant.
+- Requieren MFA, rol de plataforma y motivo registrado; cada acceso genera auditoría con `target_tenant_id`.
+- Acceso de soporte a datos de un tenant: *break-glass* con aprobación y tiempo limitado (proceso a definir en 002/015).
+
+## 9. Pruebas obligatorias (gate bloqueante de PR)
+
+| ID | Prueba | Nivel |
+|---|---|---|
+| MT-01 | Usuario de tenant A recibe 404 al leer/actualizar cada recurso de tenant B (por endpoint) | Integración API |
+| MT-02 | Consulta sin `app.tenant_id` devuelve 0 filas en toda tabla de negocio | Integración BD |
+| MT-03 | `INSERT` con `tenant_id` distinto al contexto falla (`WITH CHECK`) | Integración BD |
+| MT-04 | Catálogo: toda tabla con `tenant_id` tiene RLS habilitado y forzado | CI (consulta §4) |
+| MT-05 | El rol `kuota_app` no tiene `BYPASSRLS` ni es propietario | CI |
+| MT-06 | Reutilización de conexión del pool no conserva contexto | Integración BD |
+| MT-07 | `tenant_id` enviado por el cliente en body/query es ignorado o rechazado | Integración API |
+| MT-08 | Misma persona en 2 tenants: cada tenant ve solo su registro de cliente | Integración API |
+| MT-09 | Jobs en segundo plano procesan solo el tenant del registro | Integración |
+
+Features responsables: el mecanismo y MT-02..06 en **001-platform-foundation**; identidad, membresías y MT-01/07/08 en
+**002-identity-tenancy**; cada feature posterior agrega MT-01 para sus endpoints.

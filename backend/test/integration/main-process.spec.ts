@@ -1,0 +1,95 @@
+import { execFile, spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { STRONG_TOKEN, validEnv } from '../support/env.js';
+
+/** T025: el proceso real `node dist/main.js` (build SWC) arranca con configuración válida y aborta con una inválida. */
+const BACKEND_DIR = join(__dirname, '../..');
+const MAIN = join(BACKEND_DIR, 'dist/main.js');
+
+async function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      server.close(() => resolve(typeof address === 'object' && address ? address.port : 0));
+    });
+  });
+}
+
+function run(env: Record<string, string | undefined>, untilListening: boolean) {
+  const child = spawn(process.execPath, [MAIN], { cwd: BACKEND_DIR, env: { PATH: process.env['PATH'], ...env } });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (c: Buffer) => (stdout += c.toString()));
+  child.stderr.on('data', (c: Buffer) => (stderr += c.toString()));
+  const exited = new Promise<number | null>((resolve) => child.on('exit', (code) => resolve(code)));
+  const ready = untilListening
+    ? new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`no arrancó: ${stdout}${stderr}`)), 20_000);
+        child.stdout.on('data', () => {
+          if (stdout.includes('Nest application successfully started')) {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+      })
+    : Promise.resolve();
+  return { child, exited, ready, output: () => ({ stdout, stderr }) };
+}
+
+describe('proceso main.ts (T025)', () => {
+  beforeAll(async () => {
+    await promisify(execFile)(join(BACKEND_DIR, 'node_modules/.bin/nest'), ['build'], {
+      cwd: BACKEND_DIR,
+      timeout: 120_000,
+    });
+  }, 180_000);
+
+  it('arranca con configuración válida, responde problem+json y emite logs JSON', async () => {
+    const port = await freePort();
+    const proc = run(
+      validEnv({
+        PORT: String(port),
+        DATABASE_URL_APP: 'postgresql://kuota_app_login:ficticio-secreto-db@127.0.0.1:55432/kuota',
+      }),
+      true,
+    );
+    try {
+      await proc.ready;
+      const res = await fetch(`http://127.0.0.1:${port}/v1/no-existe`);
+      expect(res.status).toBe(404);
+      expect(res.headers.get('content-type')).toMatch(/^application\/problem\+json/);
+      const lines = proc.output().stdout.trim().split('\n');
+      expect(lines.every((line) => (JSON.parse(line) as { service: string }).service === 'kuota-core')).toBe(true);
+      expect(proc.output().stdout).not.toContain('ficticio-secreto-db');
+    } finally {
+      proc.child.kill('SIGTERM');
+      await proc.exited;
+    }
+  });
+
+  it('aborta con código 1 si la configuración es inválida, sin revelar valores', async () => {
+    const proc = run(
+      validEnv({
+        KUOTA_ENV: 'production',
+        KUOTA_DEV_TENANT_CONTEXT: 'enabled',
+        KUOTA_METRICS_TOKEN: STRONG_TOKEN,
+        DATABASE_URL_APP: 'postgresql://kuota_migrator:ficticio-secreto-db@127.0.0.1:55432/kuota',
+      }),
+      false,
+    );
+    expect(await proc.exited).toBe(1);
+    const { stdout, stderr } = proc.output();
+    const record = JSON.parse(stderr.trim()) as { level: string; issues: string[] };
+    expect(record.level).toBe('fatal');
+    expect(record.issues.join('\n')).toMatch(/KUOTA_DEV_TENANT_CONTEXT/);
+    expect(record.issues.join('\n')).toMatch(/DATABASE_URL_APP/);
+    expect(stderr + stdout).not.toContain('ficticio-secreto-db');
+    expect(stderr + stdout).not.toContain(STRONG_TOKEN);
+    expect(stdout).not.toContain('Nest application successfully started');
+  });
+});

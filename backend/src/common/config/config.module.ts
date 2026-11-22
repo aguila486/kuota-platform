@@ -1,5 +1,5 @@
 import { type DynamicModule, Global, Module } from '@nestjs/common';
-import { APP_CONFIG } from './app-config.js';
+import { APP_CONFIG, type AppConfig } from './app-config.js';
 import { loadConfig } from './load-config.js';
 
 /**
@@ -13,6 +13,15 @@ export class ConfigModule {
     return {
       module: ConfigModule,
       providers: [{ provide: APP_CONFIG, useFactory: () => loadConfig(env) }],
+      exports: [APP_CONFIG],
+    };
+  }
+
+  /** Usa una configuración ya validada (el bootstrap la valida antes de crear Nest para fallar sin arrancar nada). */
+  static forConfig(config: AppConfig): DynamicModule {
+    return {
+      module: ConfigModule,
+      providers: [{ provide: APP_CONFIG, useValue: config }],
       exports: [APP_CONFIG],
     };
   }

@@ -1,0 +1,352 @@
+openapi: 3.1.0
+info:
+  title: Kuota Core API
+  version: 1.0.0-foundation
+  summary: Contrato inicial de la plataforma (feature 001-platform-foundation).
+  description: |
+    Borrador de diseño de 001. La fuente de verdad versionada se materializa en
+    `contracts/openapi/kuota-core.v1.yaml` durante la implementación (Constitución XII).
+    Convenciones transversales: errores RFC 9457 (problem+json), `X-Correlation-Id`,
+    `Idempotency-Key` en escrituras, dinero como `{amount_minor: string, currency}`,
+    `X-App-Version` para compatibilidad de apps.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Kuota-Proprietary
+servers:
+  - url: http://localhost:3000
+    description: Local
+tags:
+  - name: health
+    description: Chequeos de vida y disponibilidad (sin versión de API).
+  - name: meta
+    description: Metadatos de la API y compatibilidad de apps.
+  - name: dev-probe
+    description: Recurso técnico NO productivo (solo KUOTA_ENV local/testing). Valida aislamiento, idempotencia y auditoría.
+security: []
+paths:
+  /health/live:
+    get:
+      tags: [health]
+      operationId: getLiveness
+      summary: Proceso vivo.
+      responses:
+        '200':
+          description: Vivo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthStatus' }
+  /health/ready:
+    get:
+      tags: [health]
+      operationId: getReadiness
+      summary: Listo para recibir tráfico (verifica dependencias).
+      responses:
+        '200':
+          description: Listo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthStatus' }
+        '503':
+          description: No listo; indica dependencia caída.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthStatus' }
+  /v1/meta/compatibility:
+    get:
+      tags: [meta]
+      operationId: getCompatibility
+      summary: Versión de API y versión mínima soportada por app.
+      parameters:
+        - $ref: '#/components/parameters/AppVersion'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Información de compatibilidad.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompatibilityInfo' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /v1/dev/probe-items:
+    post:
+      tags: [dev-probe]
+      operationId: createDevProbeItem
+      summary: Crea un registro técnico (idempotente y auditado).
+      x-kuota-non-production: true
+      x-kuota-idempotent: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/DevTenant'
+        - $ref: '#/components/parameters/DevActor'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DevProbeItemCreate' }
+      responses:
+        '201':
+          description: Creado (o respuesta reproducida si `Idempotent-Replayed`).
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' }
+            Idempotent-Replayed: { $ref: '#/components/headers/IdempotentReplayed' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DevProbeItem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/MissingTenantContext' }
+        '409': { $ref: '#/components/responses/IdempotencyInProgress' }
+        '422': { $ref: '#/components/responses/IdempotencyKeyReused' }
+    get:
+      tags: [dev-probe]
+      operationId: listDevProbeItems
+      summary: Lista registros del tenant del contexto (paginación por cursor).
+      x-kuota-non-production: true
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/DevTenant'
+        - $ref: '#/components/parameters/DevActor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de resultados.
+          headers:
+            X-Correlation-Id: { $ref: '#/components/headers/CorrelationId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DevProbeItemPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/MissingTenantContext' }
+  /v1/dev/probe-items/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/DevTenant'
+      - $ref: '#/components/parameters/DevActor'
+    get:
+      tags: [dev-probe]
+      operationId: getDevProbeItem
+      summary: Obtiene un registro del tenant del contexto.
+      x-kuota-non-production: true
+      responses:
+        '200':
+          description: Registro.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DevProbeItem' }
+        '401': { $ref: '#/components/responses/MissingTenantContext' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [dev-probe]
+      operationId: updateDevProbeItem
+      summary: Actualiza la etiqueta (bloqueo optimista).
+      x-kuota-non-production: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DevProbeItemUpdate' }
+      responses:
+        '200':
+          description: Actualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DevProbeItem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/MissingTenantContext' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/VersionConflict' }
+    delete:
+      tags: [dev-probe]
+      operationId: deleteDevProbeItem
+      summary: Elimina un registro del tenant del contexto.
+      x-kuota-non-production: true
+      responses:
+        '204': { description: Eliminado. }
+        '401': { $ref: '#/components/responses/MissingTenantContext' }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  parameters:
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: UUID de correlación; si falta, el servidor genera uno y lo devuelve.
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Clave generada por el cliente, única por tenant. Recomendado UUID.
+      schema: { type: string, minLength: 8, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' }
+    AppVersion:
+      name: X-App-Version
+      in: header
+      required: false
+      description: 'Formato `<app>/<semver>+<build>`, p. ej. `collector/1.4.2+120`.'
+      schema: { type: string, pattern: '^(admin|collector|client)/\d+\.\d+\.\d+(\+\d+)?$' }
+    DevTenant:
+      name: X-Kuota-Dev-Tenant
+      in: header
+      required: true
+      description: SOLO local/testing (R-05). Reemplazado por identidad real en 002.
+      schema: { type: string, format: uuid }
+    DevActor:
+      name: X-Kuota-Dev-Actor
+      in: header
+      required: false
+      description: SOLO local/testing. Identificador técnico del actor para auditoría.
+      schema: { type: string, maxLength: 64, pattern: '^[A-Za-z0-9_.:-]+$' }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, maxLength: 512 }
+  headers:
+    CorrelationId:
+      description: Identificador de correlación de la solicitud.
+      schema: { type: string, format: uuid }
+    IdempotentReplayed:
+      description: '`true` si la respuesta proviene de una ejecución previa con la misma clave.'
+      schema: { type: string, enum: ['true'] }
+  responses:
+    BadRequest:
+      description: Error de validación.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    MissingTenantContext:
+      description: Falta contexto de tenant (code `tenant-context-required`).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: No existe en el tenant del contexto (no revela existencia en otros tenants).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    IdempotencyInProgress:
+      description: Solicitud con la misma clave aún en proceso (code `idempotency-request-in-progress`).
+      headers:
+        Retry-After:
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    IdempotencyKeyReused:
+      description: Clave reutilizada con contenido distinto (code `idempotency-key-reused`).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    VersionConflict:
+      description: Conflicto de versión optimista (code `version-conflict`).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details con extensiones Kuota.
+      required: [type, title, status, code, correlation_id]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        detail: { type: string }
+        instance: { type: string }
+        code:
+          type: string
+          description: Código estable legible por máquina.
+          examples: [validation-error, tenant-context-required, not-found, idempotency-key-reused, idempotency-request-in-progress, version-conflict, app-version-unsupported, internal-error]
+        correlation_id: { type: string, format: uuid }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: { type: string }
+              message: { type: string }
+    Money:
+      type: object
+      description: Monto exacto en unidades mínimas de la moneda (string para evitar pérdida de precisión).
+      required: [amount_minor, currency]
+      additionalProperties: false
+      properties:
+        amount_minor: { type: string, pattern: '^-?\d{1,30}$', examples: ['150000'] }
+        currency: { type: string, pattern: '^[A-Z]{3}$', examples: ['MXN'] }
+    HealthStatus:
+      type: object
+      required: [status, checks]
+      properties:
+        status: { type: string, enum: [ok, error] }
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            required: [status]
+            properties:
+              status: { type: string, enum: [up, down] }
+              detail: { type: string }
+    CompatibilityInfo:
+      type: object
+      required: [api_version, min_supported, server_time]
+      properties:
+        api_version: { type: string, examples: ['1.0.0'] }
+        min_supported:
+          type: object
+          required: [admin, collector, client]
+          properties:
+            admin: { type: string }
+            collector: { type: string }
+            client: { type: string }
+        client_supported:
+          type: [boolean, 'null']
+          description: Si se envió `X-App-Version`, indica si esa versión está soportada.
+        server_time: { type: string, format: date-time }
+    DevProbeItemCreate:
+      type: object
+      required: [label]
+      additionalProperties: false
+      description: No acepta tenant_id; el tenant proviene del contexto (FR-012).
+      properties:
+        label: { type: string, minLength: 1, maxLength: 120 }
+        sample_amount: { $ref: '#/components/schemas/Money' }
+    DevProbeItemUpdate:
+      type: object
+      required: [label, version]
+      additionalProperties: false
+      properties:
+        label: { type: string, minLength: 1, maxLength: 120 }
+        version: { type: integer, minimum: 1 }
+    DevProbeItem:
+      type: object
+      required: [id, label, version, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        sample_amount:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    DevProbeItemPage:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/DevProbeItem' }
+        next_cursor: { type: [string, 'null'] }

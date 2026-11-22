@@ -27,7 +27,7 @@ flutter/
 ```
 
 - Cada paquete/app declara `resolution: workspace`; una sola resolución de dependencias y un `pubspec.lock`.
-- **Melos 7.x** se usa solo para scripts (`analyze`, `test`, `format`, `generate`) y versionado/changelogs por
+- **Melos 8.x** se usa solo para scripts (`analyze`, `test`, `format`, `generate`) y versionado/changelogs por
   paquete. No para `bootstrap`/linking (eso lo resuelve pub workspaces).
 
 ## 3. Qué va en cada paquete

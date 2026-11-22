@@ -1,4 +1,4 @@
-# ADR-0003: Flutter — Dart pub workspaces, Melos 7 y Riverpod
+# ADR-0003: Flutter — Dart pub workspaces, Melos 8 y Riverpod
 
 - **Estado:** Propuesto
 - **Fecha:** 2026-11-22
@@ -17,7 +17,7 @@ código entre apps (IX) y exige que el cliente HTTP se genere desde OpenAPI (XII
 ## Opciones consideradas
 
 ### Gestión del workspace
-1. **Dart pub workspaces (nativo) + Melos 7** solo para scripts/versionado.
+1. **Dart pub workspaces (nativo) + Melos 8** solo para scripts/versionado.
 2. Melos clásico (≤ 6) con `melos bootstrap` y `pubspec_overrides.yaml`.
 3. Paquetes con `path:` dependencies sin herramienta.
 
@@ -34,7 +34,7 @@ código entre apps (IX) y exige que el cliente HTTP se genere desde OpenAPI (XII
 
 - **Dart pub workspaces**: `flutter/pubspec.yaml` raíz con `workspace:` y cada paquete con `resolution: workspace`.
   Un solo `pubspec.lock` y resolución compartida.
-- **Melos 7.x** con configuración en la sección `melos:` del `pubspec.yaml` raíz de `flutter/`, usado **solo** para
+- **Melos 8.x** con configuración en la sección `melos:` del `pubspec.yaml` raíz de `flutter/`, usado **solo** para
   scripts (`analyze`, `test`, `format`, generación), filtros por paquete afectado y versionado/changelog. No se usa
   `melos bootstrap` para enlazar paquetes (lo hace pub workspaces) ni `pubspec_overrides.yaml`.
 - **Riverpod** como gestión de estado e inyección de dependencias (D-ARC-02, recomendación). Si el equipo prefiere

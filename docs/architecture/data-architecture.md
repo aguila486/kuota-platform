@@ -1,6 +1,6 @@
 # Arquitectura de datos
 
-> Estado: Propuesto (2026-11-22). ADR-0004 (PostgreSQL 17 + Prisma, D-ARC-01), ADR-0005 (ledger, D-FIN-01, D-LED-01).
+> Estado: Propuesto (2026-11-22). ADR-0004 (PostgreSQL 18 + Prisma, D-ARC-01), ADR-0005 (ledger, D-FIN-01, D-LED-01).
 > El modelo detallado de cada capacidad se define en `specs/NNN-*/data-model.md`; este documento fija las reglas.
 
 ## 1. Estrategia de multi-tenancy

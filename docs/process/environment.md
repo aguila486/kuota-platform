@@ -12,12 +12,13 @@ Fecha de diagnóstico: **2026-11-22** · Equipo: macOS 26.1 (25B78), Apple Silic
 | specify-cli | `specify version` | **1.4.3** | ✅ Disponible | Instalado desde `git+https://github.com/github/spec-kit.git@v1.4.3` (ver §2) |
 | Claude Code | `claude --version` | 2.1.330 | ✅ Disponible | `specify check` → "Claude Code (available)" |
 | gh (GitHub CLI) | `gh --version` | 2.96.0 | ⚪ Opcional | No se usa para publicar sin aprobación |
-| Node.js | `node --version` | 24.18.0 (nvm) | ✅ Disponible / fase futura | Node 24 es LTS; adecuado para backend |
+| Node.js | `node --version` | 24.18.0 (nvm) | ⚠️ Disponible · fase futura | Node 24 está en LTS de mantenimiento; el proyecto fija **Node 26 LTS** (activo) → `nvm install 26` (por usuario, no afecta Node 24) |
 | npm | `npm --version` | 11.16.0 | ✅ Disponible | — |
 | corepack | `which corepack` | presente | ✅ Disponible | Permite activar pnpm sin instalador externo |
 | pnpm | `pnpm --version` | — | ⚠️ No disponible · necesario en fases futuras | Activar con `corepack enable pnpm` al iniciar el scaffolding del backend (tarea de 001) |
 | Flutter | `flutter --version` | 3.24.3 (stable) | ⚠️ **Disponible pero incompatible** | Incluye Dart 3.5.3; **pub workspaces requiere Dart ≥ 3.6**. Requiere actualizar Flutter antes de crear `flutter/` |
 | Dart | `dart --version` | 3.5.3 | ⚠️ Disponible pero incompatible | Ídem |
+| FVM | `fvm --version` | 3.2.1 (`~/.pub-cache/bin`) | ✅ Disponible | Gestor de versiones Flutter por proyecto (D-ENV-01 aprobada). Caché local: Flutter 3.44.9 (sin configurar). Proyecto fijará Flutter **3.50.1** stable (Dart 3.14) en `flutter/.fvmrc`; 4.3.x disponible (actualización opcional) |
 | Docker | `docker --version` | 28.3.2 | ✅ Disponible / fase futura | Para Docker Compose local (PostgreSQL, Redis) |
 
 ### Decisiones sobre instalaciones

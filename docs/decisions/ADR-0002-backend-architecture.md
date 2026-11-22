@@ -31,7 +31,7 @@ préstamo → recibo), aislamiento multi-tenant y alta trazabilidad. El equipo e
 
 ## Decisión
 
-- **Monolito modular NestJS** sobre **Node.js 24 LTS** y **TypeScript `strict`**.
+- **Monolito modular NestJS** sobre **Node.js 26 LTS** y **TypeScript `strict`**.
 - **pnpm workspaces** sin Nx ni Turborepo. Raíz con `pnpm-workspace.yaml` que incluye `backend` (y `tooling/*` si
   aparece). pnpm se activa con `corepack` (oficial de Node).
 - **Redis no se incluye en la iteración 1.** Colas/jobs y outbox de eventos sobre PostgreSQL (tabla outbox o pg-boss).

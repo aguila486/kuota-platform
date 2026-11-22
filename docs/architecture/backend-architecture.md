@@ -7,11 +7,11 @@
 
 | Elemento | Elección | Nota |
 |---|---|---|
-| Runtime | Node.js 24 LTS | fijado en `.nvmrc` / `engines` |
+| Runtime | Node.js 26 LTS | fijado en `.nvmrc` / `engines` |
 | Lenguaje | TypeScript `strict: true`, `noUncheckedIndexedAccess` | |
 | Framework | NestJS (módulos, DI, guards, interceptors) | |
 | Paquetes | pnpm workspaces | sin Nx/Turborepo (reevaluar si CI > 10 min o > 5 paquetes TS) |
-| BD | PostgreSQL 17 + Prisma | condicionado a spike RLS en 001 |
+| BD | PostgreSQL 18 + Prisma | condicionado a spike RLS en 001 |
 | Dinero | `bigint` (unidades mínimas) + `decimal.js` para cálculos intermedios | D-FIN-01, D-FIN-02 |
 | Validación | contra esquemas del contrato OpenAPI (ajv) + validación de dominio | |
 | Logs | pino (JSON) con redacción de campos | |

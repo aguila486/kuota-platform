@@ -39,7 +39,7 @@ flowchart LR
         API[API REST /v1<br/>contrato OpenAPI]
         W[Worker de jobs<br/>mismo código, otro proceso]
     end
-    DB[(PostgreSQL 17<br/>RLS por tenant<br/>ledger append-only)]
+    DB[(PostgreSQL 18<br/>RLS por tenant<br/>ledger append-only)]
     OBJ[(Object storage<br/>documentos, recibos PDF)]
     OTP[Proveedor OTP<br/>SMS / WhatsApp]
 
@@ -55,9 +55,9 @@ flowchart LR
 | Capa | Tecnología | Decisión |
 |---|---|---|
 | Repositorio | Monorepo único `kuota-platform`, un proyecto Spec-Kit | ADR-0001 |
-| Backend | Node.js 24 LTS · TypeScript strict · NestJS · pnpm workspaces | ADR-0002 |
+| Backend | Node.js 26 LTS · TypeScript strict · NestJS · pnpm workspaces | ADR-0002 |
 | Apps | Flutter · Dart pub workspaces · Melos · Riverpod · Drift | ADR-0003 (D-ENV-01, D-ARC-02, D-ARC-03) |
-| Datos | PostgreSQL 17 · Prisma (condicionado a spike RLS) | ADR-0004 (D-ARC-01) |
+| Datos | PostgreSQL 18 · Prisma (condicionado a spike RLS) | ADR-0004 (D-ARC-01) |
 | Ledger | Partida doble, BIGINT unidades mínimas + moneda | ADR-0005 (D-FIN-01, D-LED-01) |
 | Offline | Sincronización por comandos (outbox) | ADR-0006 (D-SYNC-01..03) |
 | Contratos | OpenAPI 3.1 en `contracts/openapi/` · cliente Dart generado | [api-contracts.md](api-contracts.md) |

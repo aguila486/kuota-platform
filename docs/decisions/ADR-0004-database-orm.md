@@ -1,4 +1,4 @@
-# ADR-0004: PostgreSQL 17 + Prisma con Row-Level Security
+# ADR-0004: PostgreSQL 18 + Prisma con Row-Level Security
 
 - **Estado:** Propuesto — **condicionado a spike técnico** (tarea de la feature 001)
 - **Fecha:** 2026-11-22
@@ -29,7 +29,7 @@ sesión filtraría contexto entre solicitudes; debe hacerse dentro de cada trans
 
 ## Decisión
 
-- **PostgreSQL 17** como base de datos única (OLTP). Réplica de lectura para reportes cuando se justifique.
+- **PostgreSQL 18** como base de datos única (OLTP). Réplica de lectura para reportes cuando se justifique.
 - **Prisma** como ORM y herramienta de migraciones (recomendación; D-ARC-01), frente a TypeORM.
   Drizzle/Kysely queda como alternativa si el spike falla.
 - Patrón RLS: **Prisma Client extension** que ejecuta cada operación de negocio dentro de una transacción y como primera

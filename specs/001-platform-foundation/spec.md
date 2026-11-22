@@ -363,7 +363,9 @@ verificando que muestra su pantalla de inicio con el nombre de la app, el entorn
 ### Measurable Outcomes
 
 - **SC-001**: Una persona nueva logra tener el entorno local listo y todas las pruebas en verde, siguiendo solo la guía,
-  en ≤ 30 minutos (excluyendo descargas), verificado al menos por una persona distinta del autor.
+  en ≤ 30 minutos (excluyendo descargas), verificado por alguien distinto de quien implementó (con mantenedor
+  único: el mantenedor valida lo implementado por Claude Code, o lo hace en un clon limpio y se re-verifica al
+  incorporarse un segundo integrante).
 - **SC-002**: El 100 % de las pruebas de acceso cruzado pasan y 0 registros de una empresa son observables desde otra
   en todos los escenarios (lectura, listado, modificación, borrado, concurrente con ≥ 50 solicitudes intercaladas).
 - **SC-003**: Cada uno de los 6 tipos de cambio defectuoso de referencia (secreto, punto flotante monetario, estructura

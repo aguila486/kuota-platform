@@ -17,7 +17,7 @@ flowchart TB
         CA["client_mobile<br/>Flutter Android/iOS<br/>caché de solo lectura"]
         API["Kuota Core API<br/>NestJS · REST /v1 · OpenAPI"]
         WK["Kuota Core Worker<br/>NestJS (mismo código)<br/>jobs, outbox, conciliaciones"]
-        PG[("PostgreSQL 17<br/>RLS por tenant<br/>ledger append-only")]
+        PG[("PostgreSQL 18<br/>RLS por tenant<br/>ledger append-only")]
         OS[("Object storage<br/>S3-compatible")]
     end
     OTP["Proveedor OTP"]
@@ -81,7 +81,7 @@ flowchart TB
   (pg-boss o tabla outbox propia; se decide en el plan de 001). Sin Redis en v1.
 - **Límites:** cada job ejecuta en contexto de un tenant explícito; los jobs son idempotentes.
 
-### PostgreSQL 17
+### PostgreSQL 18
 - **Responsable de:** todo el estado de negocio, ledger, auditoría, idempotencia, cola de jobs.
 - **Aislamiento:** RLS habilitado y forzado en tablas con `tenant_id`; roles `kuota_migrator` (owner),
   `kuota_app`, `kuota_worker`, `kuota_platform`, `kuota_readonly`. Ver [data-architecture.md](data-architecture.md).

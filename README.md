@@ -48,9 +48,10 @@ kuota-platform/
 | Python + uv | Spec-Kit CLI | Python 3.11+, uv reciente |
 | specify-cli | SDD | **1.4.3** (fijada) |
 | Claude Code | SDD | actual |
-| Node.js | backend | 24 LTS |
-| pnpm | backend (workspaces) | 10.x vía `corepack` |
-| Flutter / Dart | apps | Dart **≥ 3.6** (requerido por pub workspaces) |
+| Node.js | backend | 26 LTS (nvm, `.nvmrc`) |
+| pnpm | backend (workspaces) | 12.x vía `corepack` (fijado en `packageManager`) |
+| Flutter / Dart | apps | Flutter 3.50.x (Dart 3.14) fijado con **FVM** (`.fvmrc`); mínimo Dart ≥ 3.6 |
+| FVM | apps | ≥ 3.2 (instalado 3.2.1; 4.3.x disponible) — D-ENV-01 |
 | Docker | entorno local | 24+ |
 
 Detalle y diagnóstico: [`docs/process/environment.md`](docs/process/environment.md).

@@ -41,6 +41,11 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
   *Maintenance*. Para un proyecto nuevo con horizonte multianual reduce una migración de runtime. Instalarlo con
   `nvm install 26` es por usuario y no afecta Node 24 (se mantiene para otros proyectos).
 - **Alternatives considered**: Node 24 (instalado hoy; menor runway). Se actualizaron ADR-0002, overview, README.
+- **Implementación (G1, 2026-11-22)**: `.nvmrc` fija **26.13.1** (Latest LTS en nodejs.org). Node 26 **ya no incluye
+  Corepack** (verificado: `corepack: command not found` tras `nvm install`); se instala `corepack@0.36.0`
+  (`nodejs/corepack`, `engines` ≥ 26) con `npm i -g` **dentro del Node 26 de nvm**, sin tocar otras versiones. pnpm
+  queda fijado en **12.21.0** (`latest` y `latest-12` en npm; 12.22/12.23 son `next`). El alias `default` de nvm se
+  fijó en 24.18.0 para que la instalación de Node 26 no cambie el Node por defecto de otros proyectos.
 
 ## R-02 · TypeScript 7 (compilador nativo) con decoradores de NestJS
 
@@ -52,6 +57,11 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 - **Risk / fallback**: Si TS 7 presentara incompatibilidades de tipos con `@nestjs/*` 12, se fija la última 6.x en la
   tarea de scaffolding y se registra en este documento. Criterio de verificación: `pnpm typecheck` limpio sobre el
   esqueleto.
+- **Resultado en T007 (2026-11-22): fallback aplicado, TypeScript 6.0.3.** TS 7.0.2 sí pasa el typecheck del esqueleto
+  (`pnpm dlx --package=typescript@7.0.2 tsc --noEmit`, exit 0), pero la cadena de herramientas no lo admite:
+  `typescript-eslint` 8.73.0 (el último) declara `typescript >=4.8.4 <6.1.0`, y lo necesita el lint con tipos de T009;
+  `@nestjs/cli` 12.0.15 depende de `typescript ~6.0.2`. Se usa una sola versión (6.0.3) para typecheck, lint y CLI. SWC
+  sigue siendo el emisor. **Revisión:** volver a TS 7 cuando `typescript-eslint` y `@nestjs/cli` lo admitan.
 - **Alternatives considered**: `tsc` como emisor (más lento, misma salida); `esbuild` (no emite metadatos de decoradores).
 
 ## R-03 · Runner de pruebas TypeScript: Vitest vs Jest
@@ -234,6 +244,15 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
   pruebas. El backend corre en el host en desarrollo (`pnpm dev`) y opcionalmente en compose (perfil `app`).
   Comando único: `make up` (o `scripts/dev/up.sh`) → compose + migraciones + verificación de salud.
 - **Alternatives considered**: backend siempre en contenedor (bucle de desarrollo más lento).
+- **Implementación (G1, 2026-11-22)**: imagen `postgres:18@sha256:eb63372c…` (índice multiarquitectura; servidor 18.7),
+  puerto publicado solo en `127.0.0.1`, por defecto **55432** (`KUOTA_PG_HOST_PORT`): en la máquina de desarrollo el 5432
+  y el 5433 ya estaban ocupados por otro PostgreSQL. Las contraseñas de los roles no se versionan: `01-roles.sql` las lee
+  del entorno con `\getenv` y falla si faltan o tienen menos de 12 caracteres. Testcontainers usa la misma imagen,
+  leída de `compose.yaml`.
+- **Cadena de suministro (pnpm 12, T007):** se respeta la edad mínima de publicación de pnpm: `dependency-cruiser` queda
+  en **18.8.0** porque 18.9.0 se publicó el mismo día y pnpm pedía exceptuarla. Los scripts de instalación de
+  `@swc/core`, `ssh2`, `cpu-features` y `protobufjs` quedan **denegados** en `allowBuilds` (`pnpm-workspace.yaml`): son
+  opcionales y todo funciona sin ellos (typecheck, build, pruebas y Testcontainers verificados).
 
 ## R-19 · Estado y estructura Flutter
 

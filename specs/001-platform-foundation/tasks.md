@@ -30,17 +30,17 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 
 **Purpose**: Toolchains fijados, workspace raíz y entorno local base (research R-01, R-17, R-18, R-19)
 
-- [ ] T001 Crear `.nvmrc` (Node 26) y `package.json` raíz con `"packageManager": "pnpm@12.x"` fijado, `engines` y scripts agregadores vacíos en `package.json`
-- [ ] T002 Crear `pnpm-workspace.yaml` con el paquete `backend` (sin Nx/Turborepo, ADR-0002) en `pnpm-workspace.yaml`
-- [ ] T003 [P] Crear `.env.example` con todas las variables requeridas, valores ficticios y descripción (`KUOTA_ENV`, `KUOTA_DEV_TENANT_CONTEXT`, `DATABASE_URL_APP`, `DATABASE_URL_MIGRATOR`, `LOG_LEVEL`, `API_VERSION`, `MIN_SUPPORTED_ADMIN/COLLECTOR/CLIENT`) en `.env.example`
-- [ ] T004 [P] Crear `infra/docker/compose.yaml` con `postgres:18` fijado por digest, volumen nombrado y healthcheck `pg_isready` (R-18) en `infra/docker/compose.yaml`
-- [ ] T005 [P] Crear script de roles `kuota_migrator`, `kuota_app` (NOLOGIN, NOBYPASSRLS) y `kuota_app_login`, y la base `kuota_test`, según data-model.md (Roles de base de datos) en `infra/docker/postgres/init/01-roles.sql`
-- [ ] T006 [P] Crear `scripts/dev/doctor.sh`, que verifica Node 26, pnpm 12, Docker, FVM ≥ 3.2 y la versión de Flutter de `.fvmrc`, y falla indicando la versión requerida (US1-4, FR-003), en `scripts/dev/doctor.sh`
-- [ ] T007 Inicializar el backend NestJS 12 con builder SWC, TypeScript 7 en modo `strict` solo para typecheck (R-02) y scripts `dev/build/typecheck/lint/test` en `backend/package.json`, `backend/nest-cli.json` y `backend/tsconfig.json`
-- [ ] T008 [P] Configurar Vitest 5 con `unplugin-swc`, cobertura v8 y umbrales por glob (`src/common/money/**` y `**/domain/**` ≥ 90 %, resto ≥ 80 %, Constitución X) en `backend/vitest.config.ts`
-- [ ] T009 [P] Configurar ESLint (`typescript-eslint`) y Prettier, incluida la regla que prohíbe usar el cliente Prisma fuera de `src/common/tenant-context/` (R-04), en `backend/eslint.config.mjs`
-- [ ] T010 [P] Configurar dependency-cruiser: `domain/` no importa `@nestjs/*`, `@prisma/*`, `pg`, `express`, `infrastructure/` ni `interface/`; los módulos solo importan el `index.ts` público de otros (R-11). En `backend/.dependency-cruiser.cjs`
-- [ ] T011 [P] Configurar Testcontainers (`@testcontainers/postgresql` con `postgres:18`), que aplica roles y migraciones y entrega URLs para `kuota_app_login` y `kuota_migrator`, en `backend/test/support/postgres.ts`
+- [X] T001 Crear `.nvmrc` (Node 26) y `package.json` raíz con `"packageManager": "pnpm@12.x"` fijado, `engines` y scripts agregadores vacíos en `package.json`
+- [X] T002 Crear `pnpm-workspace.yaml` con el paquete `backend` (sin Nx/Turborepo, ADR-0002) en `pnpm-workspace.yaml`
+- [X] T003 [P] Crear `.env.example` con todas las variables requeridas, valores ficticios y descripción (`KUOTA_ENV`, `KUOTA_DEV_TENANT_CONTEXT`, `DATABASE_URL_APP`, `DATABASE_URL_MIGRATOR`, `LOG_LEVEL`, `API_VERSION`, `MIN_SUPPORTED_ADMIN/COLLECTOR/CLIENT`) en `.env.example`
+- [X] T004 [P] Crear `infra/docker/compose.yaml` con `postgres:18` fijado por digest, volumen nombrado y healthcheck `pg_isready` (R-18) en `infra/docker/compose.yaml`
+- [X] T005 [P] Crear script de roles `kuota_migrator`, `kuota_app` (NOLOGIN, NOBYPASSRLS) y `kuota_app_login`, y la base `kuota_test`, según data-model.md (Roles de base de datos) en `infra/docker/postgres/init/01-roles.sql`
+- [X] T006 [P] Crear `scripts/dev/doctor.sh`, que verifica Node 26, pnpm 12, Docker, FVM ≥ 3.2 y la versión de Flutter de `.fvmrc`, y falla indicando la versión requerida (US1-4, FR-003), en `scripts/dev/doctor.sh`
+- [X] T007 Inicializar el backend NestJS 12 con builder SWC, TypeScript 7 en modo `strict` solo para typecheck (R-02) y scripts `dev/build/typecheck/lint/test` en `backend/package.json`, `backend/nest-cli.json` y `backend/tsconfig.json`
+- [X] T008 [P] Configurar Vitest 5 con `unplugin-swc`, cobertura v8 y umbrales por glob (`src/common/money/**` y `**/domain/**` ≥ 90 %, resto ≥ 80 %, Constitución X) en `backend/vitest.config.ts`
+- [X] T009 [P] Configurar ESLint (`typescript-eslint`) y Prettier, incluida la regla que prohíbe usar el cliente Prisma fuera de `src/common/tenant-context/` (R-04), en `backend/eslint.config.mjs`
+- [X] T010 [P] Configurar dependency-cruiser: `domain/` no importa `@nestjs/*`, `@prisma/*`, `pg`, `express`, `infrastructure/` ni `interface/`; los módulos solo importan el `index.ts` público de otros (R-11). En `backend/.dependency-cruiser.cjs`
+- [X] T011 [P] Configurar Testcontainers (`@testcontainers/postgresql` con `postgres:18`), que aplica roles y migraciones y entrega URLs para `kuota_app_login` y `kuota_migrator`, en `backend/test/support/postgres.ts`
 
 **Checkpoint**: se cumplen `pnpm install`, `pnpm --filter backend typecheck` y `scripts/dev/doctor.sh`. Si TypeScript 7 falla con NestJS 12, se fija la 6.x y se registra en research.md (R-02).
 

@@ -1,6 +1,6 @@
 # ADR-0003: Flutter — Dart pub workspaces, Melos 8 y Riverpod
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado (2026-11-22, responsable del proyecto). D-ARC-02 cerrada: Riverpod
 - **Fecha:** 2026-11-22
 - **Decisores:** Responsable técnico, líder Flutter
 - **Relacionado:** Constitución IX, XI, XII; D-ENV-01, D-ARC-02, D-ARC-03; ADR-0006
@@ -11,8 +11,10 @@ Tres aplicaciones Flutter (`admin_web`, `collector_mobile`, `client_mobile`) com
 componentes visuales y lógica de simulación. Collector es offline-first (Drift/SQLite). La Constitución prohíbe duplicar
 código entre apps (IX) y exige que el cliente HTTP se genere desde OpenAPI (XII).
 
-**Hallazgo de entorno (2026-11-22):** Flutter instalado 3.24.3 con **Dart 3.5.3**. Los *pub workspaces* requieren
-**Dart ≥ 3.6**. El entorno actual es **incompatible** y debe actualizarse antes de crear `flutter/` (D-ENV-01).
+**Entorno (D-ENV-01, aprobada):** la instalación global (Flutter 3.24.3 / Dart 3.5.3) no admite *pub workspaces*
+(Dart ≥ 3.6) y **no se modifica**. El proyecto fija **Flutter 3.50.1 / Dart 3.14** con **FVM ≥ 3.2** en
+`flutter/.fvmrc`. Ese archivo aún no existe: lo crea la tarea T080 de 001. Los comandos del workspace se ejecutan con
+`fvm flutter …` / `fvm dart …`.
 
 ## Opciones consideradas
 
@@ -37,9 +39,8 @@ código entre apps (IX) y exige que el cliente HTTP se genere desde OpenAPI (XII
 - **Melos 8.x** con configuración en la sección `melos:` del `pubspec.yaml` raíz de `flutter/`, usado **solo** para
   scripts (`analyze`, `test`, `format`, generación), filtros por paquete afectado y versionado/changelog. No se usa
   `melos bootstrap` para enlazar paquetes (lo hace pub workspaces) ni `pubspec_overrides.yaml`.
-- **Riverpod** como gestión de estado e inyección de dependencias (D-ARC-02, recomendación). Si el equipo prefiere
-  eventos explícitos para auditoría de UI, Bloc es la alternativa aceptable; la decisión se cierra antes de la
-  primera feature con UI.
+- **Riverpod** como gestión de estado e inyección de dependencias (**D-ARC-02 aprobada el 2026-11-22**). Bloc queda
+  descartado; reevaluarlo requiere un ADR nuevo (ver *Revisión*).
 - **admin_web en Flutter Web** inicialmente (D-ARC-03), reevaluar tras el MVP por SEO irrelevante pero rendimiento de
   tablas grandes y accesibilidad.
 
@@ -88,15 +89,43 @@ Reglas de separación:
 - Persistencia local: Drift/SQLite con cifrado (SQLCipher o equivalente evaluado en la spec de 011).
 - Credenciales: `flutter_secure_storage` (Keychain/Keystore).
 
+### Estado de UI frente a lógica de negocio
+
+- Riverpod solo orquesta el estado de presentación y la inyección de dependencias. Los providers no contienen reglas
+  financieras.
+- Reglas y cálculos: `financial_domain` (Dart puro, sin Flutter ni Riverpod). Acceso a datos: repositorios en
+  `features/*/data`, que mapean DTOs de `api_client` a modelos de dominio.
+- Dinero en Dart: `Money` con `BigInt` según ADR-0007, en móvil y en web.
+
+### Offline-first
+
+- Los estados de operación local y el motor de sincronización viven en el paquete `offline_sync` (ADR-0006), separados
+  de la UI. La UI los observa (`StreamProvider`) y no cambia estados; las transiciones las hace solo el motor.
+
+### Clave de idempotencia
+
+- La clave (UUIDv7) se genera **al crear la operación** (comando offline u operación en línea), se persiste con ella
+  (outbox en Collector; registro local de la operación pendiente en las demás apps) y se **reutiliza en cada
+  reintento**.
+- `api_client` y sus interceptores nunca generan ni reemplazan `Idempotency-Key`. Una escritura idempotente sin clave
+  falla en el cliente antes de enviarse. En Collector, `operation_id` es la clave (ADR-0006).
+
+### Entornos (FR-032 de 001)
+
+- `local`, `testing`, `staging` y `production` mediante `--dart-define-from-file=config/<entorno>.json` (sin secretos).
+  Los identificadores de app por entorno, para instalar varias versiones en paralelo, se definen al distribuir
+  (D-ARC-04).
+
 ## Consecuencias
 
 - **Positivas:** resolución de dependencias única, sin enlaces frágiles; código compartido real; tests de dominio sin Flutter.
-- **Negativas:** requiere actualizar Flutter (impacto global en la máquina; mitigado con FVM, D-ENV-01).
+- **Negativas:** requiere FVM y una versión de Flutter por proyecto (sin cambios en la instalación global).
 - **Riesgos:** algunos paquetes de terceros podrían no soportar workspaces → validar en la tarea de scaffolding.
 
 ## Validación
 
-- `dart pub get` en la raíz de `flutter/` resuelve todos los paquetes; `melos run analyze` y `melos run test` verdes.
+- `fvm flutter pub get` en la raíz de `flutter/` resuelve todos los paquetes; `melos run analyze` y `melos run test`
+  verdes.
 - Lint que impide importar `package:flutter` desde `financial_domain`.
 
 ## Revisión

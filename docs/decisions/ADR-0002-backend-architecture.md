@@ -1,9 +1,10 @@
 # ADR-0002: Backend — NestJS monolito modular con pnpm workspaces
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado con condiciones (2026-11-22, responsable del proyecto). C2-1 y C2-3 documentados en este ADR;
+  **C2-2 (propiedad de tablas, D-ARC-07) debe resolverse antes de 002**.
 - **Fecha:** 2026-11-22
 - **Decisores:** Responsable técnico
-- **Relacionado:** Constitución VIII (Clean Architecture), IX (Modularidad); ADR-0004, ADR-0005; D-ARC-04
+- **Relacionado:** Constitución VIII (Clean Architecture), IX (Modularidad); ADR-0004, ADR-0005; D-ARC-04, D-ARC-07
 
 ## Contexto
 
@@ -40,8 +41,8 @@ préstamo → recibo), aislamiento multi-tenant y alta trazabilidad. El equipo e
 ### Módulos (límites de dominio)
 
 `identity`, `tenancy`, `customers`, `products`, `loans` (originación + servicing), `payments`, `savings`, `collateral`,
-`ledger`, `collection` (operación de campo, rutas), `sync`, `receipts`, `cash-reconciliation`, `reporting`, `audit`,
-`notifications`, `platform-admin`.
+`ledger`, `collection` (operación de campo, rutas), `sync`, `receipts`, `cash-reconciliation`, `reporting`, `audit`
+(solo consulta; ver *Auditoría*), `notifications`, `platform-admin`. Los módulos se crean cuando una spec los requiere.
 
 Cada módulo:
 
@@ -67,6 +68,60 @@ Reglas:
 - Comunicación síncrona intra-proceso dentro de una transacción cuando la consistencia contable lo exige
   (p. ej. `payments` → `ledger`); eventos internos (outbox) para efectos secundarios (notificaciones, reportes).
 - El módulo `platform-admin` es el único con operaciones cross-tenant y usa un rol de base de datos distinto.
+
+### Propagación transaccional entre módulos (C2-1)
+
+- Un caso de uso abre **una** transacción con `withTenant` (ADR-0004). El cliente transaccional se guarda en CLS
+  (nestjs-cls) y es el único acceso a datos de los repositorios.
+- Los servicios de `public-api.ts` **no abren transacciones propias**: participan en la del llamador. Si se invocan sin
+  transacción activa, la abren mediante `withTenant`.
+- `withTenant` anidado:
+
+| Situación | Comportamiento |
+|---|---|
+| Transacción activa con el mismo tenant | Reutiliza la transacción: sin transacción nueva ni *savepoint* |
+| Transacción activa con otro tenant | Error `TenantContextMismatch` y rollback de toda la transacción |
+| Sin transacción activa | Abre una nueva |
+| Excepción en un callback anidado | Se propaga y revierte la transacción completa; no hay rollback parcial en v1 |
+
+- Implementación: `@nestjs-cls/transactional` 4.x con `@nestjs-cls/transactional-adapter-prisma` 2.x (existencia y
+  compatibilidad con nestjs-cls 7 y Prisma verificadas en npm el 2026-11-22) o un equivalente propio en
+  `common/tenant-context`. Se elige y verifica en el spike (criterio S5 de ADR-0004) y se registra en research R-04 de 001.
+- Ninguna llamada HTTP externa dentro de la transacción; los efectos secundarios van por outbox.
+
+### Propiedad de tablas (C2-2) — decisión D-ARC-07, antes de 002
+
+La Constitución IX prohíbe que un módulo acceda a tablas de otro; dependency-cruiser solo controla *imports* y no lo
+impide con un único cliente Prisma. Mecanismo propuesto (pendiente de aprobación):
+
+1. Manifiesto `backend/db/table-ownership.json` (tabla → módulo propietario). Un verificador de catálogo, junto a
+   `db:check-rls`, falla si una tabla del esquema `kuota` no tiene exactamente un propietario.
+2. Modelos Prisma agrupados por módulo (esquema multiarchivo `prisma/schema/<módulo>.prisma`; soporte a verificar en la
+   versión fijada) y regla de lint: en `modules/<m>/infrastructure/**` solo se accede a modelos de `<m>`. El SQL crudo
+   vive en archivos por módulo y un script rechaza referencias a tablas de otros propietarios.
+3. Los datos de otro módulo solo se obtienen por su `public-api.ts`.
+
+Alternativa más fuerte, no recomendada para v1: un esquema PostgreSQL y un rol por módulo con `SET LOCAL ROLE` en cada
+llamada. Aísla en la base de datos, pero complica las transacciones entre módulos y multiplica los permisos.
+Mientras D-ARC-07 esté pendiente, 001 solo crea tablas de `common` (`idempotency_keys`, `audit_events`) y del módulo
+técnico `dev-probe`.
+
+### Proceso worker y rol `kuota_worker` (C2-3)
+
+- Proceso `main.worker.ts` del mismo paquete (`docs/architecture/c4-containers.md`). Responsabilidades: publicar el
+  outbox, jobs programados (reconciliación del ledger, cierres de ciclo, devengos si se aprueban, purga de
+  idempotencias) y envío de OTP y push.
+- Rol `kuota_worker` con credencial propia: los mismos privilegios que `kuota_app` sobre tablas de tenant (sujeto a RLS,
+  sin `BYPASSRLS`) más DML en las tablas de cola y outbox. Cada job ejecuta en `withTenant` con el `tenant_id` de su
+  registro. Para recorrer tenants usa una función `SECURITY DEFINER` que solo devuelve IDs de tenants activos.
+- No existe en 001 (research R-16: sin cola). Se crea con la primera feature que introduzca jobs.
+
+### Auditoría: mecanismo frente a consulta
+
+- `common/audit`: mecanismo transversal (`AuditService.record()` y tabla `audit_events`, propiedad de `common`), que
+  escribe en la misma transacción del caso de uso (implementado en 001).
+- Módulo `audit` (feature 015): casos de uso de consulta y exportación, de solo lectura, a través de la API pública de
+  `common/audit`. No escribe ni redefine la tabla.
 
 ## Consecuencias
 

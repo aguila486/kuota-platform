@@ -15,7 +15,7 @@
 
 | # | Feature | Objetivo | Alcance principal | Depende de | Decisiones bloqueantes |
 |---|---|---|---|---|---|
-| 001 | platform-foundation | Base técnica verificable del monorepo | Tooling pnpm/Flutter workspace, esqueleto NestJS (health, config, logging), mecanismo de contexto de tenant + RLS con harness de pruebas, librería `money`, pipeline OpenAPI, Docker Compose, CI, plantillas de PR | — | D-ENV-01, D-ARC-01 (spike), D-ARC-02 |
+| 001 | platform-foundation | Base técnica verificable del monorepo | Tooling pnpm/Flutter workspace, esqueleto NestJS (health, config, logging), mecanismo de contexto de tenant + RLS con harness de pruebas, librería `money`, pipeline OpenAPI, Docker Compose, CI, plantillas de PR | — | D-ENV-01 (aprobada), D-FIN-01 (aprobada, ADR-0007), D-ARC-02 (aprobada), D-ARC-01 (spike T014/T015) |
 | 002 | identity-tenancy | Tenants, sucursales, usuarios, roles, autenticación | Alta de tenant (plataforma), RBAC, login staff con MFA, enrolamiento de dispositivos, identidad global vs membresías | 001 | D-AUTH-01, D-AUTH-02, D-LEG-06 |
 | 003 | customer-management | Registro de clientes por tenant | Alta/edición de cliente, datos de contacto, documentos, vínculo identidad↔cliente, enmascaramiento PII | 002 | D-LEG-02, D-LEG-03 |
 | 004 | loan-products | Configuración versionada de productos de préstamo | Parámetros (método, tasa+base, frecuencia, plazo, gracia, moratorios, garantía), simulador | 002 | D-FIN-02…06 |

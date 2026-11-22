@@ -2,10 +2,13 @@
 -- Migración 0001_foundation — 001-platform-foundation (T012 + T013)
 --
 -- Fuente: specs/001-platform-foundation/data-model.md; ADR-0004 (C4-1 roles, C4-3 política con nullif); research R-07.
--- Se ejecuta como kuota_migrator (propietario). El ejecutor la envuelve en UNA transacción: no contiene BEGIN/COMMIT.
--- SQL plano y neutral al ORM: la herramienta de migraciones (Prisma o Kysely) se decide en el spike T014/T015.
+-- Se aplica con `prisma migrate deploy` como kuota_migrator (propietario); ADR-0004, aceptado con condiciones.
+-- Transacción explícita (condición P1): `prisma migrate deploy` no envuelve las migraciones en una transacción, así que
+-- un fallo a mitad dejaría cambios parciales. Todas estas sentencias admiten ejecutarse dentro de una transacción.
 -- Requiere PostgreSQL 18 (uuidv7() nativo).
 -- =====================================================================================================================
+
+BEGIN;
 
 CREATE SCHEMA kuota AUTHORIZATION kuota_migrator;
 REVOKE ALL ON SCHEMA kuota FROM PUBLIC;
@@ -148,3 +151,5 @@ GRANT USAGE ON SCHEMA kuota TO kuota_app;
 REVOKE ALL ON kuota.dev_probe_items, kuota.idempotency_keys, kuota.audit_events FROM PUBLIC;
 GRANT SELECT, INSERT, UPDATE, DELETE ON kuota.dev_probe_items, kuota.idempotency_keys TO kuota_app;
 GRANT SELECT, INSERT ON kuota.audit_events TO kuota_app;
+
+COMMIT;

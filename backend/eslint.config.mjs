@@ -9,6 +9,18 @@ import tseslint from 'typescript-eslint';
 const RAW_DB_CLIENT_MESSAGE =
   'Acceso a datos solo vía withTenant (src/common/tenant-context). El cliente crudo de base de datos está prohibido fuera de ahí (ADR-0004).';
 
+// Contexto de tenant (ADR-0004, condición P2): solo src/common/tenant-context puede fijarlo o cambiar la identidad de la
+// sesión. Se rechazan literales y SQL de plantilla con set_config, referencias a app.tenant_id/actor_id/correlation_id y
+// SET/RESET de app.*, ROLE, SESSION AUTHORIZATION, row_security o ALL. Limitación conocida: el lint no detecta SQL
+// armado por concatenación ni funciones de base de datos; por eso siguen siendo obligatorios RLS forzado, privilegios
+// mínimos, consultas parametrizadas y revisión.
+const TENANT_CONTEXT_SQL =
+  '/set_config|\\bapp\\.(tenant_id|actor_id|correlation_id)\\b|\\b(SET|RESET)\\s+(LOCAL\\s+|SESSION\\s+)?("?app\\.|ROLE\\b|SESSION\\s+AUTHORIZATION|ROW_SECURITY|ALL\\b)/i';
+const TENANT_CONTEXT_MESSAGE =
+  'El contexto de tenant y la identidad de sesión solo se gestionan en src/common/tenant-context (withTenant). ADR-0004, condición P2.';
+const DYNAMIC_SQL_MESSAGE =
+  'SQL dinámico prohibido fuera de src/common/tenant-context: usa $queryRaw/$executeRaw con plantilla parametrizada (ADR-0004, P2).';
+
 export default defineConfig(
   { ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'generated/**'] },
   eslint.configs.recommended,
@@ -36,6 +48,16 @@ export default defineConfig(
           paths: [{ name: 'pg', message: RAW_DB_CLIENT_MESSAGE }],
           patterns: [{ group: ['@prisma/*', '.prisma/*', '**/generated/prisma/**'], message: RAW_DB_CLIENT_MESSAGE }],
         },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        { selector: `Literal[value=${TENANT_CONTEXT_SQL}]`, message: TENANT_CONTEXT_MESSAGE },
+        { selector: `TemplateElement[value.raw=${TENANT_CONTEXT_SQL}]`, message: TENANT_CONTEXT_MESSAGE },
+        {
+          selector: 'CallExpression[callee.property.name=/^\\$(queryRawUnsafe|executeRawUnsafe)$/]',
+          message: DYNAMIC_SQL_MESSAGE,
+        },
+        { selector: "MemberExpression[object.name='Prisma'][property.name='raw']", message: DYNAMIC_SQL_MESSAGE },
       ],
     },
   },

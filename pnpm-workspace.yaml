@@ -11,7 +11,7 @@ engineStrict: true
 # - protobufjs: sin script necesario para su uso en Testcontainers.
 # Permitir un build requiere justificarlo en research.md de la feature.
 # - prisma (preinstall) y @prisma/engines (postinstall: descarga el binario schema-engine que usa `prisma migrate`):
-#   permitidos para el spike T014 (research R-04). Si T015 descarta Prisma, se eliminan junto con la dependencia.
+#   permitidos porque Prisma es el ORM aprobado con condiciones (ADR-0004, condición P8). Ningún otro script.
 allowBuilds:
   '@prisma/engines': true
   prisma: true

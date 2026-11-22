@@ -1,6 +1,8 @@
+import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { Client } from 'pg';
 
@@ -9,8 +11,8 @@ import { Client } from 'pg';
  *
  * - Usa la misma imagen fijada por digest que infra/docker/compose.yaml (se lee de ahí: una sola fuente).
  * - Aplica infra/docker/postgres/init/01-roles.sql con contraseñas aleatorias por ejecución.
- * - Aplica las migraciones SQL de backend/prisma/migrations/<carpeta>/migration.sql en orden, como kuota_migrator.
- *   En G1 no hay migraciones; la herramienta definitiva (Prisma o Kysely) se decide en el spike T014/T015.
+ * - Aplica las migraciones con el mecanismo real del proyecto, `prisma migrate deploy` (ADR-0004, aceptado con
+ *   condiciones), como kuota_migrator. Cada migración controla su propia transacción (condición P1).
  * - Entrega URLs para kuota_app_login (runtime) y kuota_migrator (migraciones).
  */
 export interface TestDatabase {
@@ -37,7 +39,9 @@ function findRepoRoot(start: string): string {
 const REPO_ROOT = findRepoRoot(process.cwd());
 const COMPOSE_FILE = join(REPO_ROOT, 'infra/docker/compose.yaml');
 const ROLES_SQL = join(REPO_ROOT, 'infra/docker/postgres/init/01-roles.sql');
-const MIGRATIONS_DIR = join(REPO_ROOT, 'backend/prisma/migrations');
+const BACKEND_DIR = join(REPO_ROOT, 'backend');
+const MIGRATIONS_DIR = join(BACKEND_DIR, 'prisma/migrations');
+const PRISMA_BIN = join(BACKEND_DIR, 'node_modules/.bin/prisma');
 
 /** Imagen `postgres:18@sha256:…` declarada en compose.yaml. */
 export function postgresImage(): string {
@@ -63,26 +67,41 @@ export function migrationFolders(): string[] {
     .sort();
 }
 
-/** Aplica cada migration.sql en su propia transacción con la URL dada (atómico por migración). */
-export async function applyMigrations(url: string): Promise<string[]> {
-  const folders = migrationFolders();
+/** Error de `prisma migrate deploy`, con su código de salida y su salida para diagnóstico. */
+export class MigrateDeployError extends Error {
+  constructor(
+    readonly exitCode: number,
+    readonly output: string,
+  ) {
+    super(`prisma migrate deploy falló (exit ${exitCode})`);
+  }
+}
+
+/**
+ * Ejecuta `prisma migrate deploy` contra la URL dada y devuelve las migraciones registradas como terminadas en
+ * `_prisma_migrations`. `migrationsDir` permite usar una copia temporal (p. ej. para inyectar fallos).
+ */
+export async function applyMigrations(url: string, migrationsDir: string = MIGRATIONS_DIR): Promise<string[]> {
+  try {
+    await promisify(execFile)(PRISMA_BIN, ['migrate', 'deploy'], {
+      cwd: BACKEND_DIR,
+      env: { ...process.env, DATABASE_URL_MIGRATOR: url, KUOTA_PRISMA_MIGRATIONS_DIR: migrationsDir },
+      timeout: 120_000,
+    });
+  } catch (error) {
+    const e = error as { code?: number; stdout?: string; stderr?: string };
+    throw new MigrateDeployError(typeof e.code === 'number' ? e.code : 1, `${e.stdout ?? ''}\n${e.stderr ?? ''}`);
+  }
   const client = new Client({ connectionString: url });
   await client.connect();
   try {
-    for (const folder of folders) {
-      await client.query('BEGIN');
-      try {
-        await client.query(readFileSync(join(MIGRATIONS_DIR, folder, 'migration.sql'), 'utf8'));
-        await client.query('COMMIT');
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw new Error(`Falló la migración ${folder}`, { cause: error });
-      }
-    }
+    const rows = await client.query<{ migration_name: string }>(
+      'SELECT migration_name FROM public._prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name',
+    );
+    return rows.rows.map((r) => r.migration_name);
   } finally {
     await client.end();
   }
-  return folders;
 }
 
 export interface StartOptions {

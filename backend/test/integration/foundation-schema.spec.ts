@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client, type DatabaseError } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { applyMigrations, startTestDatabase, type TestDatabase } from '../support/postgres.js';
+import { applyMigrations, MigrateDeployError, startTestDatabase, type TestDatabase } from '../support/postgres.js';
 
 /**
  * G2 (T012/T013): migración 0001_foundation sobre PostgreSQL 18 real (Testcontainers).
@@ -467,7 +468,8 @@ describe('G2 — migración 0001_foundation', () => {
   });
 });
 
-describe('G2 — reproducibilidad de la migración', () => {
+describe('G2/P1 — migración 0001 con prisma migrate deploy (transacción explícita)', () => {
+  const MIGRATIONS_DIR = join(__dirname, '../../prisma/migrations');
   let db: TestDatabase;
 
   beforeAll(async () => {
@@ -478,44 +480,90 @@ describe('G2 — reproducibilidad de la migración', () => {
     await db?.stop();
   });
 
-  it('un rol insuficiente (kuota_app_login) no puede aplicarla y no deja objetos a medias', async () => {
+  async function catalog(url: string): Promise<{ kuota: boolean; history: boolean }> {
+    const client = await connect(url);
+    try {
+      const r = await client.query<{ kuota: boolean; history: boolean }>(
+        "SELECT to_regnamespace('kuota') IS NOT NULL AS kuota, to_regclass('public._prisma_migrations') IS NOT NULL AS history",
+      );
+      return r.rows[0]!;
+    } finally {
+      await client.end();
+    }
+  }
+
+  it('el rol de runtime (kuota_app_login) no puede migrar y no deja objetos', async () => {
     let caught: unknown;
     try {
       await applyMigrations(db.appUrl);
     } catch (error) {
       caught = error;
     }
-    expect(pgCode((caught as Error | undefined)?.cause)).toBe('42501');
-    const migrator = await connect(db.migratorUrl);
-    try {
-      const schema = await migrator.query("SELECT 1 FROM pg_namespace WHERE nspname = 'kuota'");
-      expect(schema.rowCount).toBe(0);
-    } finally {
-      await migrator.end();
-    }
+    expect(caught).toBeInstanceOf(MigrateDeployError);
+    expect((caught as MigrateDeployError).output).toMatch(/permission denied/i);
+    expect(await catalog(db.migratorUrl)).toEqual({ kuota: false, history: false });
   });
 
-  it('kuota_migrator la aplica sobre una base limpia y una segunda aplicación falla sin efectos parciales', async () => {
+  it('kuota_migrator la aplica desde cero, queda registrada y una segunda ejecución no tiene cambios pendientes', async () => {
     expect(await applyMigrations(db.migratorUrl)).toEqual(['0001_foundation']);
-    let caught: unknown;
+    const client = await connect(db.migratorUrl);
     try {
-      await applyMigrations(db.migratorUrl);
-    } catch (error) {
-      caught = error;
-    }
-    expect((caught as Error | undefined)?.message).toBe('Falló la migración 0001_foundation');
-    const migrator = await connect(db.migratorUrl);
-    try {
-      const tables = await migrator.query("SELECT tablename FROM pg_tables WHERE schemaname = 'kuota'");
+      const history = await client.query<{ migration_name: string; steps: number; owner: string }>(
+        `SELECT migration_name, applied_steps_count AS steps,
+                (SELECT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = '_prisma_migrations') AS owner
+           FROM public._prisma_migrations`,
+      );
+      expect(history.rows).toEqual([{ migration_name: '0001_foundation', steps: 1, owner: 'kuota_migrator' }]);
+      expect(await applyMigrations(db.migratorUrl)).toEqual(['0001_foundation']);
+      const count = await client.query<{ n: string }>('SELECT count(*) AS n FROM public._prisma_migrations');
+      expect(count.rows[0]?.n).toBe('1');
+      const tables = await client.query("SELECT tablename FROM pg_tables WHERE schemaname = 'kuota'");
       expect(tables.rowCount).toBe(3);
     } finally {
-      await migrator.end();
+      await client.end();
     }
   });
 
-  it('el archivo de migración no contiene BEGIN/COMMIT propios ni referencias a contraseñas', () => {
-    const sql = readFileSync(join(__dirname, '../../prisma/migrations/0001_foundation/migration.sql'), 'utf8');
-    expect(sql).not.toMatch(/^\s*(BEGIN|COMMIT)\s*;/im);
+  it('un fallo inyectado a mitad de 0001 revierte todo: sin esquema kuota y con la migración sin terminar', async () => {
+    const failing = await startTestDatabase({ applyMigrations: false });
+    const temp = mkdtempSync(join(tmpdir(), 'kuota-p1-'));
+    try {
+      cpSync(MIGRATIONS_DIR, temp, { recursive: true });
+      const file = join(temp, '0001_foundation', 'migration.sql');
+      const sql = readFileSync(file, 'utf8');
+      // Fallo después de crear esquema, tablas, triggers y políticas, justo antes del COMMIT final.
+      writeFileSync(file, sql.replace(/\nCOMMIT;\s*$/, '\nSELECT 1 / 0;\nCOMMIT;\n'));
+      expect(readFileSync(file, 'utf8')).toMatch(/SELECT 1 \/ 0;\nCOMMIT;\n$/);
+      await expect(applyMigrations(failing.migratorUrl, temp)).rejects.toBeInstanceOf(MigrateDeployError);
+      expect((await catalog(failing.migratorUrl)).kuota).toBe(false);
+      const client = await connect(failing.migratorUrl);
+      try {
+        const history = await client.query<{ finished: boolean }>(
+          "SELECT finished_at IS NOT NULL AS finished FROM public._prisma_migrations WHERE migration_name = '0001_foundation'",
+        );
+        expect(history.rows).toEqual([{ finished: false }]);
+      } finally {
+        await client.end();
+      }
+      // Prisma bloquea despliegues posteriores hasta resolver el fallo (P3009); no se usa `migrate resolve`.
+      let blocked: unknown;
+      try {
+        await applyMigrations(failing.migratorUrl, temp);
+      } catch (error) {
+        blocked = error;
+      }
+      expect((blocked as MigrateDeployError).output).toMatch(/P3009/);
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+      await failing.stop();
+    }
+  });
+
+  it('el archivo declara su propia transacción (BEGIN al inicio, COMMIT al final) y no contiene contraseñas', () => {
+    const sql = readFileSync(join(MIGRATIONS_DIR, '0001_foundation', 'migration.sql'), 'utf8');
+    const statements = sql.split('\n').filter((line) => line.trim() !== '' && !line.trim().startsWith('--'));
+    expect(statements[0]?.trim()).toBe('BEGIN;');
+    expect(statements.at(-1)?.trim()).toBe('COMMIT;');
     expect(sql).not.toMatch(/PASSWORD/i);
   });
 });

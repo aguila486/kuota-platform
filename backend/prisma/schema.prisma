@@ -1,5 +1,5 @@
 // =====================================================================================================================
-// Kuota Core — esquema Prisma del SPIKE T014 (ADR-0004; D-ARC-01 pendiente).
+// Kuota Core — esquema Prisma (ADR-0004, aceptado con condiciones; D-ARC-01 aprobada en T015).
 //
 // NO es la fuente de verdad del esquema. La fuente canónica es la migración SQL
 // prisma/migrations/0001_foundation/migration.sql (T012). Este archivo es un ESPEJO de los modelos, obtenido con
@@ -8,8 +8,9 @@
 // el SQL. Tampoco lee los defaults de audit_events.actor_id y audit_events.correlation_id (los toma de app.actor_id y
 // app.correlation_id): existen en la base, pero aquí se omiten para no generar deriva, y el cliente exige pasarlos.
 //
-// Prohibido: `prisma migrate dev`, `prisma db push` y regenerar migraciones desde este archivo. Las migraciones se
-// escriben a mano en SQL y se aplican con `prisma migrate deploy` (kuota_migrator).
+// Prohibido (condición P4): `prisma migrate dev`, `prisma db push`, `prisma migrate reset` y regenerar migraciones
+// desde este archivo. Las migraciones se escriben a mano en SQL, con BEGIN/COMMIT (P1), y se aplican con
+// `prisma migrate deploy` (kuota_migrator).
 // =====================================================================================================================
 
 generator client {

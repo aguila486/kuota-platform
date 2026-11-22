@@ -29,12 +29,35 @@ cambios sin tarea asociada. (P) CI valida que la rama sigue el patrón `feature/
 
 - Cada spec DEBE incluir una sección de riesgos de seguridad (actores, activos, amenazas) y sus mitigaciones.
 - Autenticación y autorización DEBEN aplicarse en el backend en cada endpoint; las apps nunca son fuente de autorización.
+- **Excepciones de acceso.** Un endpoint sin autenticación o sin autorización solo se admite como excepción. Cada
+  excepción DEBE registrarse en la tabla *Endpoint Access* de la spec que la introduce, con:
+  1. justificación explícita;
+  2. entornos permitidos;
+  3. clasificación de los datos expuestos;
+  4. controles de seguridad compensatorios;
+  5. pruebas que verifican el acceso permitido y el denegado.
+- Categorías admisibles (lista cerrada; ampliarla requiere enmienda):
+  - *Liveness*: puede ser público si responde solo disponibilidad mínima, sin detalles internos.
+  - *Readiness*: puede evaluar dependencias, pero NO DEBE divulgar detalles internos (hosts, versiones, mensajes de
+    error, topología); si los incluyera, DEBE ser interno o estar protegido.
+  - *Compatibilidad de versión de apps*: puede ser público si su respuesta no expone información interna sensible.
+  - *Métricas*: DEBEN ser internas y protegidas mediante restricción de red, autenticación del recolector o un control
+    equivalente. Un puerto separado NO constituye por sí mismo un control de seguridad.
+  - *Mecanismos técnicos de desarrollo y prueba*: solo en entornos `local`/`testing`, deshabilitados fuera de ellos
+    mediante controles verificables por prueba. Un encabezado técnico arbitrario NO es autenticación.
+- Ningún endpoint que lea o modifique datos de tenant, datos personales u operaciones financieras puede ser una
+  excepción en `staging` o `production`. Las excepciones NO DEBEN usarse para que funcionalidades de negocio omitan
+  autenticación.
 - Principio de mínimo privilegio para roles de aplicación, cuentas de base de datos, tokens y personal.
 - Entradas externas DEBEN validarse contra el contrato (esquema) antes de llegar al dominio.
 - Dependencias con vulnerabilidades críticas/altas conocidas NO DEBEN fusionarse a `main`.
 
-**Verificación.** (R) Checklist de seguridad en la plantilla de PR; endpoints nuevos declaran permiso requerido.
-(P) Escaneo de dependencias y de secretos en CI (bloqueante); pruebas de autorización negativas (403/404) por endpoint.
+**Verificación.** (R) Checklist de seguridad en la plantilla de PR; endpoints nuevos declaran permiso requerido en la
+tabla *Endpoint Access*; toda excepción tiene sus cinco elementos y pertenece a una categoría admisible; en el contrato,
+`security: []` solo aparece en endpoints públicos registrados como excepción.
+(P) Escaneo de dependencias y de secretos en CI (bloqueante); pruebas de autorización negativas (401/403/404) por
+endpoint; por cada excepción, pruebas de acceso permitido y denegado (incluida la ausencia del mecanismo técnico en
+configuración de `staging`/`production`).
 
 ### III. Aislamiento multi-tenant (NO NEGOCIABLE)
 
@@ -200,6 +223,10 @@ backend y verifica que el cliente generado está actualizado.
   `contracts`, `infra`, `ci`, `specs`, `docs`, `adr`, `constitution`, `speckit`).
 - Todo PR requiere: al menos 1 aprobación (2 si toca ledger, motores financieros, autenticación o RLS), CI verde,
   referencia a spec/tareas y checklist de la Constitución.
+- **Excepción de mantenedor único**: mientras el proyecto tenga un solo mantenedor, los PR en áreas que exigen 2
+  aprobaciones requieren 1 aprobación humana + checklist constitucional completo + `/speckit-analyze` sin hallazgos
+  CRITICAL + CI verde. La regla de 2 aprobaciones se activa automáticamente al registrarse un segundo mantenedor
+  en CODEOWNERS.
 - Gates bloqueantes de CI: lint, tipos, pruebas unitarias e integración de componentes afectados, cobertura, contrato
   OpenAPI y compatibilidad, pruebas de aislamiento multi-tenant, escaneo de secretos y dependencias.
 - Releases independientes por componente con versionado semántico y etiquetas `backend-vX.Y.Z`, `admin-vX.Y.Z`,
@@ -227,4 +254,4 @@ backend y verifica que el cliente generado está actualizado.
   o justificar excepciones en su tabla de complejidad; `/speckit-analyze` trata violaciones como CRITICAL.
 - Revisión periódica de la Constitución al cierre de cada iteración mayor.
 
-**Version**: 1.0.1 | **Ratified**: 2026-11-22 | **Last Amended**: 2026-11-22
+**Version**: 1.2.0 | **Ratified**: 2026-11-22 | **Last Amended**: 2026-11-22

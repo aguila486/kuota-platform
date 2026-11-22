@@ -69,3 +69,6 @@ docker-compose.override.yml
 # ---------- Reportes generados ----------
 reports/
 *.lcov
+
+# Cliente Prisma generado (spike T014): se regenera con `prisma generate`; nunca se versiona.
+backend/generated/

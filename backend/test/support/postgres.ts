@@ -17,6 +17,8 @@ export interface TestDatabase {
   readonly appUrl: string;
   readonly migratorUrl: string;
   readonly appliedMigrations: readonly string[];
+  /** Superusuario del contenedor efímero: solo para preparar escenarios de prueba (nunca lo usa la aplicación). */
+  readonly superuserUrl: string;
   stop(): Promise<void>;
 }
 
@@ -106,7 +108,13 @@ export async function startTestDatabase(options: StartOptions = {}): Promise<Tes
 
   try {
     const appliedMigrations = options.applyMigrations === false ? [] : await applyMigrations(migratorUrl);
-    return { appUrl, migratorUrl, appliedMigrations, stop: async () => void (await container.stop()) };
+    return {
+      appUrl,
+      migratorUrl,
+      appliedMigrations,
+      superuserUrl: container.getConnectionUri(),
+      stop: async () => void (await container.stop()),
+    };
   } catch (error) {
     await container.stop();
     throw error;

@@ -10,7 +10,7 @@ const RAW_DB_CLIENT_MESSAGE =
   'Acceso a datos solo vía withTenant (src/common/tenant-context). El cliente crudo de base de datos está prohibido fuera de ahí (ADR-0004).';
 
 export default defineConfig(
-  { ignores: ['dist/**', 'coverage/**', 'node_modules/**'] },
+  { ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'generated/**'] },
   eslint.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
   {

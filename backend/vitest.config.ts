@@ -15,8 +15,9 @@ export default defineConfig({
   ],
   test: {
     environment: 'node',
-    include: ['test/**/*.spec.ts'],
-    testTimeout: 15_000,
+    // `pnpm spike:rls` (T014) ejecuta solo el spike; el resto de comandos, solo las pruebas.
+    include: process.env['KUOTA_SPIKE'] === '1' ? ['scripts/spike-rls.ts'] : ['test/**/*.spec.ts'],
+    testTimeout: process.env['KUOTA_SPIKE'] === '1' ? 300_000 : 15_000,
     // Las pruebas con Testcontainers incluyen el arranque del contenedor.
     hookTimeout: 180_000,
     coverage: {

@@ -234,6 +234,8 @@ verificando que muestra su pantalla de inicio con el nombre de la app, el entorn
   segundo efecto.
 - Clave de idempotencia expirada (más de 30 días): se trata como nueva; el registro expirado no bloquea la operación.
 - Monto con más decimales que la unidad mínima de la moneda: se rechaza en la frontera; no se redondea en silencio.
+- Monto fuera del rango representable, en forma no canónica (ceros a la izquierda, `-0`) o en una moneda no soportada:
+  se rechaza con un error explícito; nunca se trunca.
 - Logs que reciben datos sensibles por error (teléfono, token, identificador fiscal): se redactan antes de emitirse.
 - Cambio en el contrato que elimina un campo usado por apps desplegadas: CI lo detecta como incompatible.
 - Herramientas locales con versión distinta a la fijada: la verificación de entorno lo advierte.
@@ -307,7 +309,8 @@ verificando que muestra su pantalla de inicio con el nombre de la app, el entorn
 
 - **FR-019**: MUST existir una primitiva monetaria (monto en unidades mínimas + código de moneda) en el servicio central
   y en el paquete de dominio móvil, con suma/resta solo entre misma moneda, multiplicación por factores decimales con
-  modo de redondeo obligatorio y reparto exacto en N partes.
+  modo de redondeo obligatorio y reparto exacto en N partes, conforme a la representación aprobada en D-FIN-01
+  (ADR-0007): rango representable, escala por moneda y forma canónica.
 - **FR-020**: MUST existir un conjunto de fixtures numéricos compartidos (entradas y resultados esperados) ejecutado por
   ambos lados.
 - **FR-021**: MUST existir una regla automatizada que rechace aritmética o tipos de punto flotante binario en código
@@ -491,10 +494,15 @@ personales (002, 003) MUST declarar su propio inventario.
 ## Assumptions
 
 - El stack (servicio central, almacén de datos, framework móvil, formato de contrato, CI) está fijado por la
-  Constitución y los ADR-0001..0006 en estado *Propuesto*; esta feature los valida en la práctica y su aprobación final
-  se registra en los ADR.
+  Constitución y los ADR (estado al 2026-11-22: ADR-0001, ADR-0003 y ADR-0007 aceptados; ADR-0002, ADR-0005 y
+  ADR-0006 aceptados con condiciones que no afectan a 001, salvo C2-1, que 001 implementa; ADR-0004 propuesto y
+  condicionado al spike de FR-018).
 - **D-ENV-01** (versión del SDK móvil): **resuelta** — Flutter fijado por proyecto con FVM en una versión stable con
   Dart ≥ 3.6; la instalación global no se modifica.
+- **D-FIN-01** (representación monetaria): **aprobada** — montos enteros en unidades mínimas + moneda ISO 4217, tasas
+  decimales exactas; reglas en ADR-0007. Sustenta FR-019..FR-022 (US4). Las reglas de redondeo de negocio (D-FIN-02)
+  siguen pendientes y no se implementan aquí: cada operación recibe el modo de redondeo explícitamente.
+- **D-ARC-02** (estado de las apps): **aprobada** — Riverpod (ADR-0003); los shells de US7 lo usan.
 - **D-ARC-01** (herramienta de acceso a datos): se asume la recomendación (Prisma) condicionada al spike de FR-018; si
   el spike falla, se replanifica con la alternativa documentada en ADR-0004 antes de continuar con US2.
 - La identidad real de usuarios y empresas pertenece a 002; aquí el contexto de empresa se fija con un mecanismo

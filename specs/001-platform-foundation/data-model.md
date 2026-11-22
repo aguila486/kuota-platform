@@ -141,8 +141,11 @@ stateDiagram-v2
 
 ### Objetos de valor (no persistidos por sí mismos)
 
-- **Money**: `amountMinor` (entero con signo, arbitrario) + `currency` (ISO 4217). Invariantes: operaciones solo entre
-  la misma moneda; escala = `minorUnits` de la moneda; redondeo explícito obligatorio. JSON: `{ "amount_minor": "<string>", "currency": "XXX" }`.
+- **Money** (ADR-0007, D-FIN-01): `amountMinor` (entero con signo dentro del rango de `BIGINT`; `bigint` en TS,
+  `BigInt` en Dart) + `currency` (ISO 4217 del catálogo). Invariantes: operaciones solo entre la misma moneda; escala =
+  `minorUnits` de la moneda; redondeo explícito obligatorio; resultado fuera de rango → `AMOUNT_OUT_OF_RANGE`. JSON:
+  `{ "amount_minor": "<string canónico>", "currency": "XXX" }`. Errores: `CURRENCY_MISMATCH`, `ROUNDING_REQUIRED`,
+  `INVALID_AMOUNT`, `TOO_MANY_DECIMALS`, `AMOUNT_OUT_OF_RANGE`, `UNSUPPORTED_CURRENCY`.
 - **RoundingMode**: `HALF_UP | HALF_EVEN | DOWN | UP | FLOOR | CEILING`.
 - **CompatibilityInfo**: `api_version` (semver), `min_supported` por app (`admin`, `collector`, `client`) en semver,
   `server_time` (para detección de desfase de reloj en apps futuras).

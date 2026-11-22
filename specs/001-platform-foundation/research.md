@@ -71,14 +71,21 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 - **Rationale**: Prisma 7 con *driver adapter* usa un pool `pg` controlado por nosotros y elimina el motor Rust, lo que
   simplifica razonar sobre conexiones; `set_config(..., true)` es local a la transacción y desaparece al devolverse la
   conexión al pool (sin fugas). Migraciones declarativas + SQL crudo para políticas RLS, roles y triggers.
-- **Criterios de aceptación del spike** (resultado se registra en `docs/decisions/ADR-0004-database-orm.md`):
-  1. Consulta sin `withTenant` → 0 filas en tabla con RLS forzado.
-  2. 50+ solicitudes concurrentes intercaladas de 2 tenants con pool de tamaño 2–5 → 0 filas cruzadas.
-  3. `kuota_app` no puede `UPDATE`/`DELETE` en `audit_events` (error de permiso) ni `ALTER` tablas.
-  4. Latencia añadida por transacción + `set_config` medida y documentada (referencia, no gate).
-  5. Migraciones ejecutadas por `kuota_migrator`; runtime con `kuota_app_login`.
-- **Fallback**: si falla 1–3, se evalúa **Kysely** (SQL tipado, control total de transacciones) con ADR actualizado antes
-  de continuar con US2. TypeORM no es fallback (mantenimiento y tipado inferiores, ver ADR-0004).
+- **Anidamiento y propagación** (ADR-0002, C2-1): el cliente transaccional vive en CLS; `withTenant` anidado con el mismo
+  tenant reutiliza la transacción, con otro tenant lanza error y revierte todo; sin *savepoints*. Implementación:
+  `@nestjs-cls/transactional` 4.x + adaptador Prisma 2.x o equivalente propio; se decide con el criterio S5.
+- **Criterios de aceptación del spike** (definición completa, configuración y regla de decisión en
+  `docs/decisions/ADR-0004-database-orm.md` §Validación; resultado en T015):
+  - S1 contexto ausente → 0 filas sin error, también en una conexión que ya ejecutó `withTenant`;
+  - S2 ≥ 50 solicitudes de 2 tenants con pool de 2–5, 0 filas cruzadas y reutilización demostrada de `pg_backend_pid()`;
+  - S3 privilegios de `kuota_app_login` (sin `UPDATE`/`DELETE` en `audit_events`, sin DDL, `WITH CHECK` en `INSERT`);
+  - S4 ruta de error (rollback y conexión limpia);
+  - S5 anidamiento (misma transacción; error con otro tenant);
+  - S6 migraciones solo con `kuota_migrator`;
+  - S7 SQL crudo (y TypedSQL si se adopta) respeta RLS;
+  - S8 latencia registrada (referencia; umbral de reevaluación pendiente de aprobación).
+- **Fallback**: si falla S1–S4 o S6, **Kysely** 0.29 (`kysely-codegen` para tipos, migraciones SQL versionadas) con
+  ADR-0004 actualizado antes de continuar con US2; debe superar los mismos criterios. TypedSQL no se usa sin S7.
 - **Alternatives considered**: Drizzle (viable; menor madurez en migraciones con SQL personalizado), Kysely (fallback),
   TypeORM (descartado).
 
@@ -132,6 +139,10 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
     mismos modos (`HALF_UP`, `HALF_EVEN`, `DOWN`, `UP`, `FLOOR`, `CEILING`).
 - **Rationale**: Constitución IV; enteros en unidades mínimas evitan errores binarios; `bigint` supera el rango seguro de
   `number` (escenario US4-4).
+- **Representación aprobada** (D-FIN-01, ADR-0007): rango de `BIGINT` como invariante en ambos lados
+  (`AMOUNT_OUT_OF_RANGE`); JSON `amount_minor` en forma canónica (`^(0|-?[1-9][0-9]{0,18})$`); catálogo de monedas en
+  código con copia de referencia `contracts/fixtures/money/currencies.json` (`UNSUPPORTED_CURRENCY`); `allocate` por
+  mayor residuo con empates por índice; `format` canónico sin localización. En Dart, `BigInt` también en web.
 - **Alternatives considered**: dinero.js 2 (API orientada a formato; menos control explícito del redondeo); big.js
   (sin precisión configurable por instancia en la forma requerida).
 
@@ -226,12 +237,11 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 
 ## R-19 · Estado y estructura Flutter
 
-- **Decision**: Riverpod 3 (ADR-0003, D-ARC-02 recomendado) solo para el shell mínimo; `shared_core` expone
+- **Decision**: Riverpod 3 (ADR-0003; **D-ARC-02 aprobada el 2026-11-22**) para los shells; `shared_core` expone
   `AppConfig` por entorno (`--dart-define-from-file=config/<env>.json`), `design_system` con tema claro/oscuro y
   variante `highContrastReceipt`; `api_client` generado; `financial_domain` con `Money` y fixtures. Melos 8 se configura en
   la sección `melos:` del `flutter/pubspec.yaml` raíz del workspace, solo para scripts.
-- **Note**: D-ARC-02 (Riverpod vs Bloc) sigue *Pendiente* en el registro; el shell de 001 usa Riverpod de forma mínima y
-  reemplazable. Si se elige Bloc, el impacto en 001 es una tarea de < 1 día.
+- **Note**: los providers solo orquestan estado de UI; reglas en `financial_domain`, sincronización en `offline_sync`.
 
 ## R-20 · CODEOWNERS con mantenedor único
 

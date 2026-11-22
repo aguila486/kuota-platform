@@ -306,11 +306,14 @@ components:
               message: { type: string }
     Money:
       type: object
-      description: Monto exacto en unidades mínimas de la moneda (string para evitar pérdida de precisión).
+      description: |
+        Monto exacto en unidades mínimas de la moneda (ADR-0007). `amount_minor` es un string canónico (sin ceros a la
+        izquierda ni `-0`) dentro del rango de BIGINT; fuera de rango o con una moneda no soportada → 400
+        `validation-error`.
       required: [amount_minor, currency]
       additionalProperties: false
       properties:
-        amount_minor: { type: string, pattern: '^-?\d{1,30}$', examples: ['150000'] }
+        amount_minor: { type: string, pattern: '^(0|-?[1-9][0-9]{0,18})$', examples: ['150000'] }
         currency: { type: string, pattern: '^[A-Z]{3}$', examples: ['MXN'] }
     LivenessStatus:
       type: object

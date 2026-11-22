@@ -75,7 +75,7 @@ Esperado adicional: duplicado concurrente → 409 con `Retry-After: 1` y, al rei
 
 ```bash
 pnpm --filter backend test:money                       # ejecuta contracts/fixtures/money/*.json
-cd flutter && fvm dart run melos run test:financial    # mismos fixtures en financial_domain
+cd flutter && fvm dart run melos run test:financial    # mismos fixtures en financial_domain (VM y web, ADR-0007)
 scripts/ci/check-no-float.sh                           # regla anti punto flotante TS + Dart
 ```
 

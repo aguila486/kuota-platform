@@ -70,7 +70,7 @@ El enfoque técnico y las decisiones están en [research.md](research.md) (R-01.
 | I | Spec-Driven Development | Spec + clarificaciones aprobables; tareas trazables a FR/US; CI valida rama `feature/NNN-*` ↔ `specs/NNN-*` | ✅ |
 | II | Seguridad por diseño (v1.2.0) | Security Risks y Endpoint Access en spec; los 5 endpoints son excepciones de categorías admisibles, cada una con justificación, entornos, clasificación, controles y pruebas (FR-040); `security: []` solo en los 3 públicos; dev-probe ausente fuera de local/testing (T016, T025, T096); métricas con escucha local + token (T093, T094); gitleaks + osv-scanner bloqueantes | ✅ |
 | III | Aislamiento multi-tenant | RLS forzado, `set_config` local, rol sin BYPASSRLS, verificación de catálogo, suite de acceso cruzado y prueba concurrente | ✅ |
-| IV | Precisión financiera | `Money` bigint + decimal.js / `decimal` Dart, redondeo obligatorio, fixtures compartidos, regla anti-float | ✅ |
+| IV | Precisión financiera | `Money` según ADR-0007 (D-FIN-01 aprobada): bigint/`BigInt` + decimal.js / `decimal` Dart, rango y forma canónica, redondeo obligatorio, fixtures compartidos en VM y web, regla anti-float | ✅ |
 | V | Inmutabilidad del ledger | Ledger fuera de alcance (006); 001 provee el patrón append-only (audit_events: REVOKE + trigger) reutilizable | ✅ N/A parcial |
 | VI | Idempotencia | `idempotency_keys` (PK tenant+key), interceptor `@Idempotent()`, prueba concurrente | ✅ |
 | VII | Auditoría | Eventos auditables listados en spec (Auditable Events); `audit_events` en la misma transacción; prueba por comando de escritura | ✅ |
@@ -88,6 +88,9 @@ El enfoque técnico y las decisiones están en [research.md](research.md) (R-01.
 (Constitución v1.2.0)**: PASA. Las excepciones de acceso de 001 no son violaciones: pertenecen a categorías admisibles
 de §II y están registradas con sus cinco elementos en la tabla Endpoint Access de spec.md. La tabla de Complexity
 Tracking queda vacía.
+
+> **Decisiones cerradas el 2026-11-22**: D-FIN-01 (ADR-0007) y D-ARC-02 (Riverpod, ADR-0003). ADR-0004 sigue
+> condicionado al spike T014/T015 (criterios S1–S8); `withTenant` anidado sigue ADR-0002 (C2-1).
 
 > **Dependencia de rama**: la Constitución v1.2.0 está confirmada en `docs/constitution-endpoint-access` (`b63f9a4`).
 > Hasta integrarla, el árbol de esta rama conserva la v1.1.0 en `.specify/memory/constitution.md`; debe integrarse
@@ -107,7 +110,7 @@ Tracking queda vacía.
 | Recurso técnico de demostración | Módulo `dev-probe`, tabla `dev_probe_items` |
 | Registro de idempotencia | Tabla `idempotency_keys`, interceptor `@Idempotent()` |
 | Bitácora de auditoría | Tabla `audit_events`, `AuditService` |
-| Primitiva monetaria | `Money` (bigint en unidades mínimas + ISO 4217) en `backend/src/common/money` y `financial_domain` |
+| Primitiva monetaria | `Money` (bigint/`BigInt` en unidades mínimas + ISO 4217, ADR-0007) en `backend/src/common/money` y `financial_domain` |
 | Fixtures numéricos compartidos | `contracts/fixtures/money/*.json` |
 | Formato estándar de errores | RFC 9457 `application/problem+json` |
 | Contrato de API | OpenAPI 3.1 `contracts/openapi/kuota-core.v1.yaml` |

@@ -12,7 +12,7 @@
 
 | ID | Pregunta | Alternativas | Impacto | Recomendación | Riesgo si no se decide | Estado | Responsable | Bloquea |
 |---|---|---|---|---|---|---|---|---|
-| D-ENV-01 | ¿Cómo actualizar Flutter (3.24.3/Dart 3.5.3 no soporta pub workspaces, requiere Dart ≥ 3.6)? | Upgrade global · FVM por proyecto · No usar pub workspaces | Afecta otros proyectos locales y CI | FVM con versión fijada en `.fvmrc` | No se puede crear `flutter/` | Pendiente | Tecnología | 001 (tareas Flutter) |
+| D-ENV-01 | ¿Cómo actualizar Flutter (3.24.3/Dart 3.5.3 no soporta pub workspaces, requiere Dart ≥ 3.6)? | Upgrade global · FVM por proyecto · No usar pub workspaces | Afecta otros proyectos locales y CI | FVM con versión fijada en `.fvmrc` | No se puede crear `flutter/` | **Aprobada (2026-11-22, responsable del proyecto): FVM por proyecto** | Tecnología | 001 (tareas Flutter) |
 | D-ARC-01 | ¿ORM? | Prisma · TypeORM · Drizzle/Kysely | Patrón RLS, migraciones, tipado | Prisma, condicionado a spike RLS + pooling | Retrabajo de capa de datos | Pendiente | Tecnología | 001 (spike), 002+ |
 | D-ARC-02 | ¿Gestión de estado Flutter? | Riverpod · Bloc | Arquitectura de las 3 apps | Riverpod | Inconsistencia entre apps | Pendiente | Tecnología | 001 (apps), 010, 014 |
 | D-ARC-03 | ¿Admin en Flutter Web? | Flutter Web · React/Next | Reutilización vs UX web/SEO/tablas | Flutter Web inicial, revisar tras MVP | Bajo en fase inicial | Pendiente | Tecnología/Producto | admin_web |

@@ -15,6 +15,14 @@
 > gates exigidos por la Constitución. El stack tecnológico ya está fijado por la Constitución y los ADRs; esta
 > especificación describe **qué** debe poder hacerse y verificarse, no cómo se implementa.
 
+## Clarifications
+
+### Session 2026-11-22
+
+- Q: ¿Cómo se resuelve el SDK móvil incompatible (Dart 3.5.3 < 3.6) para el workspace móvil (D-ENV-01)? → A: Versión de Flutter fijada por proyecto con FVM; no se modifica la instalación global.
+- Q: ¿Cuántas personas revisan Pull Requests al inicio? → A: Un único mantenedor; 1 aprobación humana + checklist constitucional + `/speckit-analyze` sin CRITICAL; la doble aprobación se activa con ≥ 2 mantenedores.
+- Q: ¿Qué compilaciones de apps ejecuta CI en 001? → A: Android y Web en CI; iOS se compila localmente hasta que se requiera distribución.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Entorno local reproducible y ejecutable (Priority: P1)
@@ -189,7 +197,7 @@ ejecutables mínimos y los paquetes compartidos (núcleo, sistema de diseño, cl
 dependencias resueltas una sola vez y comandos comunes para analizar y probar todo el workspace.
 
 **Why this priority**: Habilita el trabajo móvil desde 002, pero ninguna app tiene funcionalidad todavía; depende de la
-decisión D-ENV-01 (versión del SDK móvil).
+decisión D-ENV-01 (resuelta: SDK fijado por proyecto con FVM).
 
 **Independent Test**: Ejecutar el análisis estático y las pruebas de todo el workspace móvil y lanzar cada app,
 verificando que muestra su pantalla de inicio con el nombre de la app, el entorno y la versión.
@@ -234,7 +242,8 @@ verificando que muestra su pantalla de inicio con el nombre de la app, el entorn
 - **FR-002**: El repositorio MUST proveer un comando único que ejecute las pruebas de todos los componentes y otro que
   ejecute solo los componentes afectados por los cambios.
 - **FR-003**: El repositorio MUST fijar y verificar las versiones mínimas de herramientas requeridas, fallando con un
-  mensaje claro cuando no se cumplan.
+  mensaje claro cuando no se cumplan. La versión del SDK móvil MUST fijarse por proyecto (FVM) sin requerir cambios en
+  la instalación global del desarrollador.
 - **FR-004**: El repositorio MUST incluir un archivo de ejemplo de configuración con todas las variables requeridas,
   valores ficticios y descripción; MUST NOT contener secretos reales.
 - **FR-005**: La estructura de carpetas creada MUST corresponder a la estructura objetivo documentada; no se crean
@@ -323,9 +332,12 @@ verificando que muestra su pantalla de inicio con el nombre de la app, el entorn
 - **FR-035**: Los gates bloqueantes MUST incluir: lint, tipos, pruebas unitarias e integración, cobertura (dominio
   financiero ≥ 90 %, resto ≥ 80 %), contrato y compatibilidad, aislamiento multi-tenant, verificación de aislamiento de
   estructuras, escaneo de secretos, escaneo de dependencias (críticas/altas), reglas de dependencias de arquitectura y
-  regla anti punto flotante.
-- **FR-036**: El repositorio MUST incluir asignación automática de revisores por área (incluyendo doble revisión para
-  áreas financieras, autenticación y aislamiento) y la plantilla de PR con checklist de la Constitución.
+  regla anti punto flotante. Para apps, CI MUST compilar Android y Web; la compilación iOS es local (no bloqueante en
+  CI) hasta que se requiera distribución.
+- **FR-036**: El repositorio MUST incluir asignación automática de revisores por área y la plantilla de PR con checklist
+  de la Constitución. Con un único mantenedor, el gate es 1 aprobación humana + checklist + `/speckit-analyze` sin
+  CRITICAL; la doble revisión en áreas financieras, autenticación y aislamiento MUST quedar configurada para activarse
+  al registrarse un segundo mantenedor.
 - **FR-037**: La configuración de CI MUST poder validarse localmente; MUST NOT publicarse en un repositorio remoto ni
   modificar políticas remotas sin aprobación explícita.
 - **FR-038**: Las reglas de protección de la rama principal MUST documentarse listas para aplicar cuando exista el
@@ -372,14 +384,14 @@ verificando que muestra su pantalla de inicio con el nombre de la app, el entorn
 - El stack (servicio central, almacén de datos, framework móvil, formato de contrato, CI) está fijado por la
   Constitución y los ADR-0001..0006 en estado *Propuesto*; esta feature los valida en la práctica y su aprobación final
   se registra en los ADR.
-- **D-ENV-01** (versión del SDK móvil): se asume que se aprobará la actualización a una versión compatible con
-  workspaces (Dart ≥ 3.6) antes de ejecutar US7; si no, US7 queda bloqueada sin afectar US1–US6.
+- **D-ENV-01** (versión del SDK móvil): **resuelta** — Flutter fijado por proyecto con FVM en una versión stable con
+  Dart ≥ 3.6; la instalación global no se modifica.
 - **D-ARC-01** (herramienta de acceso a datos): se asume la recomendación (Prisma) condicionada al spike de FR-018; si
   el spike falla, se replanifica con la alternativa documentada en ADR-0004 antes de continuar con US2.
 - La identidad real de usuarios y empresas pertenece a 002; aquí el contexto de empresa se fija con un mecanismo
   técnico solo habilitado en entornos no productivos.
-- Plataformas objetivo de apps móviles: Android e iOS para cobradores y clientes; web para administración. La
-  compilación de iOS en CI puede diferirse si no hay ejecutores macOS disponibles (pendiente en clarificación).
+- Plataformas objetivo de apps móviles: Android e iOS para cobradores y clientes; web para administración. CI compila
+  Android y Web; iOS se compila localmente (ver Clarifications).
 - No existe todavía repositorio remoto; CI se define y valida localmente (p. ej. ejecutando los mismos comandos que los
   jobs) y se activa cuando se apruebe publicar el repositorio.
 - Ventana de retención de claves de idempotencia: 30 días (propuesta de arquitectura, ajustable).

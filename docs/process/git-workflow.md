@@ -56,6 +56,8 @@ Se validará con commitlint en CI (tarea de 001). Commits de código referencian
   - CI verde (todos los jobs bloqueantes del componente afectado).
   - **1 aprobación**; **2 aprobaciones** si toca ledger, motores financieros (`loans`, `payments`, `savings`,
     `collateral`, `financial_domain`), autenticación, RLS/tenancy, migraciones o la Constitución.
+  - **Mantenedor único (vigente, Constitución v1.1.0)**: mientras haya un solo mantenedor, las áreas de 2 aprobaciones
+    requieren 1 aprobación humana + checklist constitucional + `/speckit-analyze` sin CRITICAL + CI verde.
   - Conversaciones resueltas; rama actualizada con `main`.
   - Referencia a `specs/NNN-*/tasks.md` (Constitución I).
 

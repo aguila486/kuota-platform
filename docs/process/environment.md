@@ -27,7 +27,7 @@ Fecha de diagnóstico: **2026-11-22** · Equipo: macOS 26.1 (25B78), Apple Silic
   cuando se ejecute la tarea de scaffolding del backend.
 - **Flutter**: la actualización (`flutter upgrade`, canal stable) es una **acción pendiente de aprobación**, porque modifica
   una instalación global que hoy funciona y puede afectar otros proyectos del equipo. Alternativa: usar FVM por proyecto.
-  Ver decisión `D-ENV-01` en `docs/business/decisions-register.md`.
+  Ver decisión `D-ENV-01` (aprobada 2026-11-22: FVM por proyecto).
 
 ## 2. Spec-Kit (Fase 2)
 

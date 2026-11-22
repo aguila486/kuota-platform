@@ -1,0 +1,8 @@
+* text=auto eol=lf
+*.sh text eol=lf
+*.png binary
+*.jpg binary
+*.ttf binary
+*.otf binary
+# Código generado: oculto en diffs de PR (se revisa el contrato fuente, no el cliente generado)
+flutter/packages/api_client/lib/src/generated/** linguist-generated=true

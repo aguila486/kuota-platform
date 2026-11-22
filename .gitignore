@@ -1,0 +1,71 @@
+# =====================================================================
+# Kuota Platform — .gitignore (monorepo: Node/TypeScript + Flutter/Dart)
+# =====================================================================
+
+# ---------- Secretos y entornos (NUNCA versionar) ----------
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+**/secrets/
+**/*.secret.*
+google-services.json
+GoogleService-Info.plist
+key.properties
+
+# ---------- SO / editores ----------
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# ---------- Node / TypeScript (backend, tooling) ----------
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
+# ---------- Flutter / Dart ----------
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+**/build/
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/android/.gradle/
+**/android/local.properties
+**/android/app/release/
+*.g.dart.bak
+pubspec_overrides.yaml
+
+# ---------- Infra / Docker local ----------
+infra/docker/volumes/
+*.local.yml
+docker-compose.override.yml
+
+# ---------- Claude Code (configuración local por desarrollador) ----------
+.claude/settings.local.json
+
+# ---------- Reportes generados ----------
+reports/
+*.lcov

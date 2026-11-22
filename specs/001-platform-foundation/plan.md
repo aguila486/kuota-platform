@@ -26,7 +26,7 @@ El enfoque técnico y las decisiones están en [research.md](research.md) (R-01.
 
 **Primary Dependencies**:
 
-- **Backend:** NestJS 12, Prisma 7.10 + `@prisma/adapter-pg`, nestjs-cls 7, nestjs-pino 5, `@nestjs/terminus`, `@prometheus-io/client` 0.16 (R-21), decimal.js 10.
+- **Backend:** NestJS 12, Prisma 7.10 + `@prisma/adapter-pg`, nestjs-cls 7, nestjs-pino 5, `@nestjs/terminus`, OpenTelemetry Metrics (`@opentelemetry/sdk-metrics` 3.1 + `exporter-prometheus` 0.301, R-21), decimal.js 10.
 - **Calidad y contrato:** dependency-cruiser 18, Redocly CLI 2, oasdiff 1.39, openapi-generator (`dart-dio`, Docker), gitleaks 8.30, osv-scanner.
 - **Dart:** Melos 8, Riverpod 3, `decimal` 3, dio 5.
 
@@ -68,7 +68,7 @@ El enfoque técnico y las decisiones están en [research.md](research.md) (R-01.
 | # | Principio | Cómo lo cumple el plan | Estado |
 |---|---|---|---|
 | I | Spec-Driven Development | Spec + clarificaciones aprobables; tareas trazables a FR/US; CI valida rama `feature/NNN-*` ↔ `specs/NNN-*` | ✅ |
-| II | Seguridad por diseño | Sección Security Risks en spec; guard de dev bloquea arranque en staging/prod; gitleaks + osv-scanner bloqueantes | ✅ |
+| II | Seguridad por diseño (v1.2.0) | Security Risks y Endpoint Access en spec; los 5 endpoints son excepciones de categorías admisibles, cada una con justificación, entornos, clasificación, controles y pruebas (FR-040); `security: []` solo en los 3 públicos; dev-probe ausente fuera de local/testing (T016, T025, T096); métricas con escucha local + token (T093, T094); gitleaks + osv-scanner bloqueantes | ✅ |
 | III | Aislamiento multi-tenant | RLS forzado, `set_config` local, rol sin BYPASSRLS, verificación de catálogo, suite de acceso cruzado y prueba concurrente | ✅ |
 | IV | Precisión financiera | `Money` bigint + decimal.js / `decimal` Dart, redondeo obligatorio, fixtures compartidos, regla anti-float | ✅ |
 | V | Inmutabilidad del ledger | Ledger fuera de alcance (006); 001 provee el patrón append-only (audit_events: REVOKE + trigger) reutilizable | ✅ N/A parcial |
@@ -79,13 +79,44 @@ El enfoque técnico y las decisiones están en [research.md](research.md) (R-01.
 | X | Test-Driven Validation | Tareas de prueba preceden a implementación; umbrales 90/80 bloqueantes | ✅ |
 | XI | Offline Resilience | Fuera de alcance (011); 001 deja `server_time` y compatibilidad para apps | ✅ N/A |
 | XII | API Contract-First | Contrato antes del código; lint + oasdiff + cliente generado + pruebas de contrato | ✅ |
-| XIII | Observabilidad | Logs JSON con correlation id/tenant, redacción PII probada, health live/ready, métricas técnicas en puerto separado (FR-039, R-21); señales declaradas en spec (Observability Signals); alertas financieras diferidas a 006/013 | ✅ |
+| XIII | Observabilidad | Logs JSON con correlation id/tenant, redacción PII probada, health live/ready, métricas técnicas internas y protegidas (FR-039, R-21); señales declaradas en spec (Observability Signals); alertas financieras diferidas a 006/013 | ✅ |
 | XIV | Evolución compatible | Migraciones forward-only; oasdiff; endpoint de compatibilidad y versión mínima por app | ✅ |
 | XV | Protección de datos | Inventario de datos personales en spec: ninguno; redacción en logs; `.env.example` sin secretos | ✅ |
-| Gob. | Quality gates / mantenedor único | Gates de CI = lista de la Constitución; excepción de mantenedor único v1.1.0 aplicada | ✅ |
+| Gob. | Quality gates / mantenedor único | Gates de CI = lista de la Constitución; excepción de mantenedor único (v1.1.0, vigente en v1.2.0) aplicada | ✅ |
 
-**Resultado pre-research**: PASA sin violaciones. **Re-check post-diseño (Phase 1)**: PASA. `data-model.md`, el contrato y
-`quickstart.md` no introducen dependencias, servicios ni excepciones nuevas. La tabla de Complexity Tracking queda vacía.
+**Resultado pre-research**: PASA sin violaciones. **Re-check post-diseño (Phase 1)**: PASA. **Re-check 2026-11-22
+(Constitución v1.2.0)**: PASA. Las excepciones de acceso de 001 no son violaciones: pertenecen a categorías admisibles
+de §II y están registradas con sus cinco elementos en la tabla Endpoint Access de spec.md. La tabla de Complexity
+Tracking queda vacía.
+
+> **Dependencia de rama**: la Constitución v1.2.0 está confirmada en `docs/constitution-endpoint-access` (`b63f9a4`).
+> Hasta integrarla, el árbol de esta rama conserva la v1.1.0 en `.specify/memory/constitution.md`; debe integrarse
+> antes de `/speckit-implement` y de cualquier nueva ejecución de `/speckit-analyze` (orden en
+> `docs/process/constitution-amendments.md` de esa rama).
+
+## Glosario (spec ↔ plan)
+
+| Término funcional (spec) | Nombre técnico (plan / código) |
+|---|---|
+| Servicio central | Kuota Core: backend NestJS (`backend/`) |
+| Almacén de datos | PostgreSQL 18, esquema `kuota` |
+| Empresa | Tenant (`tenant_id`, GUC `app.tenant_id`) |
+| Contexto técnico de empresa | `X-Kuota-Dev-Tenant` + `DevTenantGuard` (solo `local`/`testing`; no es autenticación) |
+| Aislamiento por empresa a nivel de fila | Row-Level Security habilitado y forzado |
+| Cuenta de aplicación / cuenta de estructura | Roles `kuota_app` (`kuota_app_login`) / `kuota_migrator` |
+| Recurso técnico de demostración | Módulo `dev-probe`, tabla `dev_probe_items` |
+| Registro de idempotencia | Tabla `idempotency_keys`, interceptor `@Idempotent()` |
+| Bitácora de auditoría | Tabla `audit_events`, `AuditService` |
+| Primitiva monetaria | `Money` (bigint en unidades mínimas + ISO 4217) en `backend/src/common/money` y `financial_domain` |
+| Fixtures numéricos compartidos | `contracts/fixtures/money/*.json` |
+| Formato estándar de errores | RFC 9457 `application/problem+json` |
+| Contrato de API | OpenAPI 3.1 `contracts/openapi/kuota-core.v1.yaml` |
+| Cliente móvil generado | `flutter/packages/api_client` (openapi-generator `dart-dio`) |
+| Chequeo de vida / disponibilidad | `/health/live` / `/health/ready` |
+| Consulta de compatibilidad | `GET /v1/meta/compatibility` |
+| Métricas técnicas | OpenTelemetry + exportador Prometheus en `KUOTA_METRICS_HOST:KUOTA_METRICS_PORT` |
+| Verificación de entorno | `scripts/dev/doctor.sh` |
+| Dueños por área | `.github/CODEOWNERS` |
 
 ## Project Structure
 

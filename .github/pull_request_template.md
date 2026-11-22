@@ -22,7 +22,7 @@
 ## Checklist de la Constitución
 
 - [ ] I. Solo implementa tareas aprobadas de `tasks.md`; nada fuera de alcance
-- [ ] II. Riesgos de seguridad considerados; autorización aplicada en backend
+- [ ] II. Riesgos de seguridad considerados; autorización aplicada en backend; endpoints nuevos en la tabla *Endpoint Access* de la spec; toda excepción es de una categoría admisible y tiene justificación, entornos, clasificación de datos, controles y pruebas; `security: []` solo en endpoints públicos registrados
 - [ ] III. Tablas nuevas con `tenant_id` + RLS forzado; pruebas de acceso cruzado
 - [ ] IV. Sin punto flotante para dinero; redondeo según spec; casos numéricos de referencia
 - [ ] V. Ledger sin `UPDATE`/`DELETE`; correcciones por reverso

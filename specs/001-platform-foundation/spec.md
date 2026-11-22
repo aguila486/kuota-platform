@@ -41,7 +41,7 @@ verificar que el chequeo de salud responde "listo" y que la ejecución completa 
 
 1. **Given** un clon limpio y las herramientas requeridas instaladas, **When** la persona ejecuta el comando de arranque
    documentado, **Then** la base de datos y el servicio central quedan en ejecución y el chequeo de disponibilidad
-   indica "listo" en menos de 15 minutos totales desde el clon (excluyendo descargas iniciales de dependencias).
+   indica "listo" en ≤ 15 minutos (arranque local; condiciones de medición en SC-001).
 2. **Given** el entorno en ejecución, **When** se detiene la base de datos, **Then** el chequeo de disponibilidad indica
    "no listo" identificando la dependencia caída, mientras el chequeo de vida sigue indicando "vivo".
 3. **Given** un clon limpio, **When** se revisa el repositorio, **Then** existe un archivo de ejemplo de variables de
@@ -114,7 +114,9 @@ bloqueado con un mensaje claro.
    **Then** falla identificando la dependencia.
 7. **Given** cobertura del dominio financiero por debajo del umbral constitucional, **When** corre CI, **Then** falla.
 8. **Given** cualquier PR, **When** se abre, **Then** presenta la plantilla con el checklist de la Constitución y la
-   referencia a spec/tareas, y los responsables de cada área quedan asignados automáticamente como revisores.
+   referencia a spec/tareas, y los responsables de cada área quedan asignados automáticamente como revisores
+   (verificación de la asignación pendiente hasta existir repositorio remoto e identificador GitHub válido; ver
+   Assumptions).
 
 ---
 
@@ -181,7 +183,9 @@ concurrente) y verificar un único efecto y un único registro de auditoría por
 **Acceptance Scenarios**:
 
 1. **Given** una operación técnica con clave de idempotencia K, **When** se envía 10 veces con el mismo contenido
-   (incluyendo 5 en paralelo), **Then** se produce un único efecto y todas las respuestas son equivalentes.
+   (incluyendo 5 en paralelo), **Then** se produce un único efecto; las respuestas exitosas son equivalentes a la
+   original (las reproducciones lo indican) y las que llegan mientras la primera está en proceso reciben 409 con
+   `Retry-After`, y al reintentar obtienen la respuesta original.
 2. **Given** la clave K ya usada, **When** se reenvía con contenido distinto, **Then** se rechaza con un error explícito
    de conflicto de idempotencia.
 3. **Given** la misma clave K usada por dos empresas distintas, **When** ambas la envían, **Then** se tratan como
@@ -226,8 +230,9 @@ verificando que muestra su pantalla de inicio con el nombre de la app, el entorn
 - Solicitud sin contexto de empresa a un recurso que lo requiere: se rechaza; nunca se ejecuta "sin filtro".
 - Fuga de contexto entre solicitudes por reutilización de conexiones: cubierta por la prueba concurrente (US2-6).
 - Clave de idempotencia con formato inválido o excesivamente larga: se rechaza con error de validación.
-- Solicitud idéntica que llega mientras la primera aún se procesa: la segunda espera o recibe "en proceso"; nunca se
-  produce un segundo efecto.
+- Solicitud idéntica que llega mientras la primera aún se procesa: recibe 409 con `Retry-After`; nunca se produce un
+  segundo efecto.
+- Clave de idempotencia expirada (más de 30 días): se trata como nueva; el registro expirado no bloquea la operación.
 - Monto con más decimales que la unidad mínima de la moneda: se rechaza en la frontera; no se redondea en silencio.
 - Logs que reciben datos sensibles por error (teléfono, token, identificador fiscal): se redactan antes de emitirse.
 - Cambio en el contrato que elimina un campo usado por apps desplegadas: CI lo detecta como incompatible.
@@ -268,11 +273,16 @@ verificando que muestra su pantalla de inicio con el nombre de la app, el entorn
   identificador de correlación.
 - **FR-039**: El servicio central MUST exponer métricas técnicas básicas en un formato estándar de extracción:
   solicitudes y latencia por ruta (plantilla, no ruta concreta), método y código de estado; errores por código estable
-  del formato de errores; estado del pool de conexiones al almacén de datos; y métricas del proceso. Las métricas MUST
-  servirse en un puerto separado del tráfico de la API y MUST NOT incluir datos personales, valores de encabezados ni
-  identificadores de empresa como etiqueta. Las métricas de negocio y las alertas por errores financieros (desbalance,
+  del formato de errores; estado del pool de conexiones al almacén de datos; y métricas del proceso. Las métricas MUST NOT
+  incluir datos personales, valores de encabezados ni identificadores de empresa como etiqueta, y MUST ser internas y
+  protegidas según la tabla Endpoint Access (escucha solo local por defecto y credencial obligatoria del recolector
+  fuera de local/testing o al escuchar en otra interfaz); no se sirven en el puerto de la API. Las métricas de negocio y las alertas por errores financieros (desbalance,
   falla de conciliación) se difieren a las features que introducen esas operaciones (006 ledger, 013 conciliación de
   caja), porque 001 no tiene operaciones financieras.
+- **FR-040**: Cada endpoint de esta feature MUST declarar su acceso en la tabla Endpoint Access. Las excepciones a
+  autenticación MUST cumplir la Constitución §II (justificación, entornos, clasificación de datos, controles
+  compensatorios y pruebas de acceso permitido y denegado). Los chequeos de vida y disponibilidad MUST responder solo
+  estado y nombres lógicos de dependencias con valor arriba/abajo, sin hosts, versiones ni mensajes de error.
 
 **Aislamiento multi-tenant**
 
@@ -306,13 +316,21 @@ verificando que muestra su pantalla de inicio con el nombre de la app, el entorn
 
 **Idempotencia y auditoría**
 
-- **FR-023**: MUST existir un mecanismo reutilizable de idempotencia por empresa: misma clave y mismo contenido → mismo
-  resultado sin nuevo efecto; misma clave y contenido distinto → error de conflicto; solicitudes concurrentes con la
-  misma clave → un único efecto.
-- **FR-024**: Las claves de idempotencia MUST conservarse al menos durante la ventana definida en la arquitectura
-  (propuesta: 30 días) y su formato MUST validarse.
-- **FR-025**: MUST existir una bitácora de auditoría append-only reutilizable que registre actor, empresa, acción,
-  entidad, valores relevantes, fecha-hora del servidor, origen y correlación; la cuenta de aplicación MUST NOT poder
+- **FR-023**: MUST existir un mecanismo reutilizable de idempotencia por empresa, con esta política para 001:
+  - misma clave y mismo contenido, operación completada → se devuelve el resultado original sin nuevo efecto,
+    indicando que es una reproducción;
+  - misma clave y mismo contenido, operación aún en proceso → rechazo HTTP 409 con `Retry-After`; al reintentar tras
+    completarse, se recibe el resultado original;
+  - misma clave y contenido distinto → rechazo explícito (conflicto de reutilización de clave);
+  - solicitudes concurrentes con la misma clave → exactamente un efecto.
+- **FR-024**: Las claves de idempotencia MUST conservarse 30 días desde su creación y su formato MUST validarse. Una
+  clave expirada se trata como inexistente (una nueva solicitud con ella produce un nuevo efecto) y puede purgarse.
+  Esta política es la del alcance técnico de 001; el motor de transacciones financieras (007) y la sincronización
+  offline (011) MUST analizar y aprobar su propia política (ventana, reintentos, expiración) antes de adoptarla.
+- **FR-025**: MUST existir una bitácora de auditoría append-only reutilizable que registre actor, rol del actor, empresa,
+  acción, entidad, valores relevantes, fecha-hora del servidor, origen y correlación. El rol es opcional (nulo) en 001
+  porque el contexto técnico no tiene modelo de identidad; desde 002 MUST derivarse del contexto de autorización
+  confiable del servidor y MUST NOT aceptarse de un valor enviado por el cliente; la cuenta de aplicación MUST NOT poder
   modificar ni borrar registros.
 - **FR-026**: El mecanismo de idempotencia y la auditoría MUST demostrarse sobre la operación técnica de FR-017.
 
@@ -361,7 +379,7 @@ verificando que muestra su pantalla de inicio con el nombre de la app, el entorn
   aislamiento, idempotencia y auditoría. No disponible en producción.
 - **Registro de idempotencia**: Clave, empresa, huella del contenido, estado (en proceso/completado), resultado
   almacenado y fecha de expiración.
-- **Registro de auditoría**: Actor, empresa, acción, entidad e identificador, valores relevantes, fecha-hora del
+- **Registro de auditoría**: Actor, rol del actor (nulo en 001), empresa, acción, entidad e identificador, valores relevantes, fecha-hora del
   servidor, fecha-hora del dispositivo (opcional), origen y correlación. Inmutable.
 - **Monto (Money)**: Valor en unidades mínimas + código de moneda; objeto de valor, no entidad persistida por sí misma.
 - **Fixture numérico**: Caso con entradas, operación, modo de redondeo y resultado esperado, compartido por backend y
@@ -397,8 +415,12 @@ Métricas y eventos de log relevantes de esta feature (Constitución XIII):
 
 ### Measurable Outcomes
 
-- **SC-001**: Una persona nueva logra tener el entorno local listo y todas las pruebas en verde, siguiendo solo la guía,
-  en ≤ 30 minutos (excluyendo descargas), verificado por alguien distinto de quien implementó (con mantenedor
+- **SC-001**: Siguiendo solo la guía, una persona nueva logra el **arranque local** (chequeo de disponibilidad "listo")
+  en ≤ 15 minutos y el **arranque más la ejecución completa de las pruebas establecidas** (comando único de FR-002) en
+  verde en ≤ 30 minutos. Medición: cronómetro desde el clon terminado hasta cada hito, en una máquina que cumple los
+  prerrequisitos (verificación de entorno en verde: runtime del servicio central, contenedores, SDK móvil fijado);
+  se excluye el tiempo de descarga de dependencias, imágenes de contenedor y SDK, que se mide y registra por separado.
+  Verificado por alguien distinto de quien implementó (con mantenedor
   único: el mantenedor valida lo implementado por Claude Code, o lo hace en un clon limpio y se re-verifica al
   incorporarse un segundo integrante).
 - **SC-002**: El 100 % de las pruebas de acceso cruzado pasan y 0 registros de una empresa son observables desde otra
@@ -425,12 +447,39 @@ Métricas y eventos de log relevantes de esta feature (Constitución XIII):
 | Estructura nueva sin aislamiento | Error humano en futuras features | Datos por empresa | Verificación automática de catálogo bloqueante en CI | FR-015, US2-4 |
 | Cuenta de aplicación con privilegios excesivos | Compromiso de la aplicación | Integridad de datos y bitácora | Cuenta sin omisión de aislamiento, sin cambios de estructura y sin modificar auditoría | FR-014, US2-5, US6-5 |
 | Secretos versionados | Error humano | Credenciales | Solo archivo de ejemplo con valores ficticios; escáner de secretos sobre todo el historial | FR-004, SC-007 |
-| Datos sensibles en logs o métricas | Error humano | Datos personales futuros | Redacción probada en logs; métricas sin etiquetas de empresa, encabezados ni datos personales, en puerto separado | FR-010, FR-039, SC-009 |
+| Datos sensibles en logs o métricas | Error humano | Datos personales futuros | Redacción probada en logs; métricas sin etiquetas de empresa, encabezados ni datos personales | FR-010, FR-039, SC-009 |
+| Métricas o chequeos que revelan detalles internos | Reconocimiento por un atacante | Topología, versiones, errores internos | Métricas internas con credencial del recolector; chequeos con respuesta mínima y esquema cerrado (ver Endpoint Access) | FR-006, FR-039, FR-040 |
 | Cadena de suministro (dependencias, acciones de CI, imágenes) | Paquete o imagen comprometidos | Código y CI | Escaneo de dependencias bloqueante; acciones de CI fijadas por hash; imágenes de contenedor fijadas por digest | FR-035 |
 | Duplicación de efectos por reintentos | Red inestable, reintentos del cliente | Integridad de operaciones | Idempotencia por empresa con manejo concurrente | FR-023, SC-006 |
 
 Riesgos fuera de alcance (pertenecen a 002+): autenticación real, gestión de sesiones, fuerza bruta, exposición
 pública de endpoints y cifrado en reposo en infraestructura gestionada (D-ARC-04).
+
+## Endpoint Access *(Constitución II)*
+
+001 no tiene autenticación real (llega en 002). Por eso **todos** sus endpoints son excepciones registradas; ninguno
+lee ni modifica datos de tenant en `staging`/`production`.
+
+| Ruta | Método | Autenticación | Autorización | Exposición de red | Entornos permitidos | Justificación |
+|---|---|---|---|---|---|---|
+| `/health/live` | GET | Ninguna (público) | Ninguna | Pública permitida | Todos | Sondas de orquestador; solo indica que el proceso responde |
+| `/health/ready` | GET | Ninguna (público) | Ninguna | Pública permitida; interna recomendada | Todos | Sondas de enrutamiento; solo estado agregado y arriba/abajo por dependencia lógica |
+| `/v1/meta/compatibility` | GET | Ninguna (público) | Ninguna | Pública | Todos | Las apps la consultan antes de autenticarse para saber si su versión está soportada |
+| `/metrics` (escucha de métricas, fuera de la API) | GET | Credencial del recolector (token portador); opcional solo en `local`/`testing` con escucha local | Solo el recolector | Interna: escucha local por defecto; nunca en el puerto de la API | Todos, con credencial obligatoria fuera de `local`/`testing` o al escuchar en otra interfaz | Observabilidad (Constitución XIII) |
+| `/v1/dev/probe-items`, `/v1/dev/probe-items/{id}` | POST, GET, PATCH, DELETE | **Ninguna**: el contexto técnico de empresa NO es autenticación | Aislamiento por empresa (RLS) con el contexto técnico | Local / runner de CI | Solo `local` y `testing` | Recurso técnico para demostrar aislamiento, idempotencia y auditoría antes de 002 |
+
+### Registro de excepciones
+
+| Endpoint | Datos expuestos (clasificación) | Controles compensatorios | Pruebas (permitido / denegado) |
+|---|---|---|---|
+| `/health/live` | Operativo, no sensible: `{status}` | Esquema cerrado; no consulta dependencias | 200 sin credenciales / sin campos adicionales |
+| `/health/ready` | Operativo, no sensible: `status` y `checks.<nombre>.status` (`up`/`down`) | Esquema cerrado sin `detail`; el detalle del fallo solo va al log | 200 y 503 sin credenciales / la respuesta con la BD caída no contiene host, puerto, versión ni mensaje de error |
+| `/v1/meta/compatibility` | Público por diseño: versión de API, versiones mínimas por app, hora del servidor | Esquema cerrado; no refleja encabezados; sin datos de build ni de infraestructura | 200 sin credenciales / sin campos adicionales; 400 con `X-App-Version` inválido |
+| `/metrics` | Interno, no sensible por diseño: métricas técnicas sin etiquetas de empresa ni datos personales | Escucha `127.0.0.1` por defecto; token portador comparado en tiempo constante; el arranque falla fuera de `local`/`testing` (o con escucha no local) sin token | 200 con token / 401 sin token o con token inválido; arranque abortado sin token en `staging`/`production`; 404 en el puerto de la API |
+| `/v1/dev/*` | Sintético (sin datos personales) | Módulo no registrado fuera de `local`/`testing`; el arranque aborta si el mecanismo está habilitado en `staging`/`production`; aislamiento RLS | Operaciones con contexto en `testing` / 401 sin contexto; 404 en todas las rutas `/v1/dev/*` con configuración `staging`/`production`, enviando o no el encabezado técnico |
+
+La exposición de red definitiva (balanceador, red interna, autenticación del recolector en producción) se decide con
+el despliegue (D-ARC-04); 001 garantiza los controles de aplicación descritos.
 
 ## Personal Data Inventory *(Constitución XV)*
 
@@ -454,6 +503,9 @@ personales (002, 003) MUST declarar su propio inventario.
   Android y Web; iOS se compila localmente (ver Clarifications).
 - No existe todavía repositorio remoto; CI se define y valida localmente (p. ej. ejecutando los mismos comandos que los
   jobs) y se activa cuando se apruebe publicar el repositorio.
-- Ventana de retención de claves de idempotencia: 30 días (propuesta de arquitectura, ajustable).
+- Ventana de retención de claves de idempotencia: 30 días (FR-024), solo para el alcance técnico de 001.
 - Ventana de soporte de versiones de apps (D-ARC-05) no afecta esta feature más allá de exponer el dato configurable.
 - No se aprovisiona ningún servicio cloud (D-ARC-04); todo corre localmente o en ejecutores de CI.
+- **Asignación automática de revisores (FR-036, US3-8)**: el archivo de dueños por área se crea con un marcador de
+  posición, no con un usuario real. Su funcionamiento queda **pendiente de validación** hasta que exista el
+  repositorio remoto aprobado y un identificador GitHub válido del mantenedor; no se considera verificado en 001.

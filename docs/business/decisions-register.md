@@ -18,6 +18,7 @@
 | D-ARC-03 | ¿Admin en Flutter Web? | Flutter Web · React/Next | Reutilización vs UX web/SEO/tablas | Flutter Web inicial, revisar tras MVP | Bajo en fase inicial | Pendiente | Tecnología/Producto | admin_web |
 | D-ARC-04 | ¿Proveedor cloud/hosting? | AWS · GCP · Azure · otros | Costos, residencia, servicios gestionados | Pendiente; no aprovisionar | Bloquea staging/prod | Pendiente | Tecnología/Negocio | despliegue |
 | D-ARC-05 | ¿Ventana de soporte de apps móviles antiguas? | N-1 · N-2 · por días | Compatibilidad API/sync | N-2 versiones o 90 días | Operaciones offline no sincronizables | Pendiente | Producto/Tecnología | 011, contratos |
+| D-ARC-06 | ¿Debe `/health/ready` verificar también que las migraciones esperadas están aplicadas? `deployment-architecture.md` §5 lo describe; la spec y el contrato de 001 solo verifican la BD (hallazgo L-a) | Añadir el chequeo `migrations` · Mantener solo `database` y corregir el documento | Enrutamiento de tráfico en despliegues; esquema `ReadinessStatus` | Decidir con el despliegue: si se añade, como propiedad nueva de `checks` (cambio compatible) sin exponer versiones de migración. **Criterio de resolución**: documento de despliegue, spec y contrato coinciden | Divergencia entre documentación y comportamiento | Pendiente | Tecnología | D-ARC-04 / despliegue (no bloquea 001) |
 
 ## Reglas financieras de préstamo
 
@@ -65,6 +66,7 @@
 |---|---|---|---|---|---|---|---|---|
 | D-AUTH-01 | ¿Autenticación de clientes? | OTP en cada login · PIN · OTP + device binding + PIN/biometría | Seguridad (SIM-swap), costo SMS, UX | OTP solo para enrolamiento/recuperación + device binding + PIN/biometría | Toma de cuentas | Pendiente | Seguridad/Producto | 002, 014 |
 | D-AUTH-02 | ¿Autenticación de staff? | Password · password + MFA TOTP · SSO | Seguridad del panel | Password + MFA TOTP obligatorio en roles financieros | Accesos indebidos | Pendiente | Seguridad | 002 |
+| D-AUTH-03 | ¿Cómo encajan en la Constitución §II (v1.2.0) el login/registro/recuperación (002) y la verificación pública de recibos (012), que no están en la lista cerrada de excepciones de acceso? (hallazgo M1 de `/speckit-analyze` en 001) | Tratar login/OTP como puntos de entrada de autenticación (no excepción) con controles propios · Enmendar §II para añadir categorías · Exigir credencial también en la verificación de recibos | Política de acceso de 002 y 012; posible enmienda constitucional | Definir en la spec de 002 los puntos de entrada de autenticación con controles explícitos (límite de intentos, antienumeración, auditoría). Si la verificación pública de recibos sigue siendo pública en 012, enmendar §II con su propia categoría y datos mínimos. **Criterio de resolución**: specs de 002 y 012 con tabla Endpoint Access sin excepciones fuera de categoría y `/speckit-analyze` sin CRITICAL | Contradicción constitucional en 002/012 o endpoints públicos sin controles | Pendiente | Seguridad / Producto | 002, 012 (no bloquea 001) |
 
 ## Legales y comerciales
 

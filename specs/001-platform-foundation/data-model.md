@@ -62,6 +62,7 @@ erDiagram
         uuid tenant_id "NOT NULL, RLS"
         text actor_id
         text actor_type "USER | DEVICE | SYSTEM | DEV"
+        text actor_role "nullable; NULL en 001"
         text action "e.g. dev_probe.created"
         text entity_type
         text entity_id
@@ -97,22 +98,34 @@ erDiagram
 
 ### `idempotency_keys` (FR-023, FR-024)
 
+- Política de 001 (FR-023, FR-024). No es la política definitiva de operaciones financieras: 007 y 011 la analizan y
+  aprueban por separado.
 - PK compuesta `(tenant_id, key)` → la misma clave en dos tenants son operaciones independientes (US6-3).
 - `key`: 8–128 caracteres `[A-Za-z0-9_-]`; recomendado UUID. Formato inválido → 400 problem `validation-error`.
 - `request_hash`: SHA-256 de `method + path + JSON canónico del body` (claves ordenadas).
+- **Concurrencia**: todo el flujo ocurre en **una sola transacción** de `withTenant`. Primero se toma
+  `pg_try_advisory_xact_lock` sobre un hash de `(tenant_id, key)`:
+  - si **no** se obtiene, otra solicitud con la misma clave está en proceso → 409 `idempotency-request-in-progress` con
+    `Retry-After: 1` (segundos), sin tocar la tabla;
+  - si se obtiene, se lee la fila y se decide según las respuestas a duplicados (abajo). El bloqueo se libera al
+    confirmar o revertir, por lo que no quedan filas `IN_PROGRESS` huérfanas tras una caída.
+  - Una colisión del hash de 64 bits entre claves distintas solo provoca un 409 espurio (reintentable), nunca un efecto
+    cruzado: la decisión final usa la fila con PK `(tenant_id, key)`.
+- **Expiración**: `expires_at = created_at + 30 días`. Una fila con `expires_at <= now()` se trata como inexistente: se
+  elimina dentro de la misma transacción y la solicitud se procesa como nueva. La purga masiva es manual (R-16).
 - **Transiciones**:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> IN_PROGRESS: INSERT ON CONFLICT DO NOTHING (ganador)
+    [*] --> IN_PROGRESS: bloqueo obtenido y sin fila vigente → INSERT
     IN_PROGRESS --> COMPLETED: comando confirma (misma transacción guarda respuesta)
     IN_PROGRESS --> [*]: comando falla → fila eliminada en rollback
-    COMPLETED --> [*]: expires_at alcanzado → purga
+    COMPLETED --> [*]: expires_at alcanzado → tratada como inexistente; eliminada al reutilizar la clave o por purga
 ```
 
 - Respuestas a duplicados: mismo hash + `COMPLETED` → respuesta almacenada + `Idempotent-Replayed: true`;
-  mismo hash + `IN_PROGRESS` → 409 `idempotency-request-in-progress` + `Retry-After`; hash distinto → 422
-  `idempotency-key-reused`.
+  bloqueo no obtenido (otra solicitud en proceso) → 409 `idempotency-request-in-progress` + `Retry-After`; hash
+  distinto → 422 `idempotency-key-reused`. `IN_PROGRESS` solo es visible dentro de la transacción que lo crea.
 - Solo se almacenan respuestas 2xx y 4xx deterministas (no 5xx: un 5xx permite reintento).
 
 ### `audit_events` (FR-025)
@@ -121,6 +134,10 @@ stateDiagram-v2
 - Escrito en la **misma transacción** que el comando auditado.
 - `changes` solo contiene campos no sensibles (lista permitida por tipo de entidad); nunca PII en claro.
 - `actor_type = DEV` solo posible con el mecanismo técnico de 001; 002 introduce `USER`/`DEVICE`.
+- `actor_role` (nullable): en 001 siempre `NULL`, porque el contexto técnico no tiene identidad ni roles; ningún
+  encabezado ni campo del body puede fijarlo. Desde 002 lo asigna `AuditService` a partir del rol de la membresía
+  autenticada en `TenantContext` (contexto de autorización del servidor), nunca de un valor del cliente. 002 decide
+  si pasa a ser obligatorio para `actor_type = USER` (cambio expand → contract, Constitución XIV).
 
 ### Objetos de valor (no persistidos por sí mismos)
 

@@ -9,6 +9,12 @@ info:
     Convenciones transversales: errores RFC 9457 (problem+json), `X-Correlation-Id`,
     `Idempotency-Key` en escrituras, dinero como `{amount_minor: string, currency}`,
     `X-App-Version` para compatibilidad de apps.
+
+    Acceso (Constitución §II, tabla Endpoint Access de spec.md): solo `getLiveness`, `getReadiness` y
+    `getCompatibility` son públicos (`security: []`). Las operaciones `dev-probe` usan `devTenantContext`, un contexto
+    técnico de empresa que NO es autenticación y solo existe en `local`/`testing`. No hay esquema global de seguridad:
+    toda operación nueva DEBE declarar `security` explícitamente. Las métricas no forman parte de este contrato
+    (research R-21).
   license:
     name: Proprietary
     identifier: LicenseRef-Kuota-Proprietary
@@ -22,40 +28,47 @@ tags:
     description: Metadatos de la API y compatibilidad de apps.
   - name: dev-probe
     description: Recurso técnico NO productivo (solo KUOTA_ENV local/testing). Valida aislamiento, idempotencia y auditoría.
-security: []
 paths:
   /health/live:
     get:
       tags: [health]
       operationId: getLiveness
       summary: Proceso vivo.
+      description: Público (excepción registrada). Solo indica que el proceso responde; no consulta dependencias.
+      security: []
       responses:
         '200':
           description: Vivo.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/HealthStatus' }
+              schema: { $ref: '#/components/schemas/LivenessStatus' }
   /health/ready:
     get:
       tags: [health]
       operationId: getReadiness
       summary: Listo para recibir tráfico (verifica dependencias).
+      description: |
+        Público (excepción registrada). Solo devuelve el estado agregado y `up`/`down` por dependencia lógica; nunca
+        hosts, puertos, versiones ni mensajes de error (el detalle del fallo va solo al log).
+      security: []
       responses:
         '200':
           description: Listo.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/HealthStatus' }
+              schema: { $ref: '#/components/schemas/ReadinessStatus' }
         '503':
-          description: No listo; indica dependencia caída.
+          description: No listo; indica qué dependencia lógica está caída.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/HealthStatus' }
+              schema: { $ref: '#/components/schemas/ReadinessStatus' }
   /v1/meta/compatibility:
     get:
       tags: [meta]
       operationId: getCompatibility
       summary: Versión de API y versión mínima soportada por app.
+      description: Público (excepción registrada). Las apps lo consultan antes de autenticarse.
+      security: []
       parameters:
         - $ref: '#/components/parameters/AppVersion'
         - $ref: '#/components/parameters/CorrelationId'
@@ -69,16 +82,18 @@ paths:
               schema: { $ref: '#/components/schemas/CompatibilityInfo' }
         '400': { $ref: '#/components/responses/BadRequest' }
   /v1/dev/probe-items:
+    x-kuota-non-production: true
     post:
       tags: [dev-probe]
       operationId: createDevProbeItem
+      security:
+        - devTenantContext: []
       summary: Crea un registro técnico (idempotente y auditado).
       x-kuota-non-production: true
       x-kuota-idempotent: true
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/CorrelationId'
-        - $ref: '#/components/parameters/DevTenant'
         - $ref: '#/components/parameters/DevActor'
       requestBody:
         required: true
@@ -101,11 +116,12 @@ paths:
     get:
       tags: [dev-probe]
       operationId: listDevProbeItems
+      security:
+        - devTenantContext: []
       summary: Lista registros del tenant del contexto (paginación por cursor).
       x-kuota-non-production: true
       parameters:
         - $ref: '#/components/parameters/CorrelationId'
-        - $ref: '#/components/parameters/DevTenant'
         - $ref: '#/components/parameters/DevActor'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
@@ -120,17 +136,19 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/MissingTenantContext' }
   /v1/dev/probe-items/{id}:
+    x-kuota-non-production: true
     parameters:
       - name: id
         in: path
         required: true
         schema: { type: string, format: uuid }
       - $ref: '#/components/parameters/CorrelationId'
-      - $ref: '#/components/parameters/DevTenant'
       - $ref: '#/components/parameters/DevActor'
     get:
       tags: [dev-probe]
       operationId: getDevProbeItem
+      security:
+        - devTenantContext: []
       summary: Obtiene un registro del tenant del contexto.
       x-kuota-non-production: true
       responses:
@@ -144,6 +162,8 @@ paths:
     patch:
       tags: [dev-probe]
       operationId: updateDevProbeItem
+      security:
+        - devTenantContext: []
       summary: Actualiza la etiqueta (bloqueo optimista).
       x-kuota-non-production: true
       requestBody:
@@ -164,6 +184,8 @@ paths:
     delete:
       tags: [dev-probe]
       operationId: deleteDevProbeItem
+      security:
+        - devTenantContext: []
       summary: Elimina un registro del tenant del contexto.
       x-kuota-non-production: true
       responses:
@@ -171,6 +193,15 @@ paths:
         '401': { $ref: '#/components/responses/MissingTenantContext' }
         '404': { $ref: '#/components/responses/NotFound' }
 components:
+  securitySchemes:
+    devTenantContext:
+      type: apiKey
+      in: header
+      name: X-Kuota-Dev-Tenant
+      description: |
+        Contexto técnico de empresa (UUID). NO es autenticación: no prueba identidad ni permisos. Solo existe en
+        `local`/`testing` (R-05); fuera de ellos el módulo no se registra y el arranque aborta si el mecanismo está
+        habilitado. Se reemplaza por la identidad real en 002.
   parameters:
     CorrelationId:
       name: X-Correlation-Id
@@ -182,7 +213,7 @@ components:
       name: Idempotency-Key
       in: header
       required: true
-      description: Clave generada por el cliente, única por tenant. Recomendado UUID.
+      description: Clave generada por el cliente, única por tenant (recomendado UUID). Se conserva 30 días; una clave expirada se trata como nueva (política de 001).
       schema: { type: string, minLength: 8, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$' }
     AppVersion:
       name: X-App-Version
@@ -190,12 +221,6 @@ components:
       required: false
       description: 'Formato `<app>/<semver>+<build>`, p. ej. `collector/1.4.2+120`.'
       schema: { type: string, pattern: '^(admin|collector|client)/\d+\.\d+\.\d+(\+\d+)?$' }
-    DevTenant:
-      name: X-Kuota-Dev-Tenant
-      in: header
-      required: true
-      description: SOLO local/testing (R-05). Reemplazado por identidad real en 002.
-      schema: { type: string, format: uuid }
     DevActor:
       name: X-Kuota-Dev-Actor
       in: header
@@ -236,9 +261,11 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
     IdempotencyInProgress:
-      description: Solicitud con la misma clave aún en proceso (code `idempotency-request-in-progress`).
+      description: Solicitud con la misma clave aún en proceso (code `idempotency-request-in-progress`). Al reintentar tras completarse se recibe la respuesta original.
       headers:
         Retry-After:
+          required: true
+          description: Segundos a esperar antes de reintentar (1 en 001).
           schema: { type: integer, minimum: 1 }
       content:
         application/problem+json:
@@ -285,27 +312,40 @@ components:
       properties:
         amount_minor: { type: string, pattern: '^-?\d{1,30}$', examples: ['150000'] }
         currency: { type: string, pattern: '^[A-Z]{3}$', examples: ['MXN'] }
-    HealthStatus:
+    LivenessStatus:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [ok] }
+    ReadinessStatus:
       type: object
       required: [status, checks]
+      additionalProperties: false
       properties:
         status: { type: string, enum: [ok, error] }
         checks:
           type: object
-          additionalProperties:
-            type: object
-            required: [status]
-            properties:
-              status: { type: string, enum: [up, down] }
-              detail: { type: string }
+          required: [database]
+          additionalProperties: false
+          properties:
+            database: { $ref: '#/components/schemas/DependencyStatus' }
+    DependencyStatus:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [up, down] }
     CompatibilityInfo:
       type: object
       required: [api_version, min_supported, server_time]
+      additionalProperties: false
       properties:
         api_version: { type: string, examples: ['1.0.0'] }
         min_supported:
           type: object
           required: [admin, collector, client]
+          additionalProperties: false
           properties:
             admin: { type: string }
             collector: { type: string }

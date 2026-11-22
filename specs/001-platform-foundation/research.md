@@ -98,12 +98,18 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 
 - **Decision**: Tabla `idempotency_keys` con PK `(tenant_id, key)`, `request_hash` (SHA-256 de método + ruta + cuerpo
   canónico), `status` (`IN_PROGRESS`|`COMPLETED`), respuesta almacenada, `expires_at` (30 días). Flujo:
-  `INSERT … ON CONFLICT DO NOTHING` dentro de la transacción del tenant; si no inserta: hash distinto → `422`
-  problem `idempotency-key-reused`; `IN_PROGRESS` → `409` problem `idempotency-request-in-progress` + `Retry-After`;
-  `COMPLETED` → respuesta almacenada con encabezado `Idempotent-Replayed: true`. Interceptor NestJS
+  en una sola transacción del tenant, `pg_try_advisory_xact_lock(hash(tenant_id, key))`; si el bloqueo no se obtiene
+  → `409` problem `idempotency-request-in-progress` + `Retry-After: 1`; si se obtiene: fila vigente con hash distinto
+  → `422` problem `idempotency-key-reused`; fila vigente `COMPLETED` → respuesta almacenada con encabezado
+  `Idempotent-Replayed: true`; fila expirada → se elimina y se procesa como nueva; sin fila → `INSERT` `IN_PROGRESS`,
+  comando, `COMPLETED` y commit. Interceptor NestJS
   `@Idempotent()` reutilizable. Purga por expiración: tarea manual/script en 001 (job programado se difiere).
-- **Rationale**: Garantiza un único efecto con concurrencia (la PK serializa), aislado por tenant (RLS también aplica).
-- **Alternatives considered**: Redis `SET NX` (Redis no está justificado aún, Constitución: Redis solo con justificación).
+- **Rationale**: Garantiza un único efecto con concurrencia (bloqueo consultivo + PK), aislado por tenant (RLS también
+  aplica). Corrección del 2026-11-22 (U1): con `INSERT … ON CONFLICT` dentro de la misma transacción, los duplicados
+  concurrentes esperaban el commit en vez de recibir 409, lo que contradecía el contrato; el bloqueo consultivo hace
+  observable el estado "en proceso" sin dejar filas huérfanas. Política solo para 001 (FR-024): 007/011 la revisan.
+- **Alternatives considered**: `INSERT … ON CONFLICT` en una transacción corta separada (deja filas `IN_PROGRESS`
+  huérfanas tras una caída y requiere recuperación por tiempo); Redis `SET NX` (Redis no está justificado aún, Constitución: Redis solo con justificación).
 
 ## R-07 · Auditoría append-only
 
@@ -234,21 +240,38 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
   `main` documentadas en `docs/process/git-workflow.md` (FR-038) para aplicarse al publicar, con la excepción de
   mantenedor único (Constitución v1.1.0).
 
-## R-21 · Métricas técnicas (FR-039)
+## R-21 · Métricas técnicas (FR-039) y su acceso (FR-040)
 
-- **Decision**: `@prometheus-io/client` **0.16.x** (cliente oficial de Prometheus para Node; sucesor de `prom-client`,
-  que npm marca como reemplazado), usado directamente desde un módulo `common/metrics` propio, sin wrapper de NestJS.
-  Expone en un servidor HTTP **separado** (`KUOTA_METRICS_PORT`, por defecto 9464) el formato de texto de Prometheus:
-  métricas por defecto del proceso, histograma `http_server_request_duration_seconds{route,method,status}` (ruta como
-  plantilla), `kuota_http_errors_total{code}` y gauges del pool de `adapter-pg`. Sin etiquetas de tenant (privacidad y
-  cardinalidad). No se aprovisiona servidor Prometheus ni alertas (D-ARC-04); las alertas financieras se especifican
-  en 006/013.
-- **Rationale**: Constitución XIII exige métricas técnicas básicas. El puerto separado evita exponerlas en el listener
-  público sin depender de decisiones de despliegue.
-- **Alternatives considered**: `@willsoto/nestjs-prometheus` 7 (wrapper; dependencia adicional sin valor en 001);
-  OpenTelemetry metrics SDK + exportador Prometheus (más piezas; candidato cuando se adopte tracing distribuido).
-- **Verificado**: `npm view @prometheus-io/client version` → 0.16.1; `npm view prom-client deprecated` → "replaced by
-  @prometheus-io/client" (2026-11-22).
+- **Decision**: OpenTelemetry Metrics, coherente con `docs/architecture/backend-architecture.md` y
+  `deployment-architecture.md` (telemetría con OpenTelemetry; exportador definitivo con D-ARC-04):
+  `@opentelemetry/api` 1.10, `@opentelemetry/sdk-metrics` 3.1 y `@opentelemetry/exporter-prometheus` 0.301 en modo
+  *pull*. El exportador se crea con `preventServerStart: true` y su `getMetricsRequestHandler` se monta en un servidor
+  HTTP propio de `common/metrics`, que aplica los controles de acceso. Instrumentos: histograma
+  `http_server_request_duration_seconds{route,method,status}` (ruta como plantilla), contador
+  `kuota_http_errors_total{code}`, gauges del pool de `adapter-pg` y métricas del proceso. Sin etiquetas de tenant
+  (privacidad y cardinalidad). No se aprovisiona servidor Prometheus ni alertas (D-ARC-04); las alertas financieras se
+  especifican en 006/013.
+- **Por qué no está en el contrato OpenAPI público**: el contrato describe la API que consumen las apps y genera su
+  cliente Dart (Constitución XII). Las métricas no las consume ninguna app, se sirven fuera del listener de la API, en
+  formato de exposición de Prometheus (no JSON) y su forma la define la instrumentación, no un acuerdo con clientes.
+  Incluirlas expondría su existencia en la documentación pública y generaría código de cliente innecesario. Su acceso
+  se documenta en la tabla Endpoint Access de spec.md.
+- **Controles de acceso** (Constitución §II; el puerto separado no cuenta como control):
+  - `KUOTA_METRICS_HOST` (por defecto `127.0.0.1`) y `KUOTA_METRICS_PORT` (por defecto 9464): por defecto solo es
+    alcanzable desde la propia máquina o el propio contenedor.
+  - `KUOTA_METRICS_TOKEN`: token portador del recolector, comparado en tiempo constante; sin token o con token inválido
+    → 401. Es un secreto: `.env.example` solo lleva un valor ficticio.
+  - Guard de arranque: si `KUOTA_ENV ∈ {staging, production}` o el host no es de loopback, el arranque falla cuando
+    el token falta o tiene menos de 32 caracteres.
+  - La restricción de red del entorno desplegado (red interna, política de red) se decide con D-ARC-04.
+- **Rationale**: Constitución XIII exige métricas técnicas básicas, y §II exige que sean internas y protegidas.
+  OpenTelemetry evita una segunda librería de telemetría cuando se añadan trazas y permite cambiar a OTLP *push* sin
+  tocar la instrumentación.
+- **Alternatives considered**: `@prometheus-io/client` 0.16 (sucesor oficial de `prom-client`; elegido en una primera
+  versión de esta decisión y descartado porque contradice la arquitectura documentada); `@willsoto/nestjs-prometheus`
+  (wrapper sin valor en 001); exportador OTLP *push* (requiere un colector, que depende de D-ARC-04).
+- **Verificado** (2026-11-22, `npm view`): `@opentelemetry/sdk-metrics` 3.1.1, `@opentelemetry/exporter-prometheus`
+  0.301.2 (con `preventServerStart` y `getMetricsRequestHandler` en sus tipos publicados), `@opentelemetry/api` 1.10.0.
 
 ## Incógnitas restantes
 

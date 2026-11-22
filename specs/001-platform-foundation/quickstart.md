@@ -21,13 +21,15 @@ Referencias: [contrato](contracts/kuota-core.v1.openapi.yaml), [modelo de datos]
 ```bash
 cp .env.example .env                 # valores ficticios; no contiene secretos reales (US1-3)
 scripts/dev/up.sh                    # compose (PostgreSQL 18) + roles + migraciones + backend
-curl -s localhost:3000/health/live   # → {"status":"ok",...}
+curl -s localhost:3000/health/live   # → {"status":"ok"} (sin credenciales; nada más)
 curl -s localhost:3000/health/ready  # → {"status":"ok","checks":{"database":{"status":"up"}}}
 docker compose -f infra/docker/compose.yaml stop postgres
 curl -s -o /dev/null -w '%{http_code}' localhost:3000/health/ready   # → 503, checks.database.status = down (US1-2)
 curl -s localhost:3000/health/live   # → sigue 200
-curl -s localhost:9464/metrics | grep -E 'http_server_request_duration_seconds|kuota_http_errors_total'   # métricas (FR-039)
-curl -s -o /dev/null -w '%{http_code}' localhost:3000/metrics   # → 404 (no se expone en el puerto de la API)
+curl -s -H "Authorization: Bearer $KUOTA_METRICS_TOKEN" 127.0.0.1:9464/metrics \
+  | grep -E 'http_server_request_duration_seconds|kuota_http_errors_total'          # métricas (FR-039)
+curl -s -o /dev/null -w '%{http_code}' 127.0.0.1:9464/metrics                       # → 401 sin token (FR-040)
+curl -s -o /dev/null -w '%{http_code}' localhost:3000/metrics                       # → 404 en el puerto de la API
 ```
 
 ## 2. Pruebas de todo el monorepo (US1, FR-002)
@@ -54,7 +56,9 @@ curl -s -X POST localhost:3000/v1/dev/probe-items -H "X-Kuota-Dev-Tenant: $A" -H
 curl -s -o /dev/null -w '%{http_code}' localhost:3000/v1/dev/probe-items/<id-de-A> -H "X-Kuota-Dev-Tenant: $B"   # → 404
 ```
 
-Esperado: arranque con `KUOTA_ENV=production KUOTA_DEV_TENANT_CONTEXT=enabled` **falla** (R-05).
+Esperado: arranque con `KUOTA_ENV=production KUOTA_DEV_TENANT_CONTEXT=enabled` **falla** (R-05); con
+`KUOTA_ENV=staging|production` y el mecanismo deshabilitado, todo `/v1/dev/*` responde 404 (T096); en esos entornos el
+arranque también falla sin `KUOTA_METRICS_TOKEN` (R-21).
 
 ## 4. Idempotencia y auditoría (US6, SC-006)
 
@@ -62,7 +66,9 @@ Esperado: arranque con `KUOTA_ENV=production KUOTA_DEV_TENANT_CONTEXT=enabled` *
 pnpm --filter backend test:idempotency   # 10 envíos (5 concurrentes) → 1 efecto, 1 audit_event; 100 repeticiones
 ```
 
-Esperado adicional: misma clave con body distinto → 422 `idempotency-key-reused`; `UPDATE audit_events` con
+Esperado adicional: duplicado concurrente → 409 con `Retry-After: 1` y, al reintentar, la respuesta original con
+`Idempotent-Replayed: true`; clave expirada (> 30 días) → nuevo efecto; misma clave con body distinto → 422
+`idempotency-key-reused`; `UPDATE audit_events` con
 `kuota_app_login` → error de permiso.
 
 ## 5. Dinero y fixtures (US4, SC-005)

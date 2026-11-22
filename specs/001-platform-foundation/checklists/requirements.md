@@ -35,5 +35,9 @@
   requisitos usan términos neutrales ("servicio central", "almacén de datos", "workspace móvil", "CI"). Las únicas
   menciones a tecnología concreta están en *Assumptions* y referencian decisiones ya registradas (D-ENV-01: Dart ≥ 3.6;
   D-ARC-01: Prisma), necesarias para explicar dependencias y bloqueos. El "cómo" se define en `plan.md`.
+- **Nota 2 (excepción aprobada, 2026-11-22)**: las secciones *Endpoint Access*, *Security Risks* y FR-023/FR-040 citan
+  rutas, métodos, códigos HTTP y encabezados (`Retry-After`). Lo exigen la Constitución v1.2.0 §II (tabla Endpoint
+  Access con ruta y método) y la política de idempotencia aprobada por el responsable. Son contrato de acceso y de
+  comportamiento observable, no decisiones de implementación; frameworks y librerías siguen fuera de la spec.
 - Iteración de validación 1: se eliminaron marcadores [NEEDS CLARIFICATION]; las dudas restantes (plataformas móviles
   en CI, aprobación de D-ENV-01/D-ARC-01, alcance de US7) se tratan en `/speckit-clarify`.

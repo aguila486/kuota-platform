@@ -1,0 +1,6 @@
+# Workspace TypeScript de Kuota (ADR-0002): pnpm workspaces sin Nx ni Turborepo.
+packages:
+  - backend
+
+# Falla la instalación si Node o pnpm no cumplen `engines` (FR-003).
+engineStrict: true

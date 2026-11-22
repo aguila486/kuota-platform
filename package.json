@@ -1,0 +1,16 @@
+{
+  "name": "kuota-platform",
+  "private": true,
+  "description": "Monorepo de Kuota (ADR-0001). Scripts agregadores que delegan en los paquetes del workspace.",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=26.13.1 <27",
+    "pnpm": ">=12.21.0 <13"
+  },
+  "scripts": {
+    "doctor": "scripts/dev/doctor.sh",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test"
+  }
+}

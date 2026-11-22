@@ -194,15 +194,16 @@ backend y verifica que el cliente generado está actualizado.
 ## Flujo de desarrollo y quality gates
 
 - Rama principal `main` protegida: sin pushes directos; solo merge vía Pull Request.
-- Ramas: `feature/NNN-slug` (generadas por Spec-Kit), `fix/<slug>`, `chore/<slug>`, `docs/<slug>`.
+- Ramas: `feature/NNN-slug` (generadas por Spec-Kit), `fix/<slug>`, `hotfix/<componente>-<slug>` (urgencias de
+  producción), `chore/<slug>`, `docs/<slug>`.
 - Commits con **Conventional Commits** y scope de componente (`backend`, `admin`, `collector`, `client`, `flutter-pkg`,
-  `contracts`, `infra`, `ci`, `specs`, `docs`, `adr`).
+  `contracts`, `infra`, `ci`, `specs`, `docs`, `adr`, `constitution`, `speckit`).
 - Todo PR requiere: al menos 1 aprobación (2 si toca ledger, motores financieros, autenticación o RLS), CI verde,
   referencia a spec/tareas y checklist de la Constitución.
 - Gates bloqueantes de CI: lint, tipos, pruebas unitarias e integración de componentes afectados, cobertura, contrato
   OpenAPI y compatibilidad, pruebas de aislamiento multi-tenant, escaneo de secretos y dependencias.
 - Releases independientes por componente con versionado semántico y etiquetas `backend-vX.Y.Z`, `admin-vX.Y.Z`,
-  `collector-vX.Y.Z`, `client-vX.Y.Z`.
+  `collector-vX.Y.Z`, `client-vX.Y.Z` y, para el contrato de API, `contracts-vX.Y.Z`.
 
 ## Reglas para agentes de IA
 
@@ -226,4 +227,4 @@ backend y verifica que el cliente generado está actualizado.
   o justificar excepciones en su tabla de complejidad; `/speckit-analyze` trata violaciones como CRITICAL.
 - Revisión periódica de la Constitución al cierre de cada iteración mayor.
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-22 | **Last Amended**: 2026-11-22
+**Version**: 1.0.1 | **Ratified**: 2026-11-22 | **Last Amended**: 2026-11-22

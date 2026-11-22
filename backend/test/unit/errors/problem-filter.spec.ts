@@ -89,6 +89,11 @@ class ProbeErrorsController {
     throw new HttpException('versión antigua', 426);
   }
 
+  @Get('app-version')
+  appVersion(): never {
+    throw new KuotaProblemError('app-version-unsupported');
+  }
+
   @Get('thrown-string')
   thrownString(): never {
     // eslint-disable-next-line @typescript-eslint/only-throw-error
@@ -181,17 +186,21 @@ describe('filtro problem+json (T020/T021)', () => {
     expect(text).not.toContain('token=abc');
   });
 
-  it('mapea los estados de HttpException a códigos del contrato sin exponer sus mensajes', async () => {
-    const unavailable = await call('unavailable');
-    expect(unavailable.res.status).toBe(500);
-    expect(unavailable.body['code']).toBe('internal-error');
-    expect(unavailable.text).not.toContain('host-interno');
-    expect((await call('unauthorized')).body).toMatchObject({ status: 401, code: 'tenant-context-required' });
-    expect((await call('upgrade')).body).toMatchObject({ status: 426, code: 'app-version-unsupported' });
-    // 403 aún no tiene código propio en el contrato: conserva su estado (decisión pendiente para 002).
-    const forbidden = await call('forbidden');
-    expect(forbidden.body).toMatchObject({ status: 403, code: 'validation-error' });
-    expect(forbidden.text).not.toContain('detalle interno');
+  it('HttpException sin código en el contrato (401, 403, 426, 503) → 500 internal-error, sin mensaje y con log de error', async () => {
+    logs = '';
+    for (const path of ['unavailable', 'unauthorized', 'forbidden', 'upgrade']) {
+      const { res, text, body } = await call(path);
+      expect(res.status, path).toBe(500);
+      expect(body['code'], path).toBe('internal-error');
+      for (const leak of ['host-interno', 'detalle interno', 'versión antigua']) expect(text).not.toContain(leak);
+    }
+    expect(logs).toContain('sin código en el contrato');
+    expect(logs).toContain('"level":"error"');
+  });
+
+  it('401 y 426 del contrato solo se producen con KuotaProblemError', async () => {
+    expect((await call('tenant')).body).toMatchObject({ status: 401, code: 'tenant-context-required' });
+    expect((await call('app-version')).body).toMatchObject({ status: 426, code: 'app-version-unsupported' });
   });
 
   it('aplica los encabezados del error de dominio (Retry-After en 409 idempotency-request-in-progress)', async () => {

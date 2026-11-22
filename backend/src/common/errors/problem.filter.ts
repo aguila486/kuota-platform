@@ -18,17 +18,20 @@ interface MappedProblem {
   readonly headers?: Readonly<Record<string, string>>;
 }
 
+/** Estados de HttpException que el contrato sí cubre: errores de entrada (validation-error) y recurso inexistente. */
+const INPUT_ERROR_STATUSES = new Set([400, 413, 415, 422]);
+
 /**
- * Estados de HttpException → código del contrato. Los mensajes de HttpException NO se exponen (pueden contener datos
- * internos); solo los mensajes de validación se devuelven en `errors[]`. Un 4xx sin código propio en el contrato conserva
- * su estado y usa `validation-error` (pendiente de que el contrato defina códigos para 403/405 en 002).
+ * HttpException → código del contrato. Solo se traducen los estados que el contrato cubre para errores genéricos del
+ * framework (404 y errores de entrada). Los demás (401, 403, 405, 426, 5xx…) no tienen código genérico aprobado: en 001
+ * esos estados solo los produce `KuotaProblemError`, así que una HttpException con ellos es un error de programación y
+ * se responde 500 `internal-error` (pendiente: códigos para 403/405 en el contrato de 002). Los mensajes de HttpException
+ * nunca se exponen; solo los de validación, en `errors[]`.
  */
-function fromHttpException(exception: HttpException): MappedProblem {
+function fromHttpException(exception: HttpException): MappedProblem & { unmapped?: true } {
   const status = exception.getStatus();
-  if (status >= 500) return { code: 'internal-error', status: 500 };
-  if (status === 401) return { code: 'tenant-context-required', status };
   if (status === 404) return { code: 'not-found', status };
-  if (status === 426) return { code: 'app-version-unsupported', status };
+  if (!INPUT_ERROR_STATUSES.has(status)) return { code: 'internal-error', status: 500, unmapped: true };
   const response = exception.getResponse();
   const messages =
     typeof response === 'object' && response !== null && Array.isArray((response as { message?: unknown }).message)
@@ -39,7 +42,7 @@ function fromHttpException(exception: HttpException): MappedProblem {
     : { code: 'validation-error', status };
 }
 
-function toProblem(exception: unknown): MappedProblem {
+function toProblem(exception: unknown): MappedProblem & { unmapped?: true } {
   if (exception instanceof KuotaProblemError) {
     return {
       code: exception.code,
@@ -78,7 +81,10 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     if (problem.status >= 500) {
       // El detalle (con stack, redactado por el logging) va solo al log, nunca al cliente.
       const err = exception instanceof Error ? exception : new Error('Valor no Error lanzado');
-      this.logger.error({ err, code: problem.code, correlation_id: correlationId }, 'Error no controlado');
+      const message = problem.unmapped
+        ? `HttpException ${(exception as HttpException).getStatus()} sin código en el contrato: usar KuotaProblemError`
+        : 'Error no controlado';
+      this.logger.error({ err, code: problem.code, correlation_id: correlationId }, message);
     } else {
       this.logger.debug(
         { code: problem.code, status: problem.status, correlation_id: correlationId },

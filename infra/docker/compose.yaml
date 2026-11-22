@@ -1,0 +1,31 @@
+# Entorno local de Kuota (research R-18). Uso, desde la raíz del repositorio:
+#   docker compose -f infra/docker/compose.yaml --env-file .env up -d
+name: kuota
+
+services:
+  postgres:
+    # postgres:18, índice multiarquitectura fijado por digest (verificado el 2026-11-22 con
+    # `docker buildx imagetools inspect postgres:18`). Testcontainers usa esta misma referencia.
+    image: postgres:18@sha256:eb63372c1e05c755f55fa30cbd07aecc443676fc6c0fa90b9002d01537841e1a
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en .env (ver .env.example)}
+      POSTGRES_DB: kuota
+      KUOTA_MIGRATOR_PASSWORD: ${KUOTA_MIGRATOR_PASSWORD:?define KUOTA_MIGRATOR_PASSWORD en .env}
+      KUOTA_APP_LOGIN_PASSWORD: ${KUOTA_APP_LOGIN_PASSWORD:?define KUOTA_APP_LOGIN_PASSWORD en .env}
+    ports:
+      # Solo loopback: la base de datos local no se expone a la red.
+      - "127.0.0.1:${KUOTA_PG_HOST_PORT:-55432}:5432"
+    volumes:
+      # PostgreSQL 18 guarda los datos bajo /var/lib/postgresql/<versión>/docker.
+      - kuota-pgdata:/var/lib/postgresql
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kuota"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  kuota-pgdata:

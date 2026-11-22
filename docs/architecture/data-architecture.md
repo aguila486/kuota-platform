@@ -144,12 +144,37 @@ solo la consulta (ADR-0002).
 
 ## 8. Migraciones
 
-- Prisma Migrate genera SQL; RLS, grants, triggers y funciones se agregan como SQL manual en la misma migración.
+- **Fuente de verdad (ADR-0004, P4):** migraciones SQL escritas a mano, versionadas y revisadas, aplicadas con
+  `prisma migrate deploy` por `kuota_migrator`. `schema.prisma` es un espejo derivado. Prohibido usar `prisma db push`,
+  `prisma migrate dev` o `prisma migrate reset` sobre esquemas compartidos. El esquema efectivo (RLS, FORCE, políticas,
+  triggers, CHECK, índices, grants y propietarios) se verifica con pruebas sobre una base migrada; `prisma migrate diff`
+  es solo un complemento.
+- **Transacción explícita (P1):** `prisma migrate deploy` no envuelve las migraciones en una transacción. Cada migración
+  empieza con `BEGIN;` y termina con `COMMIT;`. Las operaciones que PostgreSQL no admite dentro de una transacción
+  (p. ej. `CREATE INDEX CONCURRENTLY`) van en una migración propia marcada `-- kuota:non-transactional: <justificación y
+  plan de recuperación>`, con revisión explícita. Una migración fallida queda registrada y bloquea despliegues (`P3009`):
+  se corrige y se resuelve con un procedimiento revisado, nunca marcándola como aplicada sin ejecutarla.
 - Patrón **expand → migrate → contract**: agregar columnas nullable/tablas nuevas, desplegar código compatible,
   backfill, y solo en un release posterior eliminar lo viejo. Cambios destructivos requieren fase de contract aprobada.
 - Migraciones se aplican en pipeline con `kuota_migrator` antes de desplegar la nueva versión. Si `/health/ready`
   también verifica las migraciones aplicadas es la decisión pendiente D-ARC-06; en 001 solo verifica la base de datos.
 - Prueba de CI: aplicar todas las migraciones sobre BD vacía + sobre snapshot del esquema de `main`.
+
+### Mantenimiento de datos por tenant (backfills) — ADR-0004, condición P5
+
+Con FORCE RLS y las políticas limitadas a `kuota_app`, `kuota_migrator` **no ve filas de tenant**: un `UPDATE` suyo
+termina con 0 filas y sin error. Por eso un backfill nunca se da por bueno por "no fallar". Procedimiento (no hay
+todavía política de mantenimiento ni BYPASSRLS; implementarla exige aprobación separada):
+
+1. **Autorización humana** por cambio sensible, registrada con el motivo, los tenants afectados y el conteo esperado.
+2. **Tenant explícito:** se ejecuta tenant a tenant, con el contexto fijado como lo hace `withTenant`; el tenant
+   objetivo se valida contra la lista autorizada antes de escribir.
+3. **Conteo previo y posterior:** se mide cuántas filas cumplen la condición antes del cambio y se compara con las
+   afectadas; si no coinciden o el resultado es 0 cuando se esperaban cambios, la transacción se revierte.
+4. **Auditoría:** cada cambio genera eventos en `audit_events` con `actor_type = 'SYSTEM'`, la acción del backfill y la
+   correlación del procedimiento.
+5. **Recuperación:** todo dentro de una transacción por tenant; ante fallo se revierte ese tenant y el proceso se detiene
+   con un informe de los tenants completados y pendientes.
 
 ## 9. Respaldos y retención
 

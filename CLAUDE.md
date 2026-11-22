@@ -24,7 +24,8 @@ aún no existen y **no deben crearse vacías** solo para completar el árbol; se
 - **Monorepo único** (ADR-0001): un solo repositorio Git y un solo proyecto Spec-Kit en la raíz.
 - **Backend**: Node.js LTS + TypeScript + NestJS como **monolito modular** (no microservicios) — ADR-0002.
   pnpm workspaces sin Nx/Turborepo en la etapa inicial.
-- **Base de datos**: PostgreSQL con **Row-Level Security** por `tenant_id`; ORM Prisma (propuesto) — ADR-0004.
+- **Base de datos**: PostgreSQL con **Row-Level Security** por `tenant_id`; ORM Prisma 7 (aceptado con condiciones
+  P1–P8: migraciones SQL con transacción explícita, contexto solo vía `withTenant`, sin `db push`/`migrate dev`) — ADR-0004.
 - **Ledger**: partida doble, append-only, correcciones por reverso — ADR-0005.
 - **Flutter**: Dart pub workspaces (+ Melos para orquestar scripts) — ADR-0003. Drift/SQLite para offline.
 - **Contratos**: OpenAPI en `contracts/openapi/` es la fuente de verdad REST; el cliente Dart se **genera**.

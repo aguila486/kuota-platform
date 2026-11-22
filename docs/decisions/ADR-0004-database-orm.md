@@ -1,8 +1,9 @@
 # ADR-0004: PostgreSQL 18 + Prisma con Row-Level Security
 
-- **Estado:** Propuesto — **condicionado al spike T014/T015** (D-ARC-01). Prisma **no** está aprobado: su aceptación
-  depende de la evidencia del spike. Texto corregido el 2026-11-22 (C4-1…C4-6) para alinearlo con
-  `specs/001-platform-foundation/research.md` §R-04 y `data-model.md`.
+- **Estado:** **Aceptado con condiciones** (2026-11-22, responsable del proyecto; D-ARC-01, cierre de T015). Prisma 7 es
+  el ORM principal de Kuota. La aceptación **no** implica que las condiciones P1–P8 estén mitigadas: su estado está en
+  *Condiciones de la aceptación*. Kysely sigue documentado como alternativa si aparece una limitación obligatoria que
+  Prisma no pueda superar. Texto corregido antes del spike (C4-1…C4-6) para alinearlo con research R-04 y data-model.
 - **Fecha:** 2026-11-22
 - **Decisores:** Responsable técnico
 - **Relacionado:** Constitución III, IV, V, XIV; D-ARC-01; ADR-0002 (C2-1, propagación transaccional); ADR-0005;
@@ -39,8 +40,10 @@ Drizzle se evaluó (research R-04) y no es fallback: menor madurez en migracione
 
 - **PostgreSQL 18** como base de datos OLTP única (Constitución, restricciones de stack). Réplica de lectura para
   reportes cuando se justifique.
-- **Prisma 7.10 con `@prisma/adapter-pg`** como ORM y herramienta de migraciones, **condicionado** a los criterios del
-  spike (sección *Validación*). Fallback: **Kysely** (C4-4).
+- **Prisma 7.10.1 con `@prisma/adapter-pg`** como ORM y herramienta de migraciones (`prisma migrate deploy`), aceptado
+  con las condiciones P1–P8 tras superar los criterios obligatorios del spike. Alternativa documentada: **Kysely** (C4-4).
+- **Fuente de verdad del esquema (P4):** las migraciones SQL versionadas y revisadas. `schema.prisma` es un espejo
+  derivado; Prisma no representa CHECK, RLS, FORCE, triggers, funciones ni grants.
 - **Mecanismo (C4-2):** `TenantPrismaService.withTenant(fn)` en `backend/src/common/tenant-context/` abre una
   `$transaction` interactiva cuya primera sentencia es
   `SELECT set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), set_config('app.correlation_id', $3, true)`.
@@ -112,7 +115,38 @@ semilla fija para los retardos, 20 repeticiones. Script `backend/scripts/spike-r
 
 ## Resultado del spike
 
-_Pendiente: T014/T015 no se han ejecutado._
+Ejecutado en T014 (`pnpm --filter backend spike:rls`, tres ejecuciones completas con los mismos veredictos) sobre
+PostgreSQL 18.7 efímero, Prisma 7.10.1 y `adapter-pg` 7.10.1. Informe completo: `specs/001-platform-foundation/spike-t014-report.md`.
+
+| Criterio | Resultado observado |
+|---|---|
+| S1 | PASS: 0 filas sin error, en conexión nueva y en conexión reutilizada (mismo backend, variable `''`) |
+| S2 | PASS: 2000 transacciones por ejecución, 0 filas cruzadas, 0 contextos heredados, 981–990 cambios de tenant sobre el mismo backend (mínimo 10) |
+| S3 | PASS: `42501` en los 6 casos de privilegio y `WITH CHECK` |
+| S4 | PASS: rollback ante errores de la aplicación y de la base; el mismo backend queda limpio |
+| S5 | PASS: anidamiento reutiliza la transacción; otro tenant → error y rollback total. **Riesgo:** un `set_config` crudo dentro de la transacción cambia el tenant (condición P2) |
+| S6 | PASS: `migrate deploy` funciona con `kuota_migrator` y falla con `kuota_app_login` sin dejar objetos |
+| S7 | PASS para `$queryRaw`. **TypedSQL NO EJECUTADO** (condición P7) |
+| S8 | Referencia, no gate: sobrecosto de `withTenant` p50 0,73–0,77 ms · p95 1,06–1,55 ms (local) |
+| Adicional MIG-TX | FAIL: `prisma migrate deploy` no envuelve las migraciones en una transacción (condición P1) |
+| Adicional MIG-TX-EXPLICIT | PASS: con `BEGIN`/`COMMIT` en el SQL no quedan cambios parciales |
+
+Regla de decisión aplicada: S1–S6 en PASS → aceptación propuesta y aprobada por el responsable con condiciones.
+
+## Condiciones de la aceptación
+
+Responsable de todas: responsable técnico del proyecto (mantenedor único). Estado al 2026-11-22.
+
+| ID | Condición | Severidad | Estado | Evidencia o prueba requerida | Hito |
+|---|---|---|---|---|---|
+| P1 | Migraciones con transacción explícita (`BEGIN;` primero, `COMMIT;` último); las operaciones no transaccionales van en una migración propia marcada `-- kuota:non-transactional: …` con justificación y plan de recuperación | Alta | **Cumplida localmente**: `0001_foundation` lleva `BEGIN`/`COMMIT` (no estaba desplegada en ningún entorno persistente); fallo inyectado → rollback total; convención verificada por prueba estática | `foundation-schema.spec.ts` (bloque P1), `migration-governance.spec.ts` (unit) | Gate de CI en G12 (T048) |
+| P2 | Solo `common/tenant-context` fija `app.*` o cambia la identidad de sesión | Alta | **Parcial**: reglas de ESLint con 14 pruebas negativas; el lint no detecta concatenación de SQL ni funciones de base de datos | `tenant-context-guard.spec.ts` | `withTenant` definitivo (T039); gate de CI en G12 |
+| P3 | `_prisma_migrations` en `public` con propietario y privilegios correctos | Media | **Cumplida**: propietario `kuota_migrator`; sin privilegios para runtime, worker simulado ni PUBLIC; sin `CREATE` en `public` para ellos; `search_path` por defecto sin esquemas escribibles por el runtime | `migration-governance.spec.ts` (integración, P3) | Reverificar al crear `kuota_worker` (P6) |
+| P4 | SQL versionado como fuente de verdad; prohibidos `prisma db push`, `migrate dev` y `migrate reset` sobre esquemas compartidos; validación del esquema efectivo | Alta | **Cumplida localmente**: prohibición verificada en scripts; validación efectiva de restricciones por nombre, función, triggers, políticas, grants y propietarios; `migrate diff` vacío como complemento | `migration-governance.spec.ts` (unit e integración), `foundation-schema.spec.ts` | Gate de CI en G12 |
+| P5 | Mantenimiento de datos (backfills) por tenant con autorización humana separada | Alta | **Pendiente**: procedimiento documentado (`docs/architecture/data-architecture.md` §8); **sin** política de mantenimiento ni BYPASSRLS | Prueba de filas afectadas y auditoría en el primer backfill | Antes del primer backfill |
+| P6 | `kuota_worker` solo con permisos heredados de `kuota_app` cuando corresponda | Media | **Pendiente**: dirección aprobada; rol no creado. Herencia verificada solo con roles simulados | Pruebas reales de aislamiento y herencia en su tarea | Primera feature con jobs |
+| P7 | TypedSQL fuera del alcance aprobado | Media | **Pendiente (no adoptado)** | Evaluación independiente de tipos, transacciones, RLS y mantenibilidad | Antes de adoptarlo (p. ej. 006) |
+| P8 | Solo los scripts de instalación imprescindibles para Prisma | Media | **Cumplida**: `allowBuilds` permite solo `prisma` y `@prisma/engines`; versiones exactas 7.10.1 | Revisión de `pnpm-workspace.yaml`; escaneo de dependencias en CI | Continua; escaneo en G12 |
 
 ## Revisión
 

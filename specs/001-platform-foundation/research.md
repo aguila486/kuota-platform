@@ -225,6 +225,22 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
   serializador que enmascara patrones (teléfonos de 10+ dígitos, correos) en mensajes libres. Prueba que escribe datos
   sensibles conocidos y verifica que no aparecen en la salida (SC-009).
 - **Alternatives considered**: Winston (más lento, redacción manual).
+- **Implementación (G4: T016–T021, 2026-11-22)**:
+  - Dependencias exactas: `nestjs-pino` 5.3.2, `pino` 10.4.0, `pino-http` 11.0.0 (dependencia par obligatoria) y
+    `nestjs-cls` 7.0.2. Ninguna requiere scripts de instalación (`allowBuilds` sin cambios, condición P8).
+  - UUIDv7 de correlación con `crypto.randomUUIDv7()` nativo de Node 26 (sin dependencia). Un `X-Correlation-Id`
+    que no sea UUID nunca se refleja: se genera uno nuevo.
+  - Validación de configuración propia (`src/common/config/load-config.ts`), sin librería: el plan no fija ninguna y
+    las reglas son pocas. La API **no** carga `DATABASE_URL_MIGRATOR` y rechaza en `DATABASE_URL_APP` los usuarios
+    `kuota_migrator` y `postgres` (FR-014).
+  - Redacción: claves sensibles a cualquier profundidad (incluidas `authorization`, `cookie`, `rfc`, `pin`) y, en texto
+    libre, correos, teléfonos de 10–15 dígitos, `clave=valor` de secretos y `Bearer …`; los UUID no se alteran.
+  - Claves del CLS que lee el logging: `correlationId`, `tenantId`, `actorId`. **T038 debe usar estas mismas claves.**
+  - Errores: un `HttpException` 4xx sin código propio en el contrato (p. ej. 403) conserva su estado con
+    `validation-error`; definir códigos para 403/405 queda **pendiente para 002**. Los mensajes de `HttpException`
+    nunca se exponen; solo los de validación, en `errors[]`.
+  - Los componentes existen y están probados, pero **no están conectados al proceso real** hasta T025 (`AppModule`,
+    filtro global, `app.useLogger`).
 
 ## R-16 · Cola de jobs
 

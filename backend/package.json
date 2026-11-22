@@ -1,0 +1,54 @@
+{
+  "name": "backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kuota Core: monolito modular NestJS (ADR-0002).",
+  "engines": {
+    "node": ">=26.13.1 <27"
+  },
+  "scripts": {
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . && pnpm run lint:deps",
+    "lint:deps": "depcruise src --config .dependency-cruiser.cjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:cov": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@nestjs/common": "12.6.0",
+    "@nestjs/core": "12.6.0",
+    "@nestjs/platform-express": "12.6.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@nestjs/cli": "12.0.15",
+    "@nestjs/testing": "12.6.0",
+    "@swc/cli": "0.8.2",
+    "@swc/core": "1.16.22",
+    "@testcontainers/postgresql": "12.2.2",
+    "@types/node": "26.6.6",
+    "@types/pg": "8.23.1",
+    "@vitest/coverage-v8": "5.1.1",
+    "dependency-cruiser": "18.8.0",
+    "eslint": "10.15.0",
+    "eslint-config-prettier": "10.1.8",
+    "pg": "8.23.1",
+    "prettier": "3.10.1",
+    "testcontainers": "12.2.2",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.73.0",
+    "unplugin-swc": "2.0.0",
+    "vitest": "5.1.1"
+  },
+  "prettier": {
+    "printWidth": 120,
+    "singleQuote": true,
+    "trailingComma": "all"
+  }
+}

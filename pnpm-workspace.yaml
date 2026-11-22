@@ -4,3 +4,14 @@ packages:
 
 # Falla la instalación si Node o pnpm no cumplen `engines` (FR-003).
 engineStrict: true
+
+# Scripts de instalación de dependencias: denegados explícitamente (política por defecto de pnpm 12).
+# - @swc/core: el binario nativo llega como dependencia opcional por plataforma; su postinstall no es necesario.
+# - ssh2, cpu-features: aceleradores nativos opcionales de Testcontainers (docker-modem); tienen respaldo en JS.
+# - protobufjs: sin script necesario para su uso en Testcontainers.
+# Permitir un build requiere justificarlo en research.md de la feature.
+allowBuilds:
+  '@swc/core': false
+  cpu-features: false
+  protobufjs: false
+  ssh2: false

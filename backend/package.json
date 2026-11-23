@@ -18,7 +18,8 @@
     "test": "pnpm run prisma:generate && vitest run",
     "test:cov": "pnpm run prisma:generate && vitest run --coverage",
     "spike:rls": "KUOTA_SPIKE=1 vitest run --reporter=verbose",
-    "prisma:generate": "prisma generate --no-hints"
+    "prisma:generate": "prisma generate --no-hints",
+    "db:check-rls": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-rls.ts"
   },
   "dependencies": {
     "@nestjs/common": "12.6.0",

@@ -5,6 +5,7 @@ import { LoggerModule } from 'nestjs-pino';
 import type { DestinationStream } from 'pino';
 import { APP_CONFIG, type AppConfig } from '../config/app-config.js';
 import { CORRELATION_HEADER, correlationIdFor } from './correlation.js';
+import { httpErrorObject, httpSuccessObject, serializeHttpRequest, serializeHttpResponse } from './http-log.js';
 import { buildLoggerOptions, CLS_CORRELATION_ID } from './logger-options.js';
 
 export interface LoggingModuleOptions {
@@ -48,10 +49,17 @@ export class LoggingModule {
         LoggerModule.forRootAsync({
           inject: [APP_CONFIG],
           useFactory: (config: AppConfig) => {
+            // Logging HTTP mínimo por lista permitida (http-log.ts): sin IP, puertos, encabezados, URL cruda, query ni
+            // cuerpos. `wrapSerializers: false` hace que los serializadores reciban el objeto crudo y no la copia
+            // completa que pino-http prepara por defecto.
             const httpOptions = {
               ...buildLoggerOptions(config),
               genReqId: assignCorrelation,
               customAttributeKeys: { reqId: 'correlation_id' },
+              wrapSerializers: false,
+              serializers: { req: serializeHttpRequest, res: serializeHttpResponse },
+              customSuccessObject: httpSuccessObject,
+              customErrorObject: httpErrorObject,
             };
             return {
               renameContext: 'module',

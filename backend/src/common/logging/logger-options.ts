@@ -1,7 +1,7 @@
 import { ClsServiceManager } from 'nestjs-cls';
 import pino, { type Logger, type LoggerOptions } from 'pino';
 import type { AppConfig } from '../config/app-config.js';
-import { buildRedactPaths, maskSensitiveText, REDACTED, sanitizeLogValue } from './redaction.js';
+import { buildRedactPaths, maskSensitiveText, REDACTED, sanitizeLogObject } from './redaction.js';
 
 /** Claves del CLS que lee el logging. Las fija el contexto de tenant (T038); el cliente nunca las aporta. */
 export const CLS_TENANT_ID = 'tenantId';
@@ -32,7 +32,7 @@ export function buildLoggerOptions(config: AppConfig): LoggerOptions {
     mixin: contextFields,
     formatters: {
       level: (label) => ({ level: label }),
-      log: (object) => sanitizeLogValue(object) as Record<string, unknown>,
+      log: (object) => sanitizeLogObject(object),
     },
     hooks: {
       logMethod(args, method) {
@@ -40,6 +40,6 @@ export function buildLoggerOptions(config: AppConfig): LoggerOptions {
         method.apply(this, masked as Parameters<typeof method>);
       },
     },
-    redact: { paths: buildRedactPaths(config.env), censor: REDACTED },
+    redact: { paths: buildRedactPaths(), censor: REDACTED },
   };
 }

@@ -1,4 +1,5 @@
-import { isDevelopmentEnv, type KuotaEnv } from '../config/app-config.js';
+import { IncomingMessage, ServerResponse } from 'node:http';
+import { Socket } from 'node:net';
 
 /** Redacción de datos sensibles en logs (FR-010, R-15). */
 export const REDACTED = '[REDACTED]';
@@ -37,11 +38,16 @@ export function maskSensitiveText(text: string): string {
 }
 
 const MAX_DEPTH = 8;
+/** Sustituye a una solicitud, respuesta o socket que se pase a un log por error (nunca se serializan completos). */
+export const OMITTED_HTTP_OBJECT = '[OMITTED:http-object]';
+const isHttpObject = (value: object): boolean =>
+  value instanceof IncomingMessage || value instanceof ServerResponse || value instanceof Socket;
 
 /** Copia saneada de un valor de log: redacta claves sensibles y enmascara texto, a cualquier profundidad. */
 export function sanitizeLogValue(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') return maskSensitiveText(value);
   if (depth >= MAX_DEPTH || value === null || typeof value !== 'object') return value;
+  if (isHttpObject(value)) return OMITTED_HTTP_OBJECT;
   if (value instanceof Error) {
     return {
       type: value.name,
@@ -59,10 +65,39 @@ export function sanitizeLogValue(value: unknown, depth = 0): unknown {
   return out;
 }
 
-/** Rutas de `redact` de pino para los objetos que serializa pino-http (encabezados). */
-export function buildRedactPaths(env: KuotaEnv): string[] {
-  const paths = ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'];
-  // Los encabezados técnicos solo tienen sentido en local/testing; fuera de ahí se tratan como datos no confiables.
-  if (!isDevelopmentEnv(env)) paths.push('req.headers["x-kuota-dev-tenant"]', 'req.headers["x-kuota-dev-actor"]');
+/**
+ * Campos de primer nivel que tienen serializador propio por lista permitida (http-log.ts): `formatters.log` los deja
+ * pasar sin tocar para que el serializador reciba el objeto crudo. Cualquier otra aparición de un objeto HTTP se omite.
+ */
+const SERIALIZED_KEYS = new Set(['req', 'res']);
+
+/** `formatters.log`: sanea el objeto de un log (claves sensibles, texto y objetos HTTP accidentales). */
+export function sanitizeLogObject(object: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(object)) {
+    out[key] = SERIALIZED_KEYS.has(key)
+      ? item
+      : SENSITIVE_KEYS.has(key.toLowerCase())
+        ? REDACTED
+        : sanitizeLogValue(item, 1);
+  }
+  return out;
+}
+
+/**
+ * Rutas de `redact` de pino: defensa adicional, NO el mecanismo principal. Con los serializadores por lista permitida
+ * estos campos no existen; si un cambio futuro los reintrodujera, se censuran igualmente.
+ */
+export function buildRedactPaths(): string[] {
+  const paths = [
+    'req.headers',
+    'req.remoteAddress',
+    'req.remotePort',
+    'req.url',
+    'req.query',
+    'req.params',
+    'req.body',
+    'res.headers',
+  ];
   return paths;
 }

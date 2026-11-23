@@ -184,3 +184,24 @@ no es una firma: identifica el contenido aprobado mediante los identificadores d
   - cambios en Money TS, logs o auditoría;
   - la Constitución.
 
+## Aprobación 8 — 2026-11-23: CORS para Kuota Admin, runtime iOS, Testcontainers y T086
+
+- **Quién:** responsable del proyecto, mediante mensaje explícito en la sesión de trabajo ("KUOTA — Cierre de
+  conectividad Web, validación iOS y estabilidad de pruebas").
+- **Autorizado:**
+  1. una política CORS segura, limitada a orígenes autorizados explícitamente por entorno (hueco de especificación:
+     ni spec, ni plan, ni tasks la cubrían). Se registra como **T097** en tasks.md;
+  2. instalar el runtime de simulador iOS compatible con el Xcode existente, **después de verificar versión,
+     disponibilidad y espacio**;
+  3. investigar y corregir de forma aislada la intermitencia del desmontaje de Testcontainers;
+  4. las validaciones locales correspondientes;
+  5. los criterios de T086 cubiertos por esta autorización.
+- **No autorizado:**
+  - push, merge, rebase y despliegues;
+  - cambios arbitrarios de dependencias o de identificadores de aplicación;
+  - login, préstamos, ahorros, cobros y sincronización offline;
+  - cambiar contratos públicos, autenticación, RLS o auditoría;
+  - actualizar Xcode o Flutter sin un bloqueo demostrado y una nueva aprobación.
+- **Criterios que NO se debilitan:** T049 y T052 siguen abiertas; el checkpoint de US7 exige SC-008 con iOS verificado
+  localmente.
+

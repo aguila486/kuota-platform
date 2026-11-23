@@ -933,3 +933,118 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
   El job `backend` lo marcó como FAIL, como debe, y al repetirlo pasó 13/13 (648/648). Pendiente: revisar el
   arranque y desmontaje de Testcontainers de ese archivo, o los recursos de Docker del runner, antes de depender de
   CI remoto.
+
+### Cierre de conectividad Web, iOS y Testcontainers (2026-11-23, Aprobación 8)
+
+#### CORS para Kuota Admin (T097)
+
+- **Decisión:** `KUOTA_CORS_ALLOWED_ORIGINS`, lista separada por comas de orígenes **exactos y canónicos**
+  (`esquema://host[:puerto]`, tal como los envía el navegador en `Origin`), validada al arrancar (`loadConfig`).
+  - Se rechazan `*` y cualquier comodín, `null`, esquemas distintos de http/https, rutas, barras finales,
+    credenciales, mayúsculas en el host y puertos por defecto explícitos.
+  - Fuera de local/testing: solo `https` y nunca loopback.
+  - Vacía o ausente: **sin CORS** (no se registra el middleware; el navegador bloquea toda lectura de otro origen).
+  - Local (`.env.example`): `http://localhost:8080`, el puerto fijo de `flutter run -d chrome --web-port 8080`.
+- **Mecanismo:** `app.enableCors` de NestJS (paquete `cors` 2.8.6, ya dependencia de `@nestjs/platform-express`; no se
+  añadió ninguna dependencia) con `origin` como lista de cadenas: comparación exacta, nunca se refleja un origen ajeno.
+  - Métodos: `GET` (lo único que usa hoy el contrato `client`).
+  - Encabezados permitidos: `X-Correlation-Id`, `X-App-Version`. Expuesto: `X-Correlation-Id`.
+  - `credentials: false` (sin `Access-Control-Allow-Credentials`; no hay requisito aprobado), `Max-Age` 600 s.
+- **Comportamiento:**
+  - origen permitido → `Access-Control-Allow-Origin` con ese origen y `Vary: Origin`, también en errores problem+json;
+  - origen no permitido → nunca `Access-Control-Allow-Origin`: el navegador no supera el preflight ni deja leer la
+    respuesta. El preflight responde 204 sin permiso (comportamiento estándar de `cors`), no 403;
+  - método o encabezado fuera de la lista → el preflight solo anuncia los permitidos y el navegador rechaza;
+  - sin `Origin` (apps móviles, servidores) → sin cabeceras CORS, respuesta normal.
+- **Límites:** CORS es una protección del navegador, no un control de acceso: un cliente que no es navegador ignora
+  estas cabeceras. La autenticación y autorización siguen siendo responsabilidad de 002. Los preflight los atiende el
+  middleware `cors` antes del logging HTTP de Nest, así que no aparecen en los logs de solicitudes.
+- **Cuando lleguen operaciones `client` con otros métodos o encabezados** (p. ej. `POST` con `Idempotency-Key`), la
+  lista de `backend/src/common/http/cors.ts` se amplía junto con el contrato.
+- **Evidencia:** pruebas unitarias de configuración (orígenes válidos e inválidos por entorno) y `cors.spec.ts` sobre
+  la app real (origen permitido y no permitido, preflight válido y no permitido, encabezados personalizados, error 404
+  problem+json, sin `Origin`, sin lista). En Chrome real (headless, `admin_web` release servido en
+  `http://localhost:8080`, backend local con la lista):
+  - "Compatible con Kuota Core / API 1.0.0", versión 0.1.0+1, y el `GET /v1/meta/compatibility` registrado en el log
+    del backend con el `X-Correlation-Id` generado por la app;
+  - con `MIN_SUPPORTED_ADMIN=0.2.0`: "Versión no soportada: actualiza la app / Versión mínima soportada: 0.2.0";
+  - la misma app servida desde `http://localhost:8081` (no permitido): "Kuota Core no disponible / network-error", y
+    ningún `GET` llega al backend.
+
+#### iOS: BLOQUEADO por espacio en disco
+
+- **Verificado:** Xcode 26.3 (17C529) activo; SDK iOS 26.2 y simulador iOS 26.2 presentes; único runtime instalado iOS
+  18.6 (8,2 GB); macOS 26.1 en arm64; Flutter 3.50.1.
+- **Bloqueo demostrado:** `xcodebuild -showdestinations` del `Runner` no ofrece ningún destino: "iOS 26.2 is not
+  installed. Please download and install the platform from Xcode > Settings > Components" (también para "Any iOS
+  Device"). Xcode 26.3 no usa los simuladores iOS 18.6 sin la plataforma 26.2. `flutter doctor`: "iOS 26.2 Simulator
+  not installed".
+- **Disponibilidad y tamaño** (índice oficial de Apple `index2.dvtdownloadableindex`): iOS 26.2 (23C54), variante
+  arm64, **8 388 683 973 bytes (7,81 GiB)**; universal, 9,75 GiB.
+- **Espacio:** 10,30 GiB libres de 460 GiB (98 % usado). La instalación dejaría unos 2,5 GiB, o menos si la
+  importación copia la imagen; con Docker y los builds de Android en el mismo volumen, el riesgo de agotar el disco a
+  mitad de la instalación es alto. **No se instaló.**
+- **Para desbloquear (decisión del responsable):** liberar al menos unos 20 GiB (por ejemplo, eliminar el runtime iOS
+  18.6 si no se usa, o la caché de builds de Docker) y ejecutar
+  `xcodebuild -downloadPlatform iOS -buildVersion 26.2 -architectureVariant arm64`. Después: `flutter doctor`, destinos,
+  build y arranque de `collector_mobile` y `client_mobile` en el simulador (comandos en `flutter/README.md`).
+
+#### Testcontainers: 409 "container is running" en el desmontaje
+
+- **Causa (logs de Docker Desktop, `dockerd.log`, contenedor `3be932d8b85c` del fallo de las 11:50):**
+  - 17:50:26.8 Z `docker stop -t 0`: "Container failed to exit within 0s of signal 2 - using the force" (SIGKILL);
+  - 17:50:36.9 Z "Container failed to exit within 10s of kill - trying direct SIGKILL";
+  - 17:50:50.3 Z el shim se desconecta: el proceso terminó unos **23 s** después del stop;
+  - en la misma ventana, la VM no podía crear procesos ("unable to create new parent process") y los health checks
+    caducaban: la VM de Docker estaba saturada justo después de los builds de Android.
+  - `container.stop()` de testcontainers 12.2.2 envía `stop` con `t=0` y, en cuanto Docker responde, `rm` **sin
+    force**. Docker respondió al `stop` antes de que el proceso terminara (sus esperas internas tras el SIGKILL están
+    acotadas) y el `rm` llegó con el contenedor aún en marcha: 409.
+- **No es** concurrencia entre suites (cada archivo tiene su propio contenedor y un único `stop`), ni Ryuk (actúa al
+  terminar el proceso), ni un timeout de Vitest.
+- **Corrección** (`backend/test/support/postgres.ts`): `stop` sin `remove` → `wait --condition not-running` (límite 120
+  s; si se agota, error explícito con el estado) → `rm` con volúmenes. Sin `force`, sin reintentos y sin silenciar
+  errores. `TestDatabase.stop()` sigue siendo idempotente, y si fallan a la vez el arranque y el desmontaje se lanza un
+  `AggregateError` que conserva el error original.
+- **Pruebas:** `test/unit/support/container-teardown.spec.ts` fija el orden con dobles que responden 409 si el `rm`
+  llega antes de la salida (salida tardía, salida que no llega y fallo del stop).
+- **Reproducción bajo carga controlada:** 6 Postgres en paralelo, 1,5 M filas en cada uno, los 8 núcleos del equipo
+  saturados y `stop` concurrente: 24 de 24 desmontajes correctos con el código anterior. La carga de CPU sola no basta;
+  hace falta la falta de memoria de la VM que provocan los builds de Android. No se forzó para no arriesgar los
+  contenedores y volúmenes persistentes del equipo. La regresión de este bloque repite la secuencia real (job
+  `flutter` con builds y, a continuación, `backend`).
+- **Otro síntoma ya observado** (timeout de 30 s al publicar el puerto en el arranque): misma saturación, pero en el
+  arranque; no se cambió.
+
+#### Conteo de pruebas Flutter
+
+- Según el runner (reporter JSON de `dart test`/`flutter test`, como los ejecuta `melos run test`): `financial_domain`
+  4, `shared_core` 16, `api_client` 25 (con `dart test`); `design_system` 5, `admin_web` 7, `collector_mobile` 7,
+  `client_mobile` 7 (con `flutter test`); `tool/` 15 (`dart test tool/test`). **Total: 86**, 0 omitidas, 0 duplicadas.
+  Cada miembro se ejecuta en un único paso de Melos y ningún otro job ejecuta pruebas Flutter (`contracts` solo
+  regenera el cliente). El "81" del informe anterior era un error de suma.
+- `shared_core` bajo `flutter test` (no es como lo ejecuta CI) da 15 + 1 error: su prueba de `--define` lanza
+  `Platform.resolvedExecutable run …`, que bajo `flutter test` no es `dart`. Documentado en `flutter/README.md`.
+
+#### T086
+
+- `scripts/ci/check-single-lockfile.sh`, en el job `flutter` con su autoprueba: un solo `flutter/pubspec.lock`
+  versionado, todos los miembros con `resolution: workspace` y ningún `pubspec.yaml` de apps/packages fuera de
+  `workspace:`. Las copias defectuosas de referencia (lock en un paquete o en una app, sin lock en la raíz, miembro sin
+  `resolution`, app fuera de `workspace:`, miembro inexistente) fallan.
+- `flutter/README.md` documenta los comandos de Android, iOS y Web. Los de iOS están **sin verificar** localmente.
+- **Checkpoint de US7 NO cumplido:** SC-008 exige iOS verificado localmente.
+
+#### Regresión local del bloque (2026-11-23)
+
+- Secuencia real del fallo original (`general` → `contracts` → `flutter` con builds → `backend`):
+  - `general`: 5/5 PASS.
+  - `contracts`: 5 PASS + oasdiff contra `main` **OMITIDO** (sin baseline; T049 abierta).
+  - `flutter`: 11 PASS + anti-float Dart **PENDIENTE** (sin código en `financial_domain`). Incluye lockfile único y
+    su autoprueba, 86 pruebas, osv-scanner, Web release de `admin_web` y APK debug de las dos apps móviles.
+  - `backend`: 18/18 PASS; 49/49 archivos, 675/675 pruebas (648 + 27 nuevas de CORS y desmontaje); cobertura 98,53 /
+    97,28 / 98,12 / 99,6; idempotencia 100 repeticiones; osv-scanner sobre `pnpm-lock.yaml`. **Sin el 409.**
+- Android 14 (emulador) con el backend con CORS activo: `collector_mobile` y `client_mobile` muestran "Compatible con
+  Kuota Core / API 1.0.0" (las apps nativas no envían `Origin`; CORS no les afecta).
+- Volúmenes `kuota_kuota-pgdata` y `kuota-g6check_kuota-pgdata` intactos; ningún contenedor de Testcontainers residual.
+- iOS: BLOQUEADO (ver arriba). T052 sigue abierta: GitHub Actions no se ha ejecutado.

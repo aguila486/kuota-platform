@@ -23,6 +23,7 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 - Rutas relativas a la raíz del repositorio `kuota-platform/`
 - T093–T096 se añadieron tras `/speckit-analyze` (2026-11-22) y se ubican en su fase; no se renumeró para conservar las
   referencias existentes a T001–T092
+- T097 (CORS) se añadió el 2026-11-23 con la Aprobación 8 (hueco de especificación detectado al conectar `admin_web`)
 
 ---
 
@@ -250,7 +251,9 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 - [X] T083 [P] [US7] Crear el paquete `design_system` (tema claro/oscuro y variante `highContrastReceipt`) con prueba de widget del tema (US7-3), en `flutter/packages/design_system/`
 - [X] T084 [P] [US7] Crear `flutter/tool/check_deps.dart` y su prueba con un `pubspec` defectuoso de referencia. Debe fallar si una app depende de otra app, si un paquete depende de una app, o si `financial_domain` o `shared_core` dependen de `flutter` (US7-4, FR-033). Archivos: `flutter/tool/check_deps.dart` y `flutter/tool/test/check_deps_test.dart`
 - [X] T085 [US7] Crear las apps `admin_web` (Flutter Web **provisional**, D-ARC-03 pendiente: solo scaffolding, entorno, arranque, build Web e integración; sin pantallas administrativas), `collector_mobile` y `client_mobile` (Android e iOS). Cada una muestra una pantalla de inicio con nombre, entorno, versión y el resultado de `getCompatibility` vía `api_client`, usa un `ProviderScope` Riverpod mínimo, configs `flutter/config/{local,testing,staging,production}.json` y una prueba de widget (US7-2, FR-032). Añade las 3 apps a `workspace:` del `flutter/pubspec.yaml` raíz (cierra la etapa B de T080). En `flutter/apps/*/`
-- [ ] T086 [US7] Verificar la resolución única del workspace: un solo `flutter/pubspec.lock` y ningún `pubspec.lock` por paquete (US7-1). Documentar los comandos móviles en `flutter/README.md`
+- [X] T086 [US7] Verificar la resolución única del workspace: un solo `flutter/pubspec.lock` y ningún `pubspec.lock` por paquete (US7-1). Documentar los comandos móviles en `flutter/README.md`
+
+- [X] T097 [US7] Política CORS de Kuota Core para Kuota Admin en Flutter Web (añadida el 2026-11-23, Aprobación 8): `KUOTA_CORS_ALLOWED_ORIGINS` con orígenes exactos y canónicos por entorno (sin comodines, `null`, rutas ni barras finales; `https` y sin loopback fuera de local/testing; vacío = sin CORS), solo los métodos y encabezados del contrato `client`, sin credenciales; pruebas de origen permitido y no permitido, preflight válido y no permitido, encabezados personalizados y errores, y comprobación desde Chrome real. En `backend/src/common/http/cors.ts`, `backend/src/common/config/` y `backend/test/{unit,integration}/`
 
 **Checkpoint**: quickstart.md §7 pasa y se cumple SC-008 (iOS verificado localmente).
 
@@ -281,7 +284,7 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
   - La parte Dart (T059, T063) depende de la etapa A de T080 y de T082.
 - **US5 (P2)**: depende de Foundational (T022–T024). T070 depende de la etapa A de T080 y añade `api_client` a `workspace:`. T067 depende de los controladores existentes (T028, T029, T042); no requiere US6.
 - **US6 (P2)**: depende de US2 (dev-probe, `withTenant`, `IdempotencyKeyPipe`). T095 depende de T066 (helper de contrato).
-- **US7 (P3)**: depende de Foundational y de D-ENV-01 (aprobada). T085 depende de T070 (`api_client`).
+- **US7 (P3)**: depende de Foundational y de D-ENV-01 (aprobada). T085 depende de T070 (`api_client`). T097 depende de T025 (bootstrap) y T016 (configuración).
 - **Polish**: depende de todas las historias.
 
 ### Grafo de historias

@@ -114,7 +114,7 @@ describe('operaciones del repositorio (T041)', () => {
       expect(await repo.findById(ofA.id)).toBeNull();
       expect((await repo.list(100, null)).items).toEqual([]);
       expect(await repo.updateLabel(ofA.id, 'hack', 1)).toEqual({ kind: 'not-found' });
-      expect(await repo.delete(ofA.id)).toBe(false);
+      expect(await repo.delete(ofA.id)).toBeNull();
     });
     const still = await request(A, () => repo.findById(ofA.id));
     expect(still).toMatchObject({ label: 'de-A', version: 1 });

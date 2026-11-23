@@ -16,8 +16,12 @@ import { TenantContextModule } from '../../src/common/tenant-context/tenant-cont
 import {
   TenantContextMismatchError,
   TenantPrismaService,
+  type TenantTransaction,
+  TenantTransactionClosedError,
   TenantTransactionRequiredError,
 } from '../../src/common/tenant-context/tenant-prisma.service.js';
+import { DevProbeService } from '../../src/modules/dev-probe/application/dev-probe.service.js';
+import { PrismaDevProbeRepository } from '../../src/modules/dev-probe/infrastructure/prisma-dev-probe.repository.js';
 import { validEnv } from '../support/env.js';
 import { startTestDatabase, type TestDatabase } from '../support/postgres.js';
 import { asTenantSql, rejection, sqlState } from '../support/tenant-data.js';
@@ -240,12 +244,143 @@ describe('eventos de dev-probe (T073, US6-4)', () => {
     expect((await create(tenant, { label: 'base' }, 'dev:ana', key)).status).toBe(201); // reproducción
     expect(await countAll('audit_events', tenant)).toBe(baseline);
   });
+});
 
-  it('PENDIENTE contractual: DELETE aún no se audita (el contrato no admite el 400 de la política de actor)', async () => {
+describe('DELETE auditado (T073, T078; contrato con 400 desde 2026-11-23)', () => {
+  const rowExists = async (id: string) =>
+    (await admin.query('SELECT 1 FROM kuota.dev_probe_items WHERE id = $1', [id])).rowCount === 1;
+  const actionsOf = async (id: string) => (await eventsOf(id)).map((e) => e['action']);
+
+  it('DELETE propio con actor → 204 sin cuerpo; la fila desaparece y queda dev_probe.deleted con label y version del registro borrado', async () => {
     const tenant = randomUUID();
-    const id = String((await create(tenant, { label: 'borrado' })).body['id']);
+    const id = String((await create(tenant, { label: 'a-borrar' })).body['id']);
+    expect((await call('PATCH', `${PATH}/${id}`, { tenant, body: { label: 'a-borrar-v2', version: 1 } })).status).toBe(
+      200,
+    );
+    const res = await call('DELETE', `${PATH}/${id}`, { tenant, actor: 'dev:carla' });
+    expect(res.status).toBe(204);
+    expect(res.text).toBe('');
+    expect(await rowExists(id)).toBe(false);
+    const deleted = (await eventsOf(id)).filter((e) => e['action'] === 'dev_probe.deleted');
+    expect(deleted).toHaveLength(1);
+    expect(deleted[0]).toMatchObject({
+      tenant_id: tenant,
+      actor_id: 'dev:carla',
+      actor_type: 'DEV',
+      actor_role: null,
+      entity_type: 'dev_probe',
+      entity_id: id,
+      changes: { label: 'a-borrar-v2', version: 2 },
+      correlation_id: res.correlation,
+      idempotency_key: null,
+    });
+    expect(Object.keys(deleted[0]!['changes'] as Json).sort()).toEqual(['label', 'version']);
+  });
+
+  it('sin actor o con actor malformado → 400 validation-error (problem+json); la fila y los eventos no cambian', async () => {
+    const tenant = randomUUID();
+    const id = String((await create(tenant, { label: 'protegido' })).body['id']);
+    for (const actor of [null, 'actor inválido!', 'x'.repeat(65)]) {
+      const res = await call('DELETE', `${PATH}/${id}`, { tenant, actor });
+      expect(res.status, String(actor)).toBe(400);
+      expect(res.body['code']).toBe('validation-error');
+      expect(res.body['errors']).toEqual([{ field: 'X-Kuota-Dev-Actor', message: expect.any(String) as unknown }]);
+    }
+    expect(await rowExists(id)).toBe(true);
+    expect(await actionsOf(id)).toEqual(['dev_probe.created']);
+  });
+
+  it('actor válido de otro tenant → 404 sin revelar el recurso; sin borrado ni evento en ningún tenant', async () => {
+    const [A, B] = [randomUUID(), randomUUID()];
+    const id = String((await create(A, { label: 'ajeno-delete' })).body['id']);
+    const res = await call('DELETE', `${PATH}/${id}`, { tenant: B, actor: 'dev:intruso' });
+    expect(res.status).toBe(404);
+    expect(res.body['code']).toBe('not-found');
+    expect(res.text).not.toContain('ajeno-delete');
+    expect(await rowExists(id)).toBe(true);
+    expect(await countAll('audit_events', B)).toBe(0);
+    expect(await actionsOf(id)).toEqual(['dev_probe.created']);
+  });
+
+  it('recurso inexistente o ya borrado (reintento) → 404 sin evento', async () => {
+    const tenant = randomUUID();
+    expect((await call('DELETE', `${PATH}/${randomUUID()}`, { tenant })).status).toBe(404);
+    const id = String((await create(tenant, { label: 'dos-veces' })).body['id']);
     expect((await call('DELETE', `${PATH}/${id}`, { tenant })).status).toBe(204);
-    expect((await eventsOf(id)).map((e) => e['action'])).toEqual(['dev_probe.created']);
+    expect((await call('DELETE', `${PATH}/${id}`, { tenant })).status).toBe(404);
+    expect(await actionsOf(id)).toEqual(['dev_probe.created', 'dev_probe.deleted']);
+    expect(await countAll('audit_events', tenant)).toBe(2);
+  });
+
+  it('fallo de auditoría → 500 sin detalles internos; el DELETE se revierte; tras quitar el fallo, el reintento funciona', async () => {
+    const tenant = randomUUID();
+    const id = String((await create(tenant, { label: 'audit-delete-falla' })).body['id']);
+    await admin.query(
+      "ALTER TABLE kuota.audit_events ADD CONSTRAINT t078_falla CHECK (action <> 'dev_probe.deleted') NOT VALID",
+    );
+    try {
+      const res = await call('DELETE', `${PATH}/${id}`, { tenant });
+      expect(res.status).toBe(500);
+      expect(res.text).not.toMatch(/t078_falla|audit_events|constraint|prisma/i);
+      expect(await rowExists(id)).toBe(true);
+      expect(await actionsOf(id)).toEqual(['dev_probe.created']);
+    } finally {
+      await admin.query('ALTER TABLE kuota.audit_events DROP CONSTRAINT t078_falla');
+    }
+    expect((await call('DELETE', `${PATH}/${id}`, { tenant })).status).toBe(204);
+    expect(await rowExists(id)).toBe(false);
+    expect(await actionsOf(id)).toEqual(['dev_probe.created', 'dev_probe.deleted']);
+  });
+
+  it('fallo de PostgreSQL en el DELETE → 500; ni borrado ni evento', async () => {
+    const tenant = randomUUID();
+    const id = String((await create(tenant, { label: 'no-se-borra' })).body['id']);
+    await admin.query(`CREATE FUNCTION kuota.t078_reject() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog AS $$
+      BEGIN RAISE EXCEPTION 'borrado rechazado (prueba)'; END $$`);
+    await admin.query(
+      "CREATE TRIGGER t078_reject BEFORE DELETE ON kuota.dev_probe_items FOR EACH ROW WHEN (OLD.label = 'no-se-borra') EXECUTE FUNCTION kuota.t078_reject()",
+    );
+    try {
+      const res = await call('DELETE', `${PATH}/${id}`, { tenant });
+      expect(res.status).toBe(500);
+      expect(res.text).not.toMatch(/rechazado|trigger|prisma/i);
+    } finally {
+      await admin.query('DROP TRIGGER t078_reject ON kuota.dev_probe_items');
+      await admin.query('DROP FUNCTION kuota.t078_reject()');
+    }
+    expect(await rowExists(id)).toBe(true);
+    expect(await actionsOf(id)).toEqual(['dev_probe.created']);
+  });
+
+  it('concurrencia: 2 tenants borran a la vez y 5 DELETE simultáneos del mismo registro → exactamente 1 borrado y 1 evento', async () => {
+    const [A, B] = [randomUUID(), randomUUID()];
+    const ids = await Promise.all(
+      Array.from({ length: 10 }, async (_, i) => {
+        const tenant = i % 2 === 0 ? A : B;
+        return { tenant, id: String((await create(tenant, { label: `conc-del-${i}` })).body['id']) };
+      }),
+    );
+    const results = await Promise.all(
+      ids.map(({ tenant, id }) => call('DELETE', `${PATH}/${id}`, { tenant, actor: `dev:${tenant.slice(0, 4)}` })),
+    );
+    expect(results.every((r) => r.status === 204)).toBe(true);
+    for (const { tenant, id } of ids) {
+      const deleted = (await eventsOf(id)).filter((e) => e['action'] === 'dev_probe.deleted');
+      expect(deleted).toHaveLength(1);
+      expect(deleted[0]).toMatchObject({ tenant_id: tenant, actor_id: `dev:${tenant.slice(0, 4)}` });
+    }
+    const target = String((await create(A, { label: 'carrera' })).body['id']);
+    const race = await Promise.all(Array.from({ length: 5 }, () => call('DELETE', `${PATH}/${target}`, { tenant: A })));
+    expect(race.filter((r) => r.status === 204)).toHaveLength(1);
+    expect(race.filter((r) => r.status === 404)).toHaveLength(4);
+    expect((await actionsOf(target)).filter((a) => a === 'dev_probe.deleted')).toHaveLength(1);
+  }, 60_000);
+
+  it('regresión: create y update siguen auditados igual', async () => {
+    const tenant = randomUUID();
+    const id = String((await create(tenant, { label: 'regresion' })).body['id']);
+    await call('PATCH', `${PATH}/${id}`, { tenant, body: { label: 'regresion-2', version: 1 } });
+    expect(await actionsOf(id)).toEqual(['dev_probe.created', 'dev_probe.updated']);
   });
 });
 
@@ -539,5 +674,102 @@ describe('AuditService a nivel de servicio (T077)', () => {
       actor_id: 'dev:svc',
       origin: 'ip-hash:test',
     });
+  });
+});
+
+describe('DELETE a nivel de servicio: actor cambiado y cliente retenido (T078, R3)', () => {
+  let moduleRef: TestingModule;
+  let pool: Pool;
+  let cls: ClsService;
+  let tenantPrisma: TenantPrismaService;
+  let service: DevProbeService;
+  let repo: PrismaDevProbeRepository;
+
+  beforeAll(async () => {
+    pool = new Pool({ connectionString: db.appUrl, max: 2 });
+    const config = loadConfig(validEnv({ DATABASE_URL_APP: db.appUrl, LOG_LEVEL: 'silent' }));
+    moduleRef = await Test.createTestingModule({
+      imports: [ClsModule.forRoot({ global: true }), ConfigModule.forConfig(config), TenantContextModule],
+    })
+      .overrideProvider(TenantPrismaService)
+      .useFactory({
+        factory: (c: AppConfig, ctx: TenantContext) => new TenantPrismaService(c, ctx, { pool }),
+        inject: [APP_CONFIG, TenantContext],
+      })
+      .compile();
+    cls = moduleRef.get(ClsService);
+    tenantPrisma = moduleRef.get(TenantPrismaService);
+    repo = new PrismaDevProbeRepository(tenantPrisma);
+    service = new DevProbeService(
+      repo,
+      tenantPrisma,
+      new AuditService(tenantPrisma, moduleRef.get(TenantContext), cls),
+    );
+  });
+  afterAll(async () => {
+    await moduleRef?.close();
+    await pool?.end();
+  });
+
+  const operation = <T>(tenant: string, fn: () => Promise<T>) =>
+    cls.run(() => {
+      establishTenantContext(cls, { tenantId: tenant, actorId: 'dev:svc', actorType: 'DEV' });
+      cls.set(CLS_CORRELATION_ID, randomUUID());
+      cls.set(CLS_AUDIT_ORIGIN, 'ip-hash:test');
+      return fn();
+    });
+  const rowExists = async (id: string) =>
+    (await admin.query('SELECT 1 FROM kuota.dev_probe_items WHERE id = $1', [id])).rowCount === 1;
+
+  it('cambiar el actor durante la transacción del DELETE → TenantContextMismatchError; el borrado se revierte', async () => {
+    const tenant = randomUUID();
+    const item = await operation(tenant, () => service.createDevProbeItem('actor-cambiado', null));
+    const error = await rejection(
+      operation(tenant, () =>
+        tenantPrisma.withTenant(async () => {
+          await cls.run({ ifNested: 'inherit' }, async () => {
+            cls.set(CLS_ACTOR_ID, 'dev:suplantado');
+            await service.deleteDevProbeItem(item.id);
+          });
+        }),
+      ),
+    );
+    expect(error).toBeInstanceOf(TenantContextMismatchError);
+    expect(await rowExists(item.id)).toBe(true);
+    expect((await events('entity_id = $1', [item.id])).map((e) => e['action'])).toEqual(['dev_probe.created']);
+  });
+
+  it('el cliente que usó el DELETE, retenido, no sirve después: rechazado sin borrar nada', async () => {
+    const tenant = randomUUID();
+    const [keep, victim] = await operation(tenant, async () => [
+      await service.createDevProbeItem('se-queda', null),
+      await service.createDevProbeItem('victima', null),
+    ]);
+    let retained: TenantTransaction | undefined;
+    await operation(tenant, () =>
+      tenantPrisma.withTenant(async (tx) => {
+        retained = tx;
+        await service.deleteDevProbeItem(victim.id);
+      }),
+    );
+    const misuse = await rejection(operation(tenant, () => retained!.dev_probe_items.deleteMany({})));
+    expect(misuse).toBeInstanceOf(TenantTransactionClosedError);
+    expect(await rowExists(keep.id)).toBe(true);
+    expect(await rowExists(victim.id)).toBe(false);
+  });
+
+  it('DELETE concurrente (P2025): si otra transacción borró la fila tras la comprobación, responde no-encontrado sin evento', async () => {
+    const tenant = randomUUID();
+    const item = await operation(tenant, () => service.createDevProbeItem('carrera-p2025', null));
+    const results = await Promise.allSettled(
+      Array.from({ length: 8 }, () => operation(tenant, () => service.deleteDevProbeItem(item.id))),
+    );
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    for (const r of results.filter((x) => x.status === 'rejected')) {
+      expect(r.reason).toMatchObject({ code: 'not-found' });
+    }
+    expect((await events('entity_id = $1', [item.id])).filter((e) => e['action'] === 'dev_probe.deleted')).toHaveLength(
+      1,
+    );
   });
 });

@@ -26,6 +26,6 @@ export abstract class DevProbeRepository {
   abstract findById(id: string): Promise<DevProbeItem | null>;
   abstract list(limit: number, afterId: string | null): Promise<DevProbePage>;
   abstract updateLabel(id: string, label: string, expectedVersion: number): Promise<UpdateOutcome>;
-  /** `true` si se eliminó; `false` si no existe en el tenant del contexto. */
-  abstract delete(id: string): Promise<boolean>;
+  /** Registro eliminado (valores en el momento del borrado) o `null` si no existe en el tenant del contexto. */
+  abstract delete(id: string): Promise<DevProbeItem | null>;
 }

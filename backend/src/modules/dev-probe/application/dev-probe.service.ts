@@ -13,8 +13,8 @@ import { type DevProbePage, DevProbeRepository } from './dev-probe.repository.js
  * Crear y actualizar son UN caso de uso con UNA transacción (`withTenant`; ADR-0002 C2-1): la escritura de negocio y su
  * `audit_event` se confirman o revierten juntos (R-07). Si la auditoría falla, la escritura tampoco se confirma. Solo se
  * auditan operaciones confirmadas: un rechazo (validación, 404, 409) no genera eventos (spec.md, Auditable Events).
- * Eliminar NO se audita todavía: el contrato de `deleteDevProbeItem` no admite el 400 que exige la política de actor
- * (bloqueo contractual registrado en research.md, US6).
+ * Eliminar también es un caso de uso auditado (`dev_probe.deleted`, con `label` y `version` del registro borrado),
+ * tras la aprobación del 400 en el contrato de `deleteDevProbeItem` (cierre de US6, 2026-11-23).
  */
 @Injectable()
 export class DevProbeService {
@@ -76,7 +76,16 @@ export class DevProbeService {
     });
   }
 
-  async deleteDevProbeItem(id: string): Promise<void> {
-    if (!(await this.repository.delete(id))) throw new KuotaProblemError('not-found');
+  deleteDevProbeItem(id: string): Promise<void> {
+    return this.tenantPrisma.withTenant(async () => {
+      const deleted = await this.repository.delete(id);
+      if (!deleted) throw new KuotaProblemError('not-found');
+      await this.audit.record({
+        action: 'dev_probe.deleted',
+        entityType: 'dev_probe',
+        entityId: deleted.id,
+        changes: { label: deleted.label, version: deleted.version },
+      });
+    });
   }
 }

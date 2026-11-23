@@ -83,10 +83,18 @@ export class PrismaDevProbeRepository extends DevProbeRepository {
     });
   }
 
-  delete(id: string): Promise<boolean> {
+  delete(id: string): Promise<DevProbeItem | null> {
     return this.tenantPrisma.withTenant(async (tx) => {
-      const { count } = await tx.dev_probe_items.deleteMany({ where: { id } });
-      return count === 1;
+      // `deleteManyAndReturn` no existe en Prisma 7.10.1. Se comprueba la existencia (RLS) y se borra con `delete`
+      // (DELETE … RETURNING), que devuelve los valores exactos borrados, en la misma transacción y sin SQL raw. Si otra
+      // transacción ya lo borró entre ambas sentencias, Prisma responde P2025 → «no existe».
+      if ((await tx.dev_probe_items.count({ where: { id } })) === 0) return null;
+      try {
+        return toDomain(await tx.dev_probe_items.delete({ where: { id } }));
+      } catch (error) {
+        if ((error as { code?: unknown }).code === 'P2025') return null;
+        throw error;
+      }
     });
   }
 }

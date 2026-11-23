@@ -70,11 +70,12 @@ export class DevProbeController {
   }
 
   /**
-   * `deleteDevProbeItem`: NO auditada todavía. La política de actor exige 400 sin actor, pero el contrato de esta
-   * operación no declara 400. Pendiente de decisión contractual (research.md, US6).
+   * `deleteDevProbeItem`: auditada (`dev_probe.deleted`); sin actor → 400 antes de escribir (contrato actualizado el
+   * 2026-11-23). No es idempotente por contrato (sin `Idempotency-Key`): un segundo DELETE responde 404 sin evento.
    */
   @Delete(':id')
   @HttpCode(204)
+  @Audited()
   async remove(@Param('id') id: string): Promise<void> {
     await this.service.deleteDevProbeItem(requireId(id));
   }

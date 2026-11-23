@@ -203,7 +203,7 @@ describe('casos de uso DevProbeService (T042)', () => {
   class FakeRepository extends DevProbeRepository {
     outcome: UpdateOutcome = { kind: 'not-found' };
     found: DevProbeItem | null = null;
-    deleted = false;
+    deleted: DevProbeItem | null = null;
     create = (item: { label: string }) => Promise.resolve(DevProbeItem.fromRecord(record({ label: item.label })));
     findById = () => Promise.resolve(this.found);
     list = (): Promise<DevProbePage> => Promise.resolve({ items: [], nextAfterId: null });
@@ -227,11 +227,11 @@ describe('casos de uso DevProbeService (T042)', () => {
     await expect(service.updateDevProbeItem(ID, 'x', 1)).resolves.toBe(item);
     repo.found = item;
     await expect(service.getDevProbeItem(ID)).resolves.toBe(item);
-    repo.deleted = true;
+    repo.deleted = item;
     await expect(service.deleteDevProbeItem(ID)).resolves.toBeUndefined();
     await expect(service.createDevProbeItem('nuevo', null)).resolves.toMatchObject({ label: 'nuevo' });
     await expect(service.listDevProbeItems(10, null)).resolves.toEqual({ items: [], nextAfterId: null });
-    // Solo las escrituras confirmadas se auditan (aquí: el update y el create exitosos), con la lista permitida.
+    // Solo las escrituras confirmadas se auditan (update, delete y create exitosos), con la lista permitida.
     expect(recorded).toEqual([
       {
         action: 'dev_probe.updated',
@@ -239,6 +239,7 @@ describe('casos de uso DevProbeService (T042)', () => {
         entityId: ID,
         changes: { label: { before: 'antes', after: 'ok' }, version: { before: 1, after: 1 } },
       },
+      { action: 'dev_probe.deleted', entityType: 'dev_probe', entityId: ID, changes: { label: 'ok', version: 1 } },
       {
         action: 'dev_probe.created',
         entityType: 'dev_probe',

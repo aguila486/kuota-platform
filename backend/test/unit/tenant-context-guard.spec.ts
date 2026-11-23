@@ -116,6 +116,42 @@ describe('P2 — protección del contexto de tenant (ESLint)', () => {
     });
   }
 
+  // R3 (P2): retener el cliente transaccional más allá de su operación.
+  const TX = 'type TenantTransaction = { readonly id: string };\n';
+  const RETAINED_TX: Record<string, string> = {
+    'campo de clase': `${TX}export class Repo {\n  private tx?: TenantTransaction;\n}\n`,
+    'campo estático (singleton)': `${TX}export class Holder {\n  static current: TenantTransaction | undefined;\n}\n`,
+    'propiedad de parámetro del constructor': `${TX}export class Repo {\n  constructor(private readonly tx: TenantTransaction) {}\n}\n`,
+    'variable de módulo': `${TX}let current: TenantTransaction | undefined;\nexport const get = () => current;\n`,
+    'variable de módulo exportada': `${TX}export let current: TenantTransaction | null = null;\n`,
+    'colección en un campo': `${TX}export class Cache {\n  readonly all: Map<string, TenantTransaction> = new Map();\n}\n`,
+  };
+  for (const [name, code] of Object.entries(RETAINED_TX)) {
+    it(`R3: rechaza retener TenantTransaction (${name})`, async () => {
+      expect(await ruleViolations(code, BUSINESS_FILE)).toEqual(['no-restricted-syntax']);
+      expect(await ruleViolations(code, TENANT_CONTEXT_FILE)).toEqual([]);
+    });
+  }
+
+  it('R3: permite TenantTransaction como parámetro, variable local o tipo de callback', async () => {
+    const code =
+      `${TX}export async function find(tx: TenantTransaction): Promise<string> {\n  const local: TenantTransaction = tx;\n  return local.id;\n}\n` +
+      'export class Uow {\n  private readonly run?: (tx: TenantTransaction) => Promise<void>;\n}\n' +
+      'export const handler = (tx: TenantTransaction): string => tx.id;\n';
+    expect(await ruleViolations(code, BUSINESS_FILE)).toEqual([]);
+  });
+
+  const RETAINED_TX_GAPS: Record<string, string> = {
+    'asignación a un campo sin anotación de tipo': `${TX}export class Repo {\n  private tx: any;\n  use(tx: TenantTransaction) {\n    this.tx = tx;\n  }\n}\n`,
+    'alias del tipo': `${TX}type Tx = TenantTransaction;\nexport class Repo {\n  private tx?: Tx;\n}\n`,
+    'cierre que captura el cliente': `${TX}export let later: () => unknown;\nexport function keep(tx: TenantTransaction) {\n  later = () => tx.id;\n}\n`,
+  };
+  for (const [name, code] of Object.entries(RETAINED_TX_GAPS)) {
+    it(`LÍMITE conocido R3 (no detectado por lint; lo cubre el control en tiempo de ejecución): ${name}`, async () => {
+      expect(await ruleViolations(code, BUSINESS_FILE)).toEqual([]);
+    });
+  }
+
   it('permite SQL parametrizado normal en un módulo de negocio', async () => {
     const code =
       'declare const tx: any; declare const id: string;\ntx.$queryRaw`SELECT id, label FROM kuota.dev_probe_items WHERE id = ${id}`;\n';

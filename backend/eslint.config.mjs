@@ -30,7 +30,16 @@ const ESTABLISH_CONTEXT_PATTERN = {
 const DYNAMIC_SQL_MESSAGE =
   'SQL dinámico prohibido fuera de src/common/tenant-context: usa $queryRaw/$executeRaw con plantilla parametrizada (ADR-0004, P2).';
 
-// Restricciones de sintaxis de seguridad (P2 + T038). Se reutilizan en los bloques que redefinen no-restricted-syntax:
+// R3 (P2): el cliente transaccional no se retiene más allá de su operación. Se detectan, por su ANOTACIÓN de tipo, los
+// campos de clase (incluidas las propiedades de parámetro del constructor) y las variables de módulo `TenantTransaction`.
+// Limitación: no detecta campos sin anotación (`this.x = tx`), alias del tipo, colecciones de `any` ni cierres; el
+// control efectivo es el de tiempo de ejecución de withTenant (propiedad por operación).
+const RETAINED_TX_MESSAGE =
+  'No retengas el cliente transaccional (TenantTransaction) en campos ni variables de módulo: recíbelo en el callback de withTenant o pídelo con tenantPrisma.transaction() en cada uso. R3, ADR-0004 P2.';
+const TX_TYPE = "TSTypeReference[typeName.name='TenantTransaction']:not(TSFunctionType TSTypeReference)";
+const MODULE_VARIABLE = 'VariableDeclaration > VariableDeclarator > Identifier > TSTypeAnnotation';
+
+// Restricciones de sintaxis de seguridad (P2 + T038 + R3). Se reutilizan en los bloques que redefinen no-restricted-syntax:
 // ESLint no combina las listas de una misma regla entre bloques, las reemplaza.
 const SECURITY_RESTRICTED_SYNTAX = [
   {
@@ -48,6 +57,10 @@ const SECURITY_RESTRICTED_SYNTAX = [
     message: DYNAMIC_SQL_MESSAGE,
   },
   { selector: "MemberExpression[object.name='Prisma'][property.name='raw']", message: DYNAMIC_SQL_MESSAGE },
+  { selector: `PropertyDefinition > TSTypeAnnotation ${TX_TYPE}`, message: RETAINED_TX_MESSAGE },
+  { selector: `TSParameterProperty ${TX_TYPE}`, message: RETAINED_TX_MESSAGE },
+  { selector: `Program > ${MODULE_VARIABLE} ${TX_TYPE}`, message: RETAINED_TX_MESSAGE },
+  { selector: `Program > ExportNamedDeclaration > ${MODULE_VARIABLE} ${TX_TYPE}`, message: RETAINED_TX_MESSAGE },
 ];
 
 // Regla anti punto flotante (T064; R-10; Constitución IV; ADR-0007) en src/common/money/** y src/**/domain/**: prohíbe el

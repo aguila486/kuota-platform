@@ -18,6 +18,8 @@ import {
   TenantContextTamperedError,
   TenantPrismaService,
   type TenantTransaction,
+  TenantTransactionClosedError,
+  TenantTransactionOwnershipError,
   TenantTransactionRequiredError,
 } from '../../src/common/tenant-context/tenant-prisma.service.js';
 import { validEnv } from '../support/env.js';
@@ -72,9 +74,8 @@ beforeAll(async () => {
   })
     .overrideProvider(TenantPrismaService)
     .useFactory({
-      factory: (c: AppConfig, ctx: TenantContext, service: ClsService) =>
-        new TenantPrismaService(c, ctx, service, { pool }),
-      inject: [APP_CONFIG, TenantContext, ClsService],
+      factory: (c: AppConfig, ctx: TenantContext) => new TenantPrismaService(c, ctx, { pool }),
+      inject: [APP_CONFIG, TenantContext],
     })
     .compile();
   tenantPrisma = moduleRef.get(TenantPrismaService);
@@ -344,38 +345,37 @@ describe('transaction() dentro de withTenant', () => {
   });
 });
 
-describe('RIESGO RESIDUAL P2 (documentado, no mitigado): referencia filtrada del cliente transaccional', () => {
-  it('si código defectuoso comparte el `tx` de A con otra operación mientras la transacción sigue abierta, esa operación lee como A', async () => {
-    await asTenant(TENANT_A, () =>
-      tenantPrisma.withTenant((tx) => tx.dev_probe_items.create({ data: { label: 'filtrado-A' } })),
-    );
+describe('R3 de P2 (mitigado): referencia filtrada del cliente transaccional', () => {
+  it('otra operación que use el `tx` retenido de A mientras sigue abierto se rechaza sin leer; A se revierte', async () => {
+    // Antes del hardening (1f6057e) B leía las filas de A. Detalle: tenant-transaction-ownership.spec.ts.
     let leaked: TenantTransaction | undefined;
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
-    const holder = asTenant(TENANT_A, () =>
-      tenantPrisma.withTenant(async (tx) => {
-        leaked = tx;
-        await gate;
-      }),
+    const holder = rejection(
+      asTenant(TENANT_A, () =>
+        tenantPrisma.withTenant(async (tx) => {
+          await tx.dev_probe_items.create({ data: { label: 'filtrado-A' } });
+          leaked = tx;
+          await gate;
+        }),
+      ),
     );
     while (!leaked) await new Promise((r) => setTimeout(r, 5));
-    const seenByB = await asTenant(TENANT_B, async () =>
-      (await leaked!.dev_probe_items.findMany()).map((r) => r.tenant_id),
-    );
+    const fromB = await rejection(asTenant(TENANT_B, () => leaked!.dev_probe_items.findMany()));
     release();
-    await holder;
-    // El cliente no consulta el contexto en cada llamada: hereda el app.tenant_id de su transacción.
-    expect(seenByB.length).toBeGreaterThan(0);
-    expect(seenByB.every((t) => t === TENANT_A)).toBe(true);
-    // Terminada la transacción, la referencia filtrada ya no sirve.
-    expect(await rejection(asTenant(TENANT_B, () => leaked!.dev_probe_items.findMany()))).toBeDefined();
+    expect(fromB).toBeInstanceOf(TenantTransactionOwnershipError);
+    expect(await holder).toBe(fromB);
+    expect(await labels(TENANT_A)).not.toContain('filtrado-A');
+    expect(await rejection(asTenant(TENANT_A, () => leaked!.dev_probe_items.findMany()))).toBeInstanceOf(
+      TenantTransactionClosedError,
+    );
   });
 });
 
 describe('concurrencia: 2 tenants intercalados sobre un pool pequeño (criterio S2)', () => {
   it('100 operaciones (50 por tenant) con pool de 3: 0 filas cruzadas y backends reutilizados entre tenants', async () => {
     const concurrentPool = new Pool({ connectionString: db.appUrl, max: 3 });
-    const service = new TenantPrismaService(config, moduleRef.get(TenantContext), cls, { pool: concurrentPool });
+    const service = new TenantPrismaService(config, moduleRef.get(TenantContext), { pool: concurrentPool });
     const before = { A: (await labels(TENANT_A)).length, B: (await labels(TENANT_B)).length };
     let seed = 20261122;
     const random = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;

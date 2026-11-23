@@ -102,8 +102,9 @@ jobs:
   flutter:
     name: flutter
     needs: changes
-    # Solo cuando exista flutter/ (US7). Mientras tanto queda saltado y `CI: resultado` lo informa como PENDIENTE.
-    # La preparación de FVM, Android y Web vive en scripts/ci/flutter.sh (T050, pendiente de US7).
+    # Solo cuando exista flutter/ (US7). Toda la lógica está en scripts/ci/flutter.sh (T050): análisis, formato,
+    # pruebas, check_deps, anti-float Dart, osv-scanner sobre pubspec.lock y builds de Android y Web (iOS fuera de CI).
+    # Android SDK y JDK 17 vienen en la imagen ubuntu-24.04 del runner.
     if: needs.changes.outputs.flutter == 'true' && needs.changes.outputs.flutter_present == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -111,6 +112,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc # scripts/ci/osv-gate.mjs (mismo gate de dependencias que el backend)
+      - name: Flutter exacto de flutter/.fvmrc (archivo oficial verificado por sha256)
+        run: scripts/ci/setup-flutter.sh
       - run: scripts/ci/flutter.sh
 
   result:

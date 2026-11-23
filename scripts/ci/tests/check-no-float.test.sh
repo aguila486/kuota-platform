@@ -39,6 +39,8 @@ expect "check-no-float.sh ts falla si la regla no rechaza el archivo defectuoso"
 echo "Anti-float Dart (scripts/ci/check-no-float-dart.sh)"
 expect "paquete inexistente → PENDIENTE (3), no PASS" 3 "$(dart_check "$TMP/no-existe")"
 mkdir -p "$TMP/vacio/src"
+mkdir -p "$TMP/solo-docs/src"; printf '/// double y num prohibidos (T063).\nlibrary;\n' >"$TMP/solo-docs/src/money.dart"
+expect "solo comentarios y library; (sin código) → PENDIENTE (3), no PASS" 3 "$(dart_check "$TMP/solo-docs")"
 expect "directorio sin archivos .dart → PENDIENTE (3), no PASS" 3 "$(dart_check "$TMP/vacio")"
 dart_case() { # nombre esperado contenido
   local dir="$TMP/dart-$RANDOM"

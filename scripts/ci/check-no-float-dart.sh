@@ -10,7 +10,8 @@
 # `analysis_options` estricto más esta regla y la revisión (alternativa evaluada: `custom_lint`, reevaluar en 004).
 #
 # Uso: scripts/ci/check-no-float-dart.sh [directorio]   (por defecto, flutter/packages/financial_domain/lib)
-# Salida: 0 sin infracciones; 1 con infracciones; 3 PENDIENTE si el directorio no existe o no tiene archivos .dart.
+# Salida: 0 sin infracciones; 1 con infracciones; 3 PENDIENTE si el directorio no existe o no tiene código Dart (solo
+# comentarios o `library;`).
 # Un 3 nunca es una aprobación.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -36,10 +37,14 @@ for my $line (split /\n/, $_, -1) {
   $n++;
   print "$n:$line\n" if $line =~ /(?<![\w\$])(double|num)(?![\w\$])|\.toDouble\s*\(/;
 }
+# ¿Queda código además de la directiva `library`? Un archivo solo con comentarios no cuenta como código verificado.
+(my $code = $_) =~ s/\blibrary(\s+[\w.]+)?\s*;//g;
+print "\@\@CODE\@\@\n" if $code =~ /\S/;
 PERL
 
 found=0
 checked=0
+code_files=0
 while IFS= read -r -d '' file; do
   checked=$((checked + 1))
   hits="$(LC_ALL=C perl -0777 -ne "$STRIP_AND_FIND" "$file")" || {
@@ -47,6 +52,8 @@ while IFS= read -r -d '' file; do
     found=$((found + 1))
     continue
   }
+  if grep -q '^@@CODE@@$' <<<"$hits"; then code_files=$((code_files + 1)); fi
+  hits="$(grep -v '^@@CODE@@$' <<<"$hits" || true)"
   if [ -n "$hits" ]; then
     while IFS= read -r hit; do
       echo "  ✗ ${file#"$ROOT"/}:${hit%%:*}: punto flotante prohibido en financial_domain (usa BigInt/Money; R-10)"
@@ -59,9 +66,10 @@ if [ "$found" -gt 0 ]; then
   echo "check-no-float-dart: $found infracción(es) en $checked archivo(s)"
   exit 1
 fi
-if [ "$checked" -eq 0 ]; then
-  echo "  PENDIENTE: ${DIR#"$ROOT"/} no contiene archivos .dart; no hay código que verificar (no es una aprobación)"
+if [ "$checked" -eq 0 ] || [ "$code_files" -eq 0 ]; then
+  echo "  PENDIENTE: ${DIR#"$ROOT"/} no contiene código Dart ($checked archivo(s), solo comentarios o \`library;\`);"
+  echo "  no hay código financiero que verificar (Money llega en T063). No es una aprobación."
   exit 3
 fi
-echo "check-no-float-dart: sin double/num en $checked archivo(s) Dart"
+echo "check-no-float-dart: sin double/num en $checked archivo(s) Dart ($code_files con código)"
 exit 0

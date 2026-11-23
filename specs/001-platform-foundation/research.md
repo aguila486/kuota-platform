@@ -607,3 +607,45 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
   respuesta.
 - **500:** ninguna operación lo declara, así que el matcher rechaza un 500 como "código no declarado". T067 cubre los
   códigos declarados.
+
+### G12 / US3: CI (2026-11-23)
+
+- **Herramientas** sin dependencia en el lockfile, en contenedores fijados por digest (`scripts/ci/lib.sh`; verificado
+  con `docker buildx imagetools inspect`): gitleaks 8.30.1, actionlint 1.7.12 (incluye shellcheck),
+  editorconfig-checker 4.0.2 y osv-scanner 2.7.1. No hay instalaciones globales salvo `corepack@0.36.0` en CI, igual
+  que pide `doctor` para Node 26.
+- **Acciones fijadas por SHA:**
+  - `actions/checkout` v7.0.1 (`3d3c42e…`);
+  - `actions/setup-node` v7.1.0 (`949feb2…`);
+  - `dorny/paths-filter` v4.0.3 (`ceb8a2b…`).
+- **Selección de jobs:** `dorny/paths-filter` solo aporta la lista de archivos. La decisión la toma
+  `scripts/ci/affected.sh` sobre `scripts/dev/path-filters.sh`, la fuente única (R-17, G6). Los filtros se ampliaron:
+  `infra/docker/`, `pnpm-workspace.yaml` y `package.json` disparan `backend`; `scripts/contracts/` y `package.json`
+  disparan `contracts`; CODEOWNERS dispara la suite completa.
+- **Check requerido único:** `CI: resultado` (`scripts/ci/ci-result.sh`). GitHub da por satisfecho un job requerido
+  que se salta, así que el agregador falla si un componente afectado no ejecutó su job. Flutter ausente se informa
+  como PENDIENTE.
+- **editorconfig-checker:**
+  - Se desactiva solo `IndentSize`: 377 falsos positivos en Markdown (listas con 3 espacios); en TypeScript la
+    sangría la controla Prettier.
+  - Se excluyen los archivos gestionados por Spec-Kit y Claude (`.claude/`, `.specify/` salvo `memory/`) y el
+    lockfile.
+  - Las demás reglas siguen activas: se corrigieron dos espacios finales reales en `schema.prisma`.
+- **OMITIDO y PENDIENTE nunca son PASS:**
+  - oasdiff contra `main` queda OMITIDO: no hay baseline. Se desbloquea al fusionar el contrato en `main`.
+  - El cliente Dart regenerado queda PENDIENTE (T069/T070).
+  - El job `flutter` (T050) espera a US7.
+  - `run-local.sh flutter` sale con 3.
+- **Hallazgo bloqueante de osv-scanner:** `effect@3.20.0` (transitiva de `prisma` → `@prisma/config`, CLI y carga de
+  configuración, fuera del camino de las peticiones) tiene GHSA-7589-6fvf-x4pw, ReDoS con CVSS 8.7; está corregida en
+  3.22.1. La Constitución II prohíbe fusionar dependencias con vulnerabilidades altas o críticas, y el gate falla
+  correctamente. Las moderadas (`glob@10.5.0` 6.3, `minimatch@9.0.9` 6.9) se informan sin bloquear. **Decisión
+  pendiente:** un override de pnpm a `effect@3.22.1` (verificando compatibilidad con Prisma 7.10.1) o una aceptación de
+  riesgo con plazo. No se cambió ninguna dependencia.
+- **Observación del contrato** (pruebas negativas): `DevProbeItem` y los demás esquemas de respuesta de dev-probe no
+  declaran `additionalProperties: false`. Una propiedad extra en una respuesta real cumple el contrato y no se
+  detecta. Endurecerlo es una decisión contractual pendiente.
+- **Pruebas negativas** (worktree temporal, sin cambios permanentes; el probador versionado es T087): se detectaron
+  TypeScript roto, contrato inválido, respuesta con tipo fuera de contrato, dependencia arquitectónica prohibida,
+  prueba unitaria fallida, política RLS ausente (migración que la borra, vía el gate de PostgreSQL), migración sin
+  prerrequisitos, cobertura bajo el umbral, suite obligatoria omitida o con `skip`, y job afectado saltado.

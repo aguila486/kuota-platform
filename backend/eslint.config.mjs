@@ -61,5 +61,16 @@ export default defineConfig(
       ],
     },
   },
+  {
+    // Excepción acotada (T028): la sonda técnica de conectividad de /health/ready puede importar `pg` y solo ejecuta
+    // `SELECT 1` con kuota_app_login. Prisma sigue prohibido y las reglas P2 de SQL siguen activas en este archivo.
+    files: ['src/common/database/pg-connectivity-probe.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [{ group: ['@prisma/*', '.prisma/*', '**/generated/prisma/**'], message: RAW_DB_CLIENT_MESSAGE }] },
+      ],
+    },
+  },
   prettier,
 );

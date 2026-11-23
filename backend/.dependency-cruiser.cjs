@@ -33,6 +33,13 @@ module.exports = {
       to: { path: '^src/modules/' },
     },
     {
+      name: 'sonda-bd-solo-health',
+      comment: 'La sonda técnica de PostgreSQL (T028) solo la usa el módulo health; no es una vía de acceso a datos.',
+      severity: 'error',
+      from: { path: '^src/', pathNot: ['^src/common/database/', '^src/modules/health/'] },
+      to: { path: '^src/common/database/' },
+    },
+    {
       name: 'sin-ciclos',
       severity: 'error',
       from: {},

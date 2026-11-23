@@ -6,6 +6,8 @@ import { ConfigModule } from './common/config/config.module.js';
 import { ProblemDetailsFilter } from './common/errors/problem.filter.js';
 import { LoggingModule } from './common/logging/logging.module.js';
 import { DEV_ONLY_MODULES } from './dev-modules.js';
+import { HealthModule } from './modules/health/health.module.js';
+import { MetaModule } from './modules/meta/meta.module.js';
 
 export interface AppModuleOptions {
   /** Módulos de desarrollo candidatos; por defecto `DEV_ONLY_MODULES`. Solo se registran si `devModulesEnabled`. */
@@ -23,7 +25,7 @@ export function devModulesEnabled(config: AppConfig): boolean {
 
 /**
  * Módulo raíz de Kuota Core (T025): configuración validada, logging estructurado con correlación, filtro global
- * problem+json y registro condicional de módulos de desarrollo.
+ * problem+json, sondas health, compatibilidad (US1) y registro condicional de módulos de desarrollo.
  */
 @Module({})
 export class AppModule {
@@ -34,6 +36,8 @@ export class AppModule {
       imports: [
         ConfigModule.forConfig(config),
         LoggingModule.forRoot(options.logStream ? { stream: options.logStream } : {}),
+        HealthModule,
+        MetaModule,
         ...devModules,
         ...(options.modules ?? []),
       ],

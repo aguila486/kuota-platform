@@ -59,6 +59,20 @@ describe('P2 — protección del contexto de tenant (ESLint)', () => {
     expect(await ruleViolations(code, TENANT_CONTEXT_FILE)).toEqual([]);
   });
 
+  it('T028: la sonda de conectividad puede importar pg, pero no Prisma ni fijar contexto', async () => {
+    const probe = 'src/common/database/pg-connectivity-probe.ts';
+    expect(await ruleViolations("import { Pool } from 'pg';\nexport const p = new Pool();\n", probe)).toEqual([]);
+    expect(await ruleViolations(FORBIDDEN['cliente Prisma crudo']!, probe)).not.toHaveLength(0);
+    expect(await ruleViolations(FORBIDDEN['set_config en SQL de plantilla']!, probe)).not.toHaveLength(0);
+    expect(await ruleViolations(FORBIDDEN['SET ROLE']!, probe)).not.toHaveLength(0);
+  });
+
+  it('T028: la excepción de pg no se extiende a otros archivos de common/database ni a health', async () => {
+    const code = "import { Pool } from 'pg';\nexport const p = new Pool();\n";
+    expect(await ruleViolations(code, 'src/common/database/otro.ts')).not.toHaveLength(0);
+    expect(await ruleViolations(code, 'src/modules/health/database.health.ts')).not.toHaveLength(0);
+  });
+
   it('permite SQL parametrizado normal en un módulo de negocio', async () => {
     const code =
       'declare const tx: any; declare const id: string;\ntx.$queryRaw`SELECT id, label FROM kuota.dev_probe_items WHERE id = ${id}`;\n';

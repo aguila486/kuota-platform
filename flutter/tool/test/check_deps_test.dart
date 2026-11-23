@@ -117,6 +117,83 @@ void main() {
     expect(violations, isEmpty);
   });
 
+  group('grafo de paquetes, HTTP y app_shell (T098; flutter-architecture.md §3)', () {
+    final withShell = {
+      ...clean,
+      'apps/admin_web': 'dependencies:\n  app_shell:\n    path: ../../packages/app_shell\n',
+      'apps/client_mobile': 'dependencies:\n  app_shell:\n    path: ../../packages/app_shell\n',
+      'packages/api_client': 'dependencies:\n  dio: any\n  shared_core:\n    path: ../shared_core\n',
+      'packages/app_shell':
+          'dependencies:\n  api_client: any\n  design_system: any\n  shared_core: any\ndev_dependencies:\n  dio: any\n',
+    };
+
+    test('el grafo permitido (app_shell → shared_core, api_client, design_system; dio solo en api_client) pasa', () {
+      expect(
+        checkWorkspace(
+          workspace(
+            withShell,
+            files: {
+              'packages/app_shell/lib/a.dart': "import 'package:api_client/api_client.dart';\n",
+              'packages/app_shell/test/t.dart': "import 'package:dio/dio.dart';\n",
+              'packages/api_client/lib/b.dart': "import 'package:dio/dio.dart';\n",
+            },
+          ),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('dependencias fuera del grafo → falla (por nombre, por path y por import)', () {
+      final violations = checkWorkspace(
+        workspace(
+          {
+            ...withShell,
+            'packages/design_system': 'dependencies:\n  api_client: any\n',
+            'packages/financial_domain': 'dependencies:\n  shell:\n    path: ../app_shell\n',
+          },
+          files: {'packages/shared_core/lib/x.dart': "import 'package:design_system/design_system.dart';\n"},
+        ),
+      );
+      final text = violations.map((v) => '$v').join('\n');
+      expect(violations.map((v) => v.rule).toSet(), {Rule.packageGraph});
+      expect(text, contains('packages/design_system: dependencies declara el paquete api_client'));
+      expect(text, contains('packages/financial_domain: dependencies declara el paquete app_shell'));
+      expect(text, contains('packages/shared_core: packages/shared_core/lib/x.dart importa el paquete design_system'));
+    });
+
+    test('HTTP fuera de api_client → falla (design_system, app_shell o una app; dependencies o lib/)', () {
+      final violations = checkWorkspace(
+        workspace(
+          {...withShell, 'packages/design_system': 'dependencies:\n  http: any\n'},
+          files: {
+            'packages/app_shell/lib/c.dart': "import 'package:dio/dio.dart';\n",
+            'apps/admin_web/lib/d.dart': "import 'package:http/http.dart';\n",
+          },
+        ),
+      );
+      expect(violations.map((v) => v.rule).toSet(), {Rule.httpOutsideApiClient});
+      expect(violations.map((v) => v.member).toSet(), {
+        'packages/design_system',
+        'packages/app_shell',
+        'apps/admin_web',
+      });
+    });
+
+    test('con app_shell en el workspace, una app que no depende de él → falla', () {
+      final violations = checkWorkspace(
+        workspace({...withShell, 'apps/client_mobile': 'dependencies:\n  shared_core: any\n'}),
+      );
+      expect(violations.single.rule, Rule.appWithoutShell);
+      expect(violations.single.member, 'apps/client_mobile');
+    });
+
+    test('un paquete sin reglas en el grafo → falla (hay que decidir sus dependencias)', () {
+      final violations = checkWorkspace(workspace({...withShell, 'packages/nuevo': 'dependencies:\n  meta: any\n'}));
+      expect(violations.single.rule, Rule.packageGraph);
+      expect('${violations.single}', contains('sin reglas'));
+    });
+  });
+
   test('un pubspec con YAML inválido → WorkspaceError (salida 2), nunca una excepción no controlada', () {
     final broken = workspace({...clean, 'apps/admin_web': 'dependencies:\n  a: 1\n  a: 2\n'});
     expect(() => checkWorkspace(broken), throwsA(isA<WorkspaceError>()));

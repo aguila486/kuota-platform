@@ -4,7 +4,13 @@
 //   - una app depende de otra app;
 //   - un paquete depende de una app;
 //   - `financial_domain` o `shared_core` dependen de Flutter (`flutter`, `flutter_test` o cualquier dependencia
-//     `sdk: flutter`).
+//     `sdk: flutter`);
+//   - un paquete depende de otro paquete del workspace fuera del grafo de flutter-architecture.md §3 (T098):
+//     shared_core → (ninguno); financial_domain, api_client y design_system → shared_core; app_shell → shared_core,
+//     api_client y design_system. Un paquete sin reglas en [allowedPackageDependencies] también es una violación;
+//   - un miembro distinto de api_client usa HTTP (`dio` o `http` en `dependencies` o importado desde `lib/`): el cliente
+//     HTTP solo vive en api_client (design_system no hace llamadas HTTP; app_shell no duplica el cliente);
+//   - existiendo app_shell, una app no depende de él (el arranque compartido no se duplica en las apps).
 // "Depende" incluye `dependencies`, `dev_dependencies` y `dependency_overrides`, por nombre o por `path:`. También
 // incluye el CÓDIGO: en un pub workspace todos los miembros comparten resolución, de modo que una app podría importar
 // `package:<otra_app>/…` sin declararlo. Por eso se revisan los `import`/`export`/`part` de los archivos Dart de cada
@@ -23,10 +29,29 @@ import 'package:yaml/yaml.dart';
 /// Paquetes que deben ser Dart puro (flutter-architecture.md §3; FR-033).
 const pureDartPackages = {'financial_domain', 'shared_core'};
 
+/// Grafo permitido entre paquetes del workspace (flutter-architecture.md §3; Aprobación 11).
+const allowedPackageDependencies = <String, Set<String>>{
+  'shared_core': {},
+  'financial_domain': {'shared_core'},
+  'api_client': {'shared_core'},
+  'design_system': {'shared_core'},
+  'app_shell': {'shared_core', 'api_client', 'design_system'},
+};
+
+/// Paquetes de HTTP: solo api_client puede usarlos en producción.
+const httpPackages = {'dio', 'http'};
+const httpOwner = 'api_client';
+
+/// Capa de composición que toda app debe usar cuando existe.
+const shellPackage = 'app_shell';
+
 enum Rule {
   appDependsOnApp('app → app'),
   packageDependsOnApp('paquete → app'),
-  pureDartDependsOnFlutter('Dart puro → Flutter');
+  pureDartDependsOnFlutter('Dart puro → Flutter'),
+  packageGraph('paquete → paquete no permitido'),
+  httpOutsideApiClient('HTTP fuera de api_client'),
+  appWithoutShell('app sin app_shell');
 
   const Rule(this.label);
   final String label;
@@ -110,6 +135,41 @@ List<Violation> checkWorkspace(Directory root) {
     return null;
   }
 
+  final packagesByName = {for (final m in members.where((m) => !m.isApp)) m.name: m};
+  final packageDirs = {for (final m in packagesByName.values) m.relativePath: m.name};
+
+  /// Nombre del paquete al que apunta una ruta relativa a la raíz, si lo hay.
+  String? packageAt(String relativeToRoot) {
+    for (final MapEntry(key: dir, value: name) in packageDirs.entries) {
+      if (relativeToRoot == dir || p.posix.isWithin(dir, relativeToRoot)) return name;
+    }
+    return null;
+  }
+
+  /// Un paquete solo puede depender de los paquetes que le permite el grafo; las apps, de cualquier paquete.
+  void reportPackage(_Member member, String target, String how) {
+    if (member.isApp || target == member.name) return;
+    final allowed = allowedPackageDependencies[member.name];
+    if (allowed == null || allowed.contains(target)) return;
+    violations.add(Violation(Rule.packageGraph, member.relativePath, '$how el paquete $target'));
+  }
+
+  for (final member in packagesByName.values) {
+    if (!allowedPackageDependencies.containsKey(member.name)) {
+      violations.add(
+        Violation(Rule.packageGraph, member.relativePath, 'paquete sin reglas en allowedPackageDependencies'),
+      );
+    }
+  }
+  if (packagesByName.containsKey(shellPackage)) {
+    for (final app in members.where((m) => m.isApp)) {
+      final deps = app.pubspec['dependencies'];
+      if (deps is! YamlMap || !deps.containsKey(shellPackage)) {
+        violations.add(Violation(Rule.appWithoutShell, app.relativePath, 'dependencies no declara $shellPackage'));
+      }
+    }
+  }
+
   void reportApp(_Member member, String app, String how) {
     if (app == member.name) return;
     violations.add(
@@ -128,6 +188,15 @@ List<Violation> checkWorkspace(Directory root) {
           final target = p.posix.normalize(p.posix.join(member.relativePath, value['path'] as String));
           final app = appAt(target);
           if (app != null) reportApp(member, app, '$section apunta por path a la app');
+        }
+        final target = packagesByName.containsKey(name)
+            ? name
+            : value is YamlMap && value['path'] is String
+            ? packageAt(p.posix.normalize(p.posix.join(member.relativePath, value['path'] as String)))
+            : null;
+        if (target != null) reportPackage(member, target, '$section declara');
+        if (section == 'dependencies' && httpPackages.contains(name) && member.name != httpOwner) {
+          violations.add(Violation(Rule.httpOutsideApiClient, member.relativePath, '$section declara $name'));
         }
         final isFlutter =
             name == 'flutter' || name == 'flutter_test' || (value is YamlMap && value['sdk'] == 'flutter');
@@ -150,6 +219,11 @@ List<Violation> checkWorkspace(Directory root) {
         if (uri.startsWith('package:')) {
           final package = uri.substring('package:'.length).split('/').first;
           if (appsByName.containsKey(package)) reportApp(member, package, '$fileRelative importa la app');
+          if (packagesByName.containsKey(package)) reportPackage(member, package, '$fileRelative importa');
+          final inLib = p.posix.isWithin('${member.relativePath}/lib', fileRelative);
+          if (inLib && httpPackages.contains(package) && member.name != httpOwner) {
+            violations.add(Violation(Rule.httpOutsideApiClient, member.relativePath, '$fileRelative importa $package'));
+          }
           if (pureDartPackages.contains(member.name) && package == 'flutter') {
             violations.add(
               Violation(Rule.pureDartDependsOnFlutter, member.relativePath, '$fileRelative importa flutter'),
@@ -172,7 +246,9 @@ void main(List<String> args) {
   try {
     final violations = checkWorkspace(root);
     if (violations.isEmpty) {
-      stdout.writeln('check_deps: sin violaciones (apps independientes; financial_domain y shared_core sin Flutter)');
+      stdout.writeln(
+        'check_deps: sin violaciones (apps independientes con app_shell; grafo de paquetes; Dart puro sin Flutter; HTTP solo en api_client)',
+      );
       return;
     }
     for (final violation in violations) {

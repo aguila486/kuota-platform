@@ -1,6 +1,6 @@
 # Workspace Flutter de Kuota
 
-Tres apps y cuatro paquetes en un único workspace de Dart (ADR-0003, US7). Hoy las apps son **shells**: muestran
+Tres apps y cinco paquetes en un único workspace de Dart (ADR-0003, US7). Hoy las apps son **shells**: muestran
 nombre, entorno, versión y la compatibilidad con Kuota Core (`GET /v1/meta/compatibility`). No tienen funcionalidad de
 negocio ni están listas para usuarios.
 
@@ -13,6 +13,7 @@ negocio ni están listas para usuarios.
 | `packages/shared_core` | `AppConfig`, `Result`, logger sin PII | Dart puro |
 | `packages/financial_domain` | Dominio financiero (Money llega con T063) | Dart puro |
 | `packages/design_system` | Tema y pantalla de inicio común | Flutter |
+| `packages/app_shell` | Composición compartida: identidad, configuración, cliente, compatibilidad y arranque (Aprobación 11) | Flutter |
 
 Los identificadores `app.kuota.*` (Android `applicationId`, iOS `PRODUCT_BUNDLE_IDENTIFIER`) son **provisionales**:
 hay que confirmarlos antes de publicar en tiendas.

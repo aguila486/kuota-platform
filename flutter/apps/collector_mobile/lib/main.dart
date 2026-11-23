@@ -1,7 +1,7 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:app_shell/app_shell.dart';
 
-import 'src/app.dart';
+import 'src/app_info.dart';
 
-/// Kuota Collector (T085). Se ejecuta con `--dart-define-from-file=../../config/<entorno>.json` (AppConfig, shared_core).
-void main() => runApp(const ProviderScope(child: KuotaShellApp()));
+/// Kuota Collector (T085, T098). Se ejecuta con `--dart-define-from-file=../../config/<entorno>.json` (AppConfig, shared_core). El
+/// arranque, la configuración, el cliente y la pantalla de inicio son los de `app_shell`; aquí solo vive la identidad.
+void main() => runKuotaApp(AppInfo.identity);

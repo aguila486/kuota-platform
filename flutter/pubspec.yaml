@@ -21,6 +21,7 @@ workspace:
   - apps/client_mobile
   - apps/collector_mobile
   - packages/api_client
+  - packages/app_shell
   - packages/shared_core
   - packages/financial_domain
   - packages/design_system

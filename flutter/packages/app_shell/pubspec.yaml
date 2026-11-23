@@ -1,0 +1,31 @@
+# Composición Flutter compartida por las tres apps (T098; Aprobación 11; C2 de T092, Constitución IX): identidad de la
+# app, providers Riverpod de configuración, cliente y compatibilidad, y el shell con la página de inicio. Es una capa de
+# composición, no un dominio: sin lógica financiera ni de negocio, sin cliente HTTP propio (usa api_client).
+# Dependencias internas permitidas: shared_core, api_client y design_system (tool/check_deps.dart).
+name: app_shell
+description: Composición Flutter compartida por las apps de Kuota (identidad, configuración, cliente y arranque).
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  api_client:
+    path: ../api_client
+  design_system:
+    path: ../design_system
+  flutter:
+    sdk: flutter
+  # Estado con Riverpod 3 (ADR-0003; D-ARC-02 aprobada; research R-19: 3.5.0), misma versión que tenían las apps.
+  flutter_riverpod: 3.5.0
+  material_ui: 1.11.1
+  shared_core:
+    path: ../shared_core
+
+dev_dependencies:
+  # El servidor falso de las pruebas implementa el HttpClientAdapter de dio (misma versión que api_client).
+  dio: 5.11.1
+  flutter_test:
+    sdk: flutter

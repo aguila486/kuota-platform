@@ -4,10 +4,15 @@ import 'package:shared_core/shared_core.dart';
 import 'generated/generated.dart';
 import 'headers.dart';
 
-/// Códigos de [Failure] que produce el cliente cuando el servidor no devuelve un problem+json con `code`.
+/// Códigos de [Failure] que produce el CLIENTE cuando el servidor no devuelve un problem+json con `code` (no son códigos
+/// del contrato; los del contrato llegan tal cual en [Failure.code]).
 abstract final class ApiFailureCodes {
   /// Sin respuesta del servidor (conexión, DNS, TLS, tiempo de espera, cancelación).
   static const network = 'network-error';
+
+  /// 502, 503 o 504 sin problem+json (típico de un proxy o balanceador con Kuota Core caído). Código del CLIENTE, de
+  /// transporte: no es un `code` del contrato.
+  static const serviceUnavailable = 'service-unavailable';
 
   /// Respuesta de error sin un problem+json reconocible.
   static const unexpectedResponse = 'unexpected-response';
@@ -84,6 +89,9 @@ final class KuotaApiClient {
     if (body is Map && body['code'] is String) {
       // problem+json del contrato: `code` estable; el título no contiene datos del usuario (RFC 9457, FR-011).
       return Failure(body['code'] as String, message: body['title'] is String ? body['title'] as String : null);
+    }
+    if (const {502, 503, 504}.contains(response.statusCode)) {
+      return Failure(ApiFailureCodes.serviceUnavailable, message: 'HTTP ${response.statusCode}');
     }
     return Failure(ApiFailureCodes.unexpectedResponse, message: 'HTTP ${response.statusCode}');
   }

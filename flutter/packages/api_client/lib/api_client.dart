@@ -6,6 +6,7 @@
 /// (`x-kuota-non-production`, dev-probe): las apps no pueden invocarlas.
 library;
 
+export 'src/compatibility_status.dart';
 export 'src/generated/generated.dart'
     show
         CompatibilityInfo,

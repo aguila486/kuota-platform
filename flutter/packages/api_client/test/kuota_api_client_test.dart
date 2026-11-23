@@ -60,13 +60,17 @@ void main() {
       expect(result, const Err<CompatibilityInfo>(Failure('service-unavailable', message: 'Título estable')));
     });
 
-    test('error sin problem+json → unexpected-response; sin respuesta → network-error', () async {
+    test('error sin problem+json: 500 → unexpected-response, 502/503/504 → service-unavailable; sin respuesta → network-error', () async {
       final adapter = FakeAdapter([
+        const FakeReply(500, '<html>Error</html>', contentType: 'text/html'),
         const FakeReply(502, '<html>Bad gateway</html>', contentType: 'text/html'),
+        const FakeReply(504, '', contentType: 'text/plain'),
         const FakeReply.networkError(),
       ]);
       final api = client(adapter);
       expect((await api.getCompatibility() as Err).failure.code, ApiFailureCodes.unexpectedResponse);
+      expect((await api.getCompatibility() as Err).failure.code, ApiFailureCodes.serviceUnavailable);
+      expect((await api.getCompatibility() as Err).failure.code, ApiFailureCodes.serviceUnavailable);
       expect((await api.getCompatibility() as Err).failure.code, ApiFailureCodes.network);
     });
   });

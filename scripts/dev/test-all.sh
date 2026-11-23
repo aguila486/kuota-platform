@@ -30,7 +30,15 @@ for component in "${SELECTED[@]}"; do
     contracts)
       run "contracts: lint" pnpm contracts:lint
       run "contracts: pruebas de reglas y de detección" pnpm contracts:test
-      run "contracts: cambios incompatibles vs $BASE_REF" pnpm contracts:breaking "$BASE_REF"
+      # Sin contrato en la base no hay comparación: se informa OMITIDO, nunca ✓ (G12: un omitido no es un PASS).
+      if git rev-parse --verify --quiet "$BASE_REF^{commit}" >/dev/null &&
+        git cat-file -e "$BASE_REF:contracts/openapi/kuota-core.v1.yaml" 2>/dev/null; then
+        run "contracts: cambios incompatibles vs $BASE_REF" pnpm contracts:breaking "$BASE_REF"
+      else
+        step "contracts: cambios incompatibles vs $BASE_REF"
+        note "omitido: $BASE_REF no contiene el contrato (no hay baseline legítimo)"
+        RESULTS+=("- contracts: cambios incompatibles vs $BASE_REF: OMITIDO (sin baseline)")
+      fi
       ;;
     flutter)
       if [ -f flutter/pubspec.yaml ]; then

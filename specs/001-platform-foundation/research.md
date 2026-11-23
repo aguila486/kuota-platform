@@ -1098,3 +1098,106 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
   - `backend`: 18/18 PASS; 675/675 pruebas en 49 archivos; cobertura 98,53 / 97,28 / 98,12 / 99,6.
   - Volúmenes intactos.
 - **US4: todas sus tareas (T056–T065) están completas** y SC-005 se cumple en backend, Dart VM y Flutter Web.
+
+### Cierre técnico de 001: métricas (T093, T094) y fase 10 (T087–T091) (2026-11-23)
+
+#### Métricas (T094 implementada, pendiente de ratificar el mecanismo; T093 completa)
+
+- **Dependencias** (versiones exactas aprobadas en R-21, sin otras): `@opentelemetry/api` 1.10.0,
+  `@opentelemetry/sdk-metrics` 3.1.1 y `@opentelemetry/exporter-prometheus` 0.301.2. Arrastran `@opentelemetry/core`,
+  `resources` 3.1.1 y `semantic-conventions`. El escaneo de dependencias Node del job `backend` pasa.
+- **`backend/src/common/metrics/`:**
+  - `MeterProvider` por aplicación (sin proveedor global) con `PrometheusExporter` (`preventServerStart: true`,
+    `withoutTargetInfo`, `withoutScopeInfo`: no se publican versiones, SDK ni datos del host).
+  - `http_server_request_duration_seconds{route,method,status}` (histograma, 5 ms–10 s);
+    `kuota_http_errors_total{code}`, alimentado por `ProblemDetailsFilter` (T021);
+    `kuota_db_pool_connections{state=idle|in_use}` y `kuota_db_pool_waiting_requests`, leídos con
+    `TenantPrismaService.poolStats()` (solo contadores; el pool sigue privado y `withTenant` no cambia); proceso:
+    `kuota_process_resident_memory_bytes`, `kuota_process_heap_used_bytes`, `kuota_process_cpu_seconds_total` y
+    `kuota_process_uptime_seconds` (sin dependencias adicionales).
+  - **Escucha propia** en `KUOTA_METRICS_HOST:KUOTA_METRICS_PORT` (por defecto `127.0.0.1:9464`): solo `GET /metrics`
+    (otra ruta 404, otro método 405). Con token configurado exige `Authorization: Bearer` comparado con
+    `crypto.timingSafeEqual` sobre resúmenes SHA-256, **antes** de delegar en `getMetricsRequestHandler`; si no, 401 con
+    `WWW-Authenticate: Bearer` y sin cuerpo. Sin token solo es posible en local/testing con escucha de loopback (guard
+    de T016); la tabla Endpoint Access hace opcional la credencial en ese caso.
+  - La escucha la abre `main.ts`, no `createApp`, para que las pruebas que crean aplicaciones no compitan por el
+    puerto. Si no puede abrirse (p. ej. `EADDRINUSE`), el proceso termina con código 1 y un log `fatal` sin el token.
+- **Desviación de mecanismo (requiere ratificación):** T094 dice "interceptor HTTP". Un `NestInterceptor` no ve las
+  rutas inexistentes (404 del router) ni los rechazos de guards, y T093 exige medir una ruta inexistente. Por eso la
+  medición se hace en un middleware de nivel HTTP (`http-metrics.ts`, montado con `app.use` igual que el contexto de
+  solicitud) que registra al terminar la respuesta con la misma normalización del log de acceso (`routeTemplate`:
+  plantilla registrada o `unmatched`; método de una lista cerrada u `OTHER`). La etiqueta por plantilla, objetivo de
+  T094, se cumple. **T094 queda sin marcar** hasta que el responsable ratifique el cambio de mecanismo.
+- **Etiquetas:** solo `route`, `method`, `status`, `code` y `state`, todas acotadas. Nunca tenant, actor, correlación,
+  IP, encabezados, URL concreta, query, cuerpos ni montos. Auditoría, logging y CLS no cambian; las métricas no leen
+  datos de auditoría.
+- **Pruebas (T093, `test/integration/metrics.spec.ts`, 11 pruebas, PostgreSQL 18 real):**
+  - acceso: 200 con token; 401 sin token, con token inválido, con otro esquema o vacío; 404/405; el puerto de la API no
+    sirve `/metrics`; escucha 127.0.0.1 por defecto; modo local sin token;
+  - contenido tras 200, 201, 400, 401, 404 (por id y ruta inexistente), 409, 500 controlado y 20 solicitudes
+    concurrentes: series exactas por plantilla (`/v1/dev/probe-items/:id`, `unmatched`), errores por código, pool real
+    y proceso;
+  - privacidad: ningún UUID, tenant, valor de encabezado, query, IP, correo, token ni versión en la salida;
+  - cardinalidad: 30 rutas desconocidas con métodos raros no crean series nuevas;
+  - sin efectos: consultar las métricas no cambia `dev_probe_items` ni `audit_events` y no se mide a sí mismo.
+  - `main-process.spec.ts`: el proceso real abre la escucha protegida (401/200; 404 en el puerto de la API) y termina
+    con código 1 si el puerto está ocupado.
+  - **Mutaciones detectadas (5/5):** sin control de token, cabecera sin esquema `Bearer`, URL concreta como ruta, filtro
+    sin contador de errores y `target_info`/scope activados.
+- **Discrepancia previa encontrada (no corregida, fuera de alcance):** en el puerto de la API, las rutas fuera de `/v1`
+  y de `/health` (p. ej. `GET /metrics` o `/foo`) responden el 404 HTML por defecto de Express, no
+  `application/problem+json`, y no pasan por el filtro (no suman a `kuota_http_errors_total`, aunque sí se miden como
+  `unmatched`). Existe desde T025 (prefijo global con exclusiones). No se cambió el tratamiento de errores.
+- **Regresión del backend:** la primera ejecución completa falló al **arrancar** un contenedor de
+  `foundation-schema.spec.ts` ("Timed out after 30000ms while waiting for container ports to be bound"; 4 pruebas
+  omitidas por ese fallo). Los logs de Docker muestran otra vez la VM sin recursos ("unable to create new parent
+  process") con unos 7 contenedores PostgreSQL arrancando en paralelo, sin builds de Android esta vez. La segunda
+  ejecución, sola, pasó: 50/50 archivos, 687/687 pruebas, cobertura 98,54 / 96,9 / 98,32 / 99,64 (`common/metrics`
+  98,63 / 87,5 / 100 / 100). Riesgo vigente: la concurrencia de Testcontainers contra la memoria de Docker Desktop; no
+  se añadieron reintentos ni se cambió la concurrencia (fuera del alcance autorizado).
+
+#### Fase 10
+
+- **T087** `scripts/ci/prove-gates.sh`: worktree temporal sin rama. Para cada defecto, control positivo (el gate real
+  pasa con HEAD limpio), defecto aplicado y fallo **con firma** (fallar por otra causa no cuenta). 6/6 probados:
+  - secreto (token `ghp_` generado en tiempo de ejecución) → `general.sh`, "Secretos: cambios sin confirmar";
+  - `amount: number` en `common/money` → `check-no-float.sh ts`, lint real;
+  - tabla con `tenant_id` sin FORCE (migración solo en el worktree, PostgreSQL efímero) → `db-gate.sh`, violación
+    exacta de `db:check-rls`;
+  - `api_version` deja de ser requerido → `contracts.sh` con `KUOTA_CI_BREAKING_BASE=HEAD`, porque `main` no tiene
+    baseline (T049);
+  - `@nestjs/common` en `dev-probe/domain/` → lint, `domain-sin-framework`;
+  - código de Money sin pruebas → `vitest --coverage` de las suites de Money con los umbrales de `vitest.config.ts` sin
+    cambios (alcance limitado a `src/common/money/**`, sin Testcontainers).
+  - Meta-prueba: con un defecto inocuo el gate "no bloqueó" y `prove-gates` falla (1); defecto desconocido → 2; sin
+    Docker, pnpm o Flutter → 2.
+- **T088:** solo documentación → solo `general`, 4 s en local (`quickstart.md` §8). En GitHub, sin medir (T052).
+- **T089:** `CLAUDE.md` con los comandos reales y las carpetas existentes.
+- **T090:** verificación posterior a la implementación en ADR-0002, 0003 y 0004, sin reaprobarlos ni cambiar estados.
+- **T091: ABIERTA.** `validation-report.md`: en un clon limpio, FR-005 se cumple; `doctor`, `install` y `general`
+  pasan. `make up` y los tiempos de SC-001 no se ejecutaron (tocarían o crearían volúmenes persistentes) y falta la
+  validación del mantenedor. US3-8 registrada como pendiente.
+
+#### T092: análisis de consistencia y convergencia (2026-11-23) — ABIERTA
+
+Ejecutado en modo de solo lectura: `/speckit-converge` añadiría tareas a `tasks.md`, y eso requiere aprobación. Resultado
+sobre spec, plan, tasks, ADR, contrato, código, pruebas y CI: 49/49 requisitos (40 FR + 9 SC) con tarea; 32/40 FR
+implementados y probados; SC: 4/9 cumplidos, 2 solo en local.
+
+- **CRITICAL (verificados):**
+  - **C1 (Constitución X, FR-035):** no hay gate de cobertura bloqueante para Dart (`financial_domain` ≥ 90 %,
+    paquetes compartidos ≥ 80 %). `flutter.sh` y los scripts de Melos ejecutan las pruebas sin `--coverage`;
+    `plan.md:79` lo da por cumplido. T050 no lo pedía: hueco en la redacción de las tareas.
+  - **C2 (Constitución IX):** `lib/src/providers.dart`, `lib/src/app.dart` y `lib/main.dart` son idénticos en las tres
+    apps; la Constitución prohíbe duplicar código entre apps. Corregirlo exige decidir el paquete destino (`plan.md`
+    fija 4 paquetes).
+- **HIGH:**
+  - **H1:** `approvals.md` no registra las autorizaciones de G4–G12, US4-TS, US7a, T050/T071/T085, T087–T090 ni
+    T093/T094. Se dieron por mensaje en la sesión, pero no constan.
+  - **H2:** `contracts.sh` registra OMITIDO si falta la referencia base; cuando exista el baseline debería ser FAIL.
+  - **H3:** 404 HTML fuera de `/v1` y `/health` (FR-011), ya registrado arriba.
+- **MEDIUM y LOW:** 13 y 9, listados en el informe de cierre. Incluyen: eventos de log de Observability Signals sin
+  implementar, SC-009 sin escaneo de los logs de la suite completa, CORS sin FR en spec, migración 0002 sin tarea,
+  textos de estado de ADR-0004 y del spec desactualizados, total de tareas 96 → 97.
+- **Decisión:** no se corrigió ningún hallazgo CRITICAL, porque todos requieren tareas o decisiones de gobernanza
+  nuevas. T092 sigue abierta y **bloquea abrir el PR**.

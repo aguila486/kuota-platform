@@ -31,3 +31,7 @@ test/integration/dev-probe.spec.ts
 test/integration/dev-probe-repository.spec.ts
 test/integration/dev-probe-disabled.spec.ts
 test/integration/health.spec.ts
+# Privacidad de logs HTTP (FR-009, FR-010; hotfix del 2026-11-23)
+test/integration/http-logging-privacy.spec.ts
+test/unit/logging/http-log.spec.ts
+test/unit/logging/redaction.spec.ts

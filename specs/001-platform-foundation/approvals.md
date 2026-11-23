@@ -296,3 +296,23 @@ completadas"), no de una enumeración en el propio mensaje de G4.
 - **No autorizado:** cambiar la Constitución, inventar requisitos, modificar el contrato fuente, borrar datos,
   imágenes, cachés o runtimes, ejecutar iOS, y desarrollar 002 (solo evaluar y proponer).
 
+## Aprobación 11 — 2026-11-23: quinto paquete `app_shell` (C2) y exclusión del código generado de la cobertura
+
+- **Quién:** responsable del proyecto, mediante mensaje explícito en la sesión de trabajo ("KUOTA — Resolver C2 con
+  app_shell y preparar 002 en modo 100 % local").
+- **Decisión (cita):** "Apruebo incorporar un quinto paquete llamado: `flutter/packages/app_shell`. Su propósito
+  exclusivo es centralizar la composición Flutter compartida por Admin Web, Collector Mobile y Client Mobile." Se
+  mantienen `shared_core`, `financial_domain`, `design_system` y `api_client` con su propósito.
+  - `app_shell` puede depender de Flutter, Riverpod, `shared_core`, `api_client` y `design_system`. No contiene lógica
+    financiera ni de un negocio concreto, no duplica clientes HTTP y no cambia las fronteras de los otros paquetes.
+  - Las apps conservan su `main.dart`, identidad, configuración, punto de entrada y plataforma.
+- **Cobertura (cita):** "Apruebo asimismo documentar la exclusión del código OpenAPI generado de los umbrales de
+  cobertura, siempre que su cobertura se informe por separado y continúen los controles de generación, compilación y
+  pruebas de integración." Ratifica la regla aplicada en C1 (`lib/src/generated/**`).
+- **Impacto documentado en criterios ya cumplidos (sin alterarlos):**
+  - T080 (etapa B) se cumplió con "3 apps y 4 paquetes" el 2026-11-23 y sigue cumplida. El workspace pasa a 3 apps y
+    5 paquetes por esta aprobación; la tarea nueva T098 cubre el quinto paquete.
+  - `plan.md` (estructura) y `flutter-architecture.md` §3 se actualizan para registrar `app_shell`.
+- **No autorizado:** debilitar la Constitución, reducir pruebas, alterar el dominio financiero, operaciones remotas,
+  iOS, ni implementar 002 (solo análisis y borradores locales).
+

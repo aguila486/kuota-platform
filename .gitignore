@@ -70,8 +70,9 @@ docker-compose.override.yml
 reports/
 *.lcov
 
-# Cliente Prisma generado (spike T014): se regenera con `prisma generate`; nunca se versiona.
-backend/generated/
+# Cliente Prisma generado: se regenera con `pnpm --filter backend prisma:generate` (lo hacen dev, build, typecheck,
+# lint y test); nunca se versiona.
+backend/src/generated/
 
 # Bundles del contrato OpenAPI (derivados de contracts/openapi; se regeneran con pnpm contracts:bundle).
 contracts/openapi/dist/

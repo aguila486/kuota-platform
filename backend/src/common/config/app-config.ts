@@ -25,3 +25,8 @@ export const APP_CONFIG = Symbol('APP_CONFIG');
 export function isDevelopmentEnv(env: KuotaEnv): boolean {
   return env === 'local' || env === 'testing';
 }
+
+/** R-05 · FR-040: el contexto técnico de tenant solo existe en local/testing con KUOTA_DEV_TENANT_CONTEXT=enabled. */
+export function devTenantContextEnabled(config: Pick<AppConfig, 'env' | 'devTenantContext'>): boolean {
+  return isDevelopmentEnv(config.env) && config.devTenantContext;
+}

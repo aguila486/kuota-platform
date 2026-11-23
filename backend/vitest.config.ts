@@ -24,7 +24,7 @@ export default defineConfig({
       provider: 'v8',
       include: ['src/**/*.ts'],
       // main.ts solo arranca el proceso; se verifica con el arranque real, no con cobertura.
-      exclude: ['src/main.ts'],
+      exclude: ['src/main.ts', 'src/generated/**'],
       reporter: ['text', 'json-summary'],
       // Constitución X: dominio financiero >= 90 %, resto >= 80 %.
       thresholds: {

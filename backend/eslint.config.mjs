@@ -18,11 +18,20 @@ const TENANT_CONTEXT_SQL =
   '/set_config|\\bapp\\.(tenant_id|actor_id|correlation_id)\\b|\\b(SET|RESET)\\s+(LOCAL\\s+|SESSION\\s+)?("?app\\.|ROLE\\b|SESSION\\s+AUTHORIZATION|ROW_SECURITY|ALL\\b)/i';
 const TENANT_CONTEXT_MESSAGE =
   'El contexto de tenant y la identidad de sesión solo se gestionan en src/common/tenant-context (withTenant). ADR-0004, condición P2.';
+// T038: el contexto de tenant/actor solo lo escribe un guard de src/common/tenant-context (establishTenantContext).
+const CONTEXT_WRITE_MESSAGE =
+  'El contexto de tenant/actor solo lo fija un guard de src/common/tenant-context (establishTenantContext). T038, ADR-0004 P2.';
+const CONTEXT_KEYS = '/^(tenantId|actorId|actorType|actorRole)$/';
+const CONTEXT_KEY_CONSTANTS = '/^CLS_(TENANT_ID|ACTOR_ID|ACTOR_TYPE|ACTOR_ROLE)$/';
+const ESTABLISH_CONTEXT_PATTERN = {
+  group: ['**/tenant-context/establish-context', '**/tenant-context/establish-context.js'],
+  message: CONTEXT_WRITE_MESSAGE,
+};
 const DYNAMIC_SQL_MESSAGE =
   'SQL dinámico prohibido fuera de src/common/tenant-context: usa $queryRaw/$executeRaw con plantilla parametrizada (ADR-0004, P2).';
 
 export default defineConfig(
-  { ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'generated/**'] },
+  { ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'src/generated/**'] },
   eslint.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
   {
@@ -46,11 +55,22 @@ export default defineConfig(
         'error',
         {
           paths: [{ name: 'pg', message: RAW_DB_CLIENT_MESSAGE }],
-          patterns: [{ group: ['@prisma/*', '.prisma/*', '**/generated/prisma/**'], message: RAW_DB_CLIENT_MESSAGE }],
+          patterns: [
+            { group: ['@prisma/*', '.prisma/*', '**/generated/prisma/**'], message: RAW_DB_CLIENT_MESSAGE },
+            ESTABLISH_CONTEXT_PATTERN,
+          ],
         },
       ],
       'no-restricted-syntax': [
         'error',
+        {
+          selector: `CallExpression[callee.property.name=/^(set|setIfUndefined)$/][arguments.0.value=${CONTEXT_KEYS}]`,
+          message: CONTEXT_WRITE_MESSAGE,
+        },
+        {
+          selector: `CallExpression[callee.property.name=/^(set|setIfUndefined)$/][arguments.0.name=${CONTEXT_KEY_CONSTANTS}]`,
+          message: CONTEXT_WRITE_MESSAGE,
+        },
         { selector: `Literal[value=${TENANT_CONTEXT_SQL}]`, message: TENANT_CONTEXT_MESSAGE },
         { selector: `TemplateElement[value.raw=${TENANT_CONTEXT_SQL}]`, message: TENANT_CONTEXT_MESSAGE },
         {
@@ -68,7 +88,12 @@ export default defineConfig(
     rules: {
       'no-restricted-imports': [
         'error',
-        { patterns: [{ group: ['@prisma/*', '.prisma/*', '**/generated/prisma/**'], message: RAW_DB_CLIENT_MESSAGE }] },
+        {
+          patterns: [
+            { group: ['@prisma/*', '.prisma/*', '**/generated/prisma/**'], message: RAW_DB_CLIENT_MESSAGE },
+            ESTABLISH_CONTEXT_PATTERN,
+          ],
+        },
       ],
     },
   },

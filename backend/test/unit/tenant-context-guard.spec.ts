@@ -73,6 +73,35 @@ describe('P2 — protección del contexto de tenant (ESLint)', () => {
     expect(await ruleViolations(code, 'src/modules/health/database.health.ts')).not.toHaveLength(0);
   });
 
+  const CONTEXT_WRITES: Record<string, string> = {
+    "cls.set('tenantId')": "declare const cls: any;\ncls.set('tenantId', 'x');\n",
+    "cls.set('actorId')": "declare const cls: any;\ncls.set('actorId', 'x');\n",
+    "cls.set('actorRole')": "declare const cls: any;\ncls.set('actorRole', 'admin');\n",
+    "cls.setIfUndefined('actorType')": "declare const cls: any;\ncls.setIfUndefined('actorType', 'USER');\n",
+    'cls.set(CLS_TENANT_ID)':
+      "declare const cls: any; declare const CLS_TENANT_ID: string;\ncls.set(CLS_TENANT_ID, 'x');\n",
+    'importar establishTenantContext':
+      "import { establishTenantContext } from '../../common/tenant-context/establish-context.js';\nexport const f = establishTenantContext;\n",
+    'importar el cliente Prisma generado':
+      "import { PrismaClient } from '../../../generated/prisma/client.js';\nexport const c = PrismaClient;\n",
+  };
+  for (const [name, code] of Object.entries(CONTEXT_WRITES)) {
+    it(`T038: rechaza fuera de tenant-context: ${name}`, async () => {
+      expect(await ruleViolations(code, BUSINESS_FILE)).not.toHaveLength(0);
+      expect(await ruleViolations(code, 'src/common/database/otro.ts')).not.toHaveLength(0);
+    });
+  }
+
+  it('T038: dentro de tenant-context sí se puede fijar el contexto', async () => {
+    const code = "declare const cls: any; declare const CLS_TENANT_ID: string;\ncls.set(CLS_TENANT_ID, 'x');\n";
+    expect(await ruleViolations(code, 'src/common/tenant-context/otro-guard.ts')).toEqual([]);
+  });
+
+  it('T038: leer el contexto o escribir otras claves del CLS está permitido', async () => {
+    const code = "declare const cls: any;\ncls.get('tenantId');\ncls.set('correlationIdExtra', 'x');\n";
+    expect(await ruleViolations(code, BUSINESS_FILE)).toEqual([]);
+  });
+
   it('permite SQL parametrizado normal en un módulo de negocio', async () => {
     const code =
       'declare const tx: any; declare const id: string;\ntx.$queryRaw`SELECT id, label FROM kuota.dev_probe_items WHERE id = ${id}`;\n';

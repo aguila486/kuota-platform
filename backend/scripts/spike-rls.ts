@@ -17,7 +17,7 @@ import { promisify } from 'node:util';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Client, Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PrismaClient, type Prisma } from '../generated/prisma/client.js';
+import { PrismaClient, type Prisma } from '../src/generated/prisma/client.js';
 import { startTestDatabase, type TestDatabase } from '../test/support/postgres.js';
 
 // --------------------------------------------------------------------------------------------------------------------

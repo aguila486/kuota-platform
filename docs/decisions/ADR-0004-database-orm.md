@@ -137,6 +137,10 @@ PostgreSQL 18.7 efímero, Prisma 7.10.1 y `adapter-pg` 7.10.1. Informe completo:
 
 Regla de decisión aplicada: S1–S6 en PASS → aceptación propuesta y aprobada por el responsable con condiciones.
 
+**Evidencia de T015 (aprobación humana):** Aprobación 2 de `specs/001-platform-foundation/approvals.md` (2026-11-22,
+responsable del proyecto): D-ARC-01 cerrada con Prisma 7 *Aceptado con condiciones* P1–P8. La aceptación no fue
+automática: la decidió el responsable a la vista del informe del spike.
+
 ## Condiciones de la aceptación
 
 Responsable de todas: responsable técnico del proyecto (mantenedor único). Estado al 2026-11-22.
@@ -188,6 +192,22 @@ Responsable de todas: responsable técnico del proyecto (mantenedor único). Est
   - El aprovisionamiento debe ejecutarse **antes** de 0002.
   - Para migrar basta con que exista `kuota_maintenance` (sin login). El login solo hace falta para ejecutar la purga.
   - `make up` lo comprueba antes de migrar con el preflight de solo lectura `scripts/migration-preflight.ts`.
+
+## Verificación tras la implementación de 001 (2026-11-23, T090)
+
+Registro del estado real; no cambia el estado (*Aceptado con condiciones*) ni ninguna condición.
+
+| ID | Estado al 2026-11-23 |
+|---|---|
+| P1 | Cumplida localmente y con gate: `scripts/ci/db-gate.sh` (preflight → `migrate deploy` → `db:check-rls`) en el job `backend`; `0001` y `0002` con `BEGIN`/`COMMIT`. Sin ejecución en GitHub (T052) |
+| P2 | **Sigue PARCIAL**: sin cambios desde la evaluación de `docs/security/p2-tenant-context-risk-assessment.md`; la identidad confiable llega con 002 |
+| P3, P4, P8 | Cumplidas, como en la tabla anterior; P8 con el escaneo de dependencias Node bloqueante en el job `backend` |
+| P5, P6, P7 | Pendientes, como en la tabla anterior |
+
+- `db:check-rls` está probado como gate bloqueante: `scripts/ci/prove-gates.sh` (T087) aplica una tabla con
+  `tenant_id` sin `FORCE` y el gate falla por esa violación.
+- Las métricas del pool (T094) se leen con un método de solo lectura de `TenantPrismaService` (`poolStats()`); el pool
+  sigue privado y `withTenant` no cambió.
 
 ## Revisión
 

@@ -186,6 +186,20 @@ técnico `dev-probe`.
   No cambia C2-2, C2-3 ni otras decisiones. **P2 (ADR-0004) sigue parcial.**
 - **Documentos alineados:** `docs/architecture/backend-architecture.md`.
 
+## Verificación tras la implementación de 001 (2026-11-23, T090)
+
+Registro del estado real; **no reaprueba** este ADR ni cambia su estado (*Aceptado con condiciones*).
+
+- **C2-1 verificado** por el criterio S5 del spike T014 (ADR-0004, §Resultado del spike: anidamiento con el mismo tenant
+  reutiliza la transacción; con otro tenant, error y rollback total) y, sobre la implementación definitiva, por
+  `backend/test/integration/tenant-prisma.spec.ts` y `tenant-transaction-ownership.spec.ts`.
+- **C2-2 (D-ARC-07) sigue PENDIENTE.** No existe manifiesto de propiedad de tablas ni verificador. Debe resolverse antes
+  de la primera tabla de negocio (002), como exige este ADR. 001 solo creó tablas de `common` y la tabla técnica de
+  `dev-probe`.
+- **Lint de dependencias activo y bloqueante** (dependency-cruiser en el job `backend`; T087 demuestra que un import de
+  framework en `domain/` lo hace fallar).
+- **Tiempo de CI del backend:** medido solo en local; GitHub Actions no se ha ejecutado (T052).
+
 ## Revisión
 
 - Extraer un módulo a servicio solo con ADR y métricas (carga, aislamiento de fallos, equipo dedicado). Candidatos

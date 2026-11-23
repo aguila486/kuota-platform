@@ -155,6 +155,19 @@ primer administrador funcional, se abre un ADR nuevo para el administrador.
   verdes.
 - Lint que impide importar `package:flutter` desde `financial_domain`.
 
+## Verificación tras la implementación de 001 (2026-11-23, T090)
+
+Registro del estado real; **no reaprueba** este ADR ni cambia su estado (*Aceptado con condiciones*).
+
+- **Condición D-ARC-03 vigente:** `admin_web` existe solo como shell provisional en Flutter Web (pantalla de inicio,
+  build Web en CI). No hay pantallas administrativas y la tecnología definitiva sigue sin decidir.
+- **Validación de este ADR, cumplida en local:** un solo `flutter/pubspec.lock` para 3 apps y 4 paquetes
+  (`scripts/ci/check-single-lockfile.sh`, T086); `melos run analyze` (`--fatal-infos`) y `melos run test` en verde
+  (124 pruebas, incluidas las de `financial_domain` en VM y Chrome); `tool/check_deps.dart` impide que
+  `financial_domain` y `shared_core` dependan de `flutter` y que una app dependa de otra.
+- **iOS:** validación local DIFERIDA por decisión arquitectónica (Aprobación 9 de 001, falta de espacio en disco); no
+  probado. Android y Web compilan en el job `flutter`.
+
 ## Revisión
 
 Reevaluar Riverpod vs Bloc si la auditoría de interacciones de UI se vuelve requisito regulatorio; reevaluar Flutter Web

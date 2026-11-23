@@ -1,11 +1,55 @@
-# Informe de validación — 001-platform-foundation
+# Informe de validación de 001-platform-foundation (T091)
 
-Registro de verificaciones que no pueden cerrarse solo desde el repositorio local. Lo completa T091 (quickstart en un
-clon limpio). Las entradas siguientes provienen de G12/US3 (2026-11-23).
+**Estado de T091: ABIERTA.** Este informe recoge la evidencia que Claude Code pudo obtener en local. T091 exige además la
+**validación por el mantenedor** (SC-001) y la medición del arranque en un clon limpio siguiendo solo la guía, que no
+están hechas.
 
-| Fecha | Elemento | Estado | Detalle |
+## 1. Ejecución en un clon limpio (Claude Code, 2026-11-23)
+
+Clon local (`git clone --no-hardlinks` del repositorio, commit `163c529`) en un directorio temporal, sin red para las
+dependencias (store local de pnpm). MacBook arm64, 8 núcleos, Docker Desktop 4.43.2 (8 GB para la VM).
+
+| Paso de la guía | Comando | Resultado | Tiempo |
 |---|---|---|---|
-| 2026-11-23 | CODEOWNERS (T053) | **Pendiente de validación** | `.github/CODEOWNERS` usa el marcador `<maintainer-handle>`; no se inventa ningún usuario. La asignación automática de revisores no funciona hasta que exista el remoto y un identificador real de GitHub |
-| 2026-11-23 | Workflow `CI` (T052) | **Solo validado en local** | `actionlint` sin errores y jobs reproducidos con `scripts/ci/run-local.sh`. Nunca se ejecutó en GitHub Actions (no hay remoto) |
-| 2026-11-23 | Protección de `main` (T055) | **No aplicada** | Reglas documentadas en `docs/process/git-workflow.md` §5; requieren el remoto y permisos de administración |
-| 2026-11-23 | Compatibilidad del contrato (oasdiff contra `main`) | **OMITIDA** | `main` no contiene el contrato: no hay baseline legítimo hasta fusionarlo |
+| Clonar | `git clone` (local) | correcto | < 1 s |
+| Herramientas | `make doctor` | "entorno listo" (Docker, Compose, Node, pnpm, FVM, Flutter 3.50.1) | 4 s |
+| Dependencias | `pnpm install --frozen-lockfile --offline` | correcto | 3 s (descargas ya en caché: no representa una máquina nueva) |
+| Job `general` | `scripts/ci/run-local.sh general` | 5/5 PASS | 5 s |
+
+**FR-005:**
+
+- `find . -type d -empty -not -path './.git/*'` en el clon: **sin resultados**.
+- Carpetas de primer y segundo nivel: todas figuran en la estructura de `plan.md` (`backend/{prisma,scripts,src,test}`,
+  `contracts/{fixtures,openapi}`, `flutter/{apps,config,packages,tool}`, `infra/docker`, `scripts/{ci,contracts,dev}`,
+  `.github/workflows`) o ya existían antes de 001 (`docs/*`, `specs/`, y las de herramientas `.claude/`, `.specify/`).
+
+## 2. No ejecutado en el clon y por qué
+
+| Paso | Motivo |
+|---|---|
+| `make up` (arranque ≤ 15 min, SC-001) | Con el proyecto de Compose por defecto (`kuota`) usaría el volumen persistente `kuota_kuota-pgdata`, que está protegido; con otro proyecto crearía un volumen persistente nuevo que luego no se podría borrar sin autorización (`docker volume rm` prohibido). Debe hacerlo el mantenedor |
+| Arranque + pruebas ≤ 30 min (SC-001) | Depende del arranque anterior y de una máquina sin cachés; las descargas se miden aparte |
+| Validación por el mantenedor | SC-001 exige una persona distinta de quien implementó; con mantenedor único, el mantenedor valida lo implementado por Claude Code |
+
+## 3. Evidencia local del repositorio de trabajo (no del clon)
+
+Ejecutada con los mismos scripts que CI, en secuencia (los jobs pesados nunca en paralelo):
+
+| Control | Resultado (2026-11-23) |
+|---|---|
+| `run-local.sh general` | 5/5 PASS |
+| `run-local.sh contracts` | 5 PASS + oasdiff contra `main` **OMITIDO** (sin baseline, T049) |
+| `run-local.sh flutter` | 14/14 PASS (124 pruebas, VM y Chrome; Web release y 2 APK) |
+| `run-local.sh backend` | 18/18 PASS, 687/687 pruebas en 50 archivos (segunda ejecución; la primera falló por un timeout de Testcontainers, ver `research.md`) |
+| `prove-gates.sh` (T087) | 6/6 gates probados: pasan con el código limpio y fallan con su defecto de referencia |
+| Duración de CI solo documentación (T088) | 4 s en local (`quickstart.md` §8) |
+
+## 4. Pendientes registrados
+
+- **US3-8 (asignación automática de revisores, FR-036): PENDIENTE.** `.github/CODEOWNERS` tiene el marcador
+  `<maintainer-handle>`: la asignación no puede verificarse hasta sustituirlo por un usuario real y abrir un PR en
+  GitHub (requiere autorización de push).
+- **SC-001:** pendiente de la ejecución y validación del mantenedor (sección 2).
+- **SC-008 / checkpoint de US7:** PENDIENTE DE VALIDACIÓN iOS (Aprobación 9). iOS: DIFERIDO POR DECISIÓN
+  ARQUITECTÓNICA — NO PROBADO.
+- **T049 y T052:** requieren el contrato en `main` y la ejecución del workflow en GitHub.

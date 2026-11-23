@@ -148,3 +148,15 @@ no es una firma: identifica el contenido aprobado mediante los identificadores d
   - US4, US7 y 002.
 - **Sin cambios en `spec.md`, `plan.md` ni `tasks.md`:** el cambio refuerza FR-009 y FR-010 sin modificar su texto.
 - **Detalle:** `docs/security/http-log-minimization.md`.
+
+### Propuesta de enmienda de T080 (PENDIENTE de aprobación, 2026-11-23)
+
+- **Texto vigente:** "`flutter/pubspec.yaml` raíz del workspace (`workspace:` con 3 apps y 4 paquetes, …)".
+- **Problema:** las 3 apps se crean en T085 y `api_client` en T069/T070, ambas fuera del alcance de US7a. Pub rechaza
+  un `workspace:` con miembros que no existen, así que el criterio no se puede cumplir antes que esas tareas, aunque la
+  nota de orden de tasks.md permite adelantar T080.
+- **Texto propuesto:** "…`flutter/pubspec.yaml` raíz del workspace (`workspace:` con los miembros existentes; T085 añade
+  las 3 apps y T069/T070 `api_client` al crearlos, de modo que al cerrar US7 contenga 3 apps y 4 paquetes, …)". El
+  resto de T080 no cambia.
+- **Estado:** T080 queda **sin marcar** hasta que se apruebe la enmienda. Lo demás de T080 está implementado:
+  `.fvmrc`, `sdk`, la sección `melos:` y `analysis_options.yaml`.

@@ -762,3 +762,63 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
   - `audit-service.spec.ts` se añade a las suites obligatorias.
 - **Nota previa superada:** las pruebas de minimización de `origin` siguen en `audit.spec.ts`. Su ubicación ya no
   depende del orden.
+
+### US7a: workspace Flutter (T080–T084, 2026-11-23)
+
+- **SDK:** Flutter 3.50.1 / Dart 3.14.0 vía FVM (`flutter/.fvmrc`, D-ENV-01), instalado con `fvm install 3.50.1`. La
+  instalación global (3.24.3 / Dart 3.5.3) no se tocó.
+  - `fvm dart run melos …` antepone el SDK de FVM al `PATH`, así que `dart`/`flutter` dentro de los scripts de Melos
+    son los fijados (verificado).
+  - `.fvm/` está en `.gitignore`.
+- **Dependencias (versiones exactas; resolución única en `flutter/pubspec.lock`):**
+
+  | Paquete | Versión | Justificación |
+  |---|---|---|
+  | `decimal` | 3.2.6 | La aprobada en la tabla de versiones; existe 3.2.7 y no se actualizó |
+  | `melos` | 8.10.1 | La aprobada; dependencia de desarrollo de la raíz, sin instalación global |
+  | `lints` | 6.1.0 | Base de `analysis_options.yaml` (ADR-0003: lints compartidos estrictos) |
+  | `test` | **1.32.0** | La 1.33.0 exige `test_api` 0.7.15, y `flutter_test` de Flutter 3.50.1 fija 0.7.14 |
+  | `yaml` | 3.1.4 | `check_deps` y la prueba de estructura leen pubspecs |
+  | `path` | 1.9.1 | Rutas en `check_deps` |
+  | `material_ui` | 1.11.1 | `flutter.dev`. `package:flutter/material.dart` está deprecado desde Flutter 3.47, y con `--fatal-infos` el aviso hace fallar el análisis. Se adopta el reemplazo oficial en vez de silenciar la deprecación o rebajar la severidad. ADR-0003 no fija ningún paquete de Material |
+- **Estructura creada:**
+  - `flutter/.fvmrc`, `flutter/pubspec.yaml` (`name: kuota_workspace`, `workspace:`, `sdk: ^3.14.0`, sección `melos:`
+    con `analyze`, `format`, `test`, `test:financial` y `generate`), `flutter/analysis_options.yaml` (estricto,
+    `page_width: 120`);
+  - `packages/shared_core` (T081), `packages/financial_domain` (T082) y `packages/design_system` (T083);
+  - `tool/check_deps.dart` y su prueba con el pubspec defectuoso de referencia (T084).
+- **T080 queda ABIERTA (bloqueo de dependencia):**
+  - Su criterio literal pide `workspace:` "con 3 apps y 4 paquetes", pero las apps son T085 y `api_client` es
+    T069/T070, y pub rechaza un workspace con miembros inexistentes.
+  - `workspace:` contiene hoy los 3 paquetes que existen; T085 y T069/T070 añaden los suyos al crearlos.
+  - Propuesta de enmienda en approvals.md.
+- **Melos:**
+  - Los scripts no invocan `melos` (no hay binario global): usan `exec:` con `packageFilters` y `steps`. `test` =
+    `test:dart` + `test:flutter` + `test:tool`.
+  - `generate` sale con su mensaje PENDIENTE mientras no exista `scripts/contracts/generate-dart-client.sh` (T069);
+    Melos lo marca como FAILED, nunca como éxito.
+- **`check_deps`:** además de los pubspecs (`dependencies`, `dev_dependencies` y `dependency_overrides`, por nombre o
+  por `path`), revisa los imports. En un pub workspace la resolución es compartida y una app podría importar
+  `package:<otra_app>/…` sin declararlo. También revisa miembros que falten en `workspace:`. Un YAML inválido termina
+  con salida 2, no con una excepción.
+- **Anti-float Dart (parte Dart de T065):**
+  - **Sobre `financial_domain/lib` real:** PASS **trivial**. Son 2 archivos sin código ejecutable, porque Money es
+    T063, pero sus comentarios mencionan `double`, `num` y `toDouble()` y la regla no da falsos positivos.
+  - **Sobre una copia con `final double amount`:** FAIL en la línea exacta.
+  - **Directorio sin archivos `.dart`:** ahora es PENDIENTE (3), no PASS.
+  - Su integración en el job `flutter` depende de T050, así que **T065 sigue abierta**.
+- **CI:**
+  - Con `flutter/pubspec.yaml` presente, el job `flutter` del workflow se ejecutaría al cambiar `flutter/` o el
+    contrato y llamaría a `scripts/ci/flutter.sh`, que no existe (T050). Fallaría y `CI: resultado` quedaría en rojo:
+    es el comportamiento cerrado esperado hasta T050.
+  - `run-local.sh flutter` sigue en PENDIENTE (3) y lista los controles locales disponibles.
+- **Arranque desde una instalación limpia:**
+
+  ```bash
+  fvm install          # en flutter/: instala la versión de .fvmrc (3.50.1)
+  cd flutter && fvm flutter pub get                   # resolución única (flutter/pubspec.lock)
+  fvm dart run melos run analyze && fvm dart run melos run format && fvm dart run melos run test
+  fvm dart run tool/check_deps.dart && ../scripts/ci/check-no-float.sh dart
+  ```
+
+  El `flutter/README.md` con los comandos móviles es parte de T086.

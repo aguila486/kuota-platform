@@ -200,6 +200,40 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
   mayor residuo con empates por índice; `format` canónico sin localización. En Dart, `BigInt` también en web.
 - **Alternatives considered**: dinero.js 2 (API orientada a formato; menos control explícito del redondeo); big.js
   (sin precisión configurable por instancia en la forma requerida).
+- **Implementación (US4 backend: T056, T057, T061, T064; T062 parcial; 2026-11-22)**:
+  - `backend/src/common/money/` (API pública en `index.ts`): `Money.of/zero/parse`, `add`, `subtract`,
+    `multiply(factor: Decimal, rounding?)`, `allocate(n | ratios)`, `format`, `equals`, `toJSON`; `MoneyError` con los
+    seis códigos de ADR-0007; `ROUNDING_MODES`; catálogo `CURRENCIES`; `moneyFromJson`/`moneyToJson`;
+    `parseMoneyField(valor, campo)` para la frontera HTTP (400 `validation-error`, `errors[{field, message}]` con el
+    código y sin reflejar el valor). `decimal.js` **10.6.0** (dependencia de runtime, exacta, sin dependencias ni
+    scripts de instalación).
+  - **Exactitud:** los montos nunca pasan por `number`. `multiply` toma el valor exacto del factor (`Decimal` en la
+    instancia clonada `precision: 40`) como fracción y calcula el producto y el redondeo con `bigint`. Así un monto de
+    19 dígitos por un factor largo no redondea ningún intermedio (`precision: 40` lo haría). Hay un fixture con un producto
+    de 49 dígitos significativos.
+  - **Catálogo:** solo las monedas que nombran los documentos aprobados (BHD 3, CLF 4, JPY 0, MXN 2, USD 2; R-08 pide un
+    catálogo mínimo). Ampliarlo es D-LEG-01.
+  - **Orden de validación** (en `of`, `parse` y `from_json`): moneda → forma → dominio.
+  - **Interpretaciones a confirmar (no están fijadas en ADR-0007; Dart deberá replicarlas en T063):**
+    - `parse` usa la gramática `-?(0|[1-9][0-9]*)(\.[0-9]+)?`: rechaza ceros a la izquierda, `.5`, `1.`, `+1`, y el
+      cero negativo (`-0`, `-0.00`) con `INVALID_AMOUNT`, por coherencia con la regla de `amount_minor`. `1.500` en
+      MXN → `TOO_MANY_DECIMALS` (lectura literal de "más decimales que la escala").
+    - `allocate` con total negativo reparte el valor absoluto y aplica el signo (`-100/3 → [-34, -33, -33]`).
+    - `HALF_UP` = mitad alejándose de cero (semántica de decimal.js y Java).
+    - Argumentos inválidos de `allocate`/`multiply` (partes ≤ 0, factor no finito o exponente extremo) son errores de
+      programación (`RangeError`), no códigos de Money.
+    Estas interpretaciones solo están en pruebas de TypeScript, no en los fixtures compartidos.
+  - **T062 parcial:** hecho `money.json.ts` (serialización, `from_json` y validación de frontera). **Falta** usarla en
+    `dev_probe_items` y `backend/src/modules/dev-probe/interface/` (G7b, no autorizado): T062 sigue sin marcar.
+- **Fixtures (T056, T057):** `contracts/fixtures/money/core.json` (104 casos), `currencies.json` y
+  `fixture.schema.json` (copia idéntica del esquema aprobado). Los valores esperados se calcularon con un oráculo
+  independiente (Python, enteros exactos y `decimal`), no con la implementación. El runner valida los archivos con
+  **Ajv 8.20.0** (devDependency, prevista en el plan: "Ajv 2020"); `strictRequired` está desactivado porque el esquema
+  usa `required` dentro de `oneOf` (válido en JSON Schema).
+  - **Hueco del esquema aprobado:** `parse(text, currency)` necesita una moneda, pero `inputs` no tiene `currency` y no
+    admite propiedades adicionales. Convención provisional, documentada en el propio archivo: la moneda viaja en
+    `inputs.a.currency` con `amount_minor` `"0"`, que se ignora. Propuesta: añadir `inputs.currency` al esquema
+    (requiere aprobación).
 
 ## R-09 · Fixtures numéricos compartidos
 
@@ -221,6 +255,11 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
     `flutter/packages/financial_domain/lib/**` (excepto en comentarios), más `analysis_options` estricto.
 - **Rationale**: verificable, simple y de bajo costo; cubre SC-003.
 - **Alternatives considered**: plugin `custom_lint` en Dart (más robusto pero más complejo; reevaluar en 004).
+- **Implementación TS (T064, 2026-11-22)**: bloque de `eslint.config.mjs` para `src/common/money/**` y
+  `src/**/domain/**` con los selectores de R-10, incluidos los parámetros de constructor y los tipos literales. Como
+  ESLint reemplaza la lista de `no-restricted-syntax` entre bloques, el bloque repite las restricciones de seguridad (P2,
+  T038). Probado con la configuración real (`anti-float-rule.spec.ts`). El archivo defectuoso de referencia (T060) y el
+  script de CI (T065) quedan pendientes.
 
 ## R-11 · Reglas de dependencias (Clean Architecture y apps)
 
@@ -394,6 +433,11 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 | ~~ADR-0002 nombra `public-api.ts`; la decisión de G7a es `index.ts`~~ | **Resuelto**: enmienda 1 de ADR-0002 (2026-11-22) |
 | T042 acepta `sample_amount` (Money) y su validación en la frontera es T062 (US4); `tasks.md` declara US2 independiente de US4 | Antes de autorizar G7b: reordenar o aprobar la dependencia |
 | P2: gate de CI de las reglas de contexto y fuente de identidad real | G12 y 002 |
+| P2 R3: el cliente transaccional compartido por código defectuoso lee como su tenant (`docs/security/p2-tenant-context-risk-assessment.md`) | Decidir antes de G7b (propuesta: proxy que verifique el tenant en cada llamada; cambia T039) |
+| Esquema de fixtures de Money sin `inputs.currency` para `parse` | Aprobar la ampliación del esquema antes de T059 (Dart) |
+| Interpretaciones de Money no fijadas en ADR-0007 (`parse` estricto, `allocate` negativo) | Confirmar antes de T063 (Dart) |
+| T062: falta usar Money en dev-probe | G7b |
+| Auditoría sin actor: sin `X-Kuota-Dev-Actor`, `app.actor_id` queda vacío y `audit_events.actor_id` es NOT NULL | Decidir en US6 (T077) antes de auditar escrituras de dev-probe (T078) |
 
 ## R-19 · Estado y estructura Flutter
 

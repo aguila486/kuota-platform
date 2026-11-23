@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Job `contracts` de CI (T049; FR-027..FR-030; R-13, R-14, R-17).
 #   A. Estructura: lint de Redocly (`pnpm contracts:lint`) y pruebas de las reglas propias y del detector de cambios
-#      incompatibles (`pnpm contracts:test`).
+#      incompatibles (`pnpm contracts:test` y `scripts/ci/tests/breaking.test.sh`, T068).
 #   B. Compatibilidad: oasdiff breaking contra `main`. Mientras `main` no contenga el contrato no hay baseline
 #      legítimo: se registra OMITIDO, nunca PASS, y no se sustituye por un contrato generado desde el propio HEAD.
 #   C. Fixtures de dinero: validación de contracts/fixtures/money contra fixture.schema.json (Ajv 2020).
@@ -37,6 +37,8 @@ breaking() {
 
 check "Estructura: Redocly lint (contracts:lint)" pnpm contracts:lint
 check "Reglas propias y detector de incompatibilidades (contracts:test)" pnpm contracts:test
+check "Detector de incompatibilidades: campo requerido eliminado de CompatibilityInfo (T068)" \
+  scripts/ci/tests/breaking.test.sh
 breaking
 check "Fixtures de dinero contra fixture.schema.json (Ajv 2020)" \
   pnpm --filter backend exec vitest run test/unit/money/fixtures.spec.ts

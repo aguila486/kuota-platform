@@ -872,3 +872,64 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
   - T070 añade `api_client` y T085 añade las apps, con lo que cierra B.
 - **Estado:** T080 sigue **sin marcar**. La propuesta anterior (que la etapa B "dejara de exigirse") se descarta: no se
   debilita el criterio final.
+
+### T071, T050 y T085: CI de Flutter y las tres apps (2026-11-23)
+
+- **SDK exacto en CI sin acciones de terceros:**
+  - `scripts/ci/setup-flutter.sh` descarga el archivo oficial `flutter_linux_3.50.1-stable.tar.xz` y verifica su
+    sha256 fijado (`4ad17fc8…2678`, de `releases_linux.json`).
+  - `lib.sh` (`use_project_flutter`) antepone ese SDK, o el de FVM en local, al `PATH` y comprueba que la versión
+    coincide con `.fvmrc`. Sin SDK válido, falla.
+  - Equivale al `fvm flutter …` de T050 (misma versión y origen oficial). FVM solo se usa en local.
+- **T071:**
+  - `contracts.sh` regenera el cliente y exige `git status` limpio en `api_client`, lo que también detecta archivos
+    nuevos o eliminados. Se niega a ejecutarse con cambios previos sin confirmar y nunca se omite. El job `contracts`
+    prepara el SDK.
+  - `backend`: script `test:contract` (30 pruebas).
+  - Negativas en un worktree temporal: contrato cambiado sin regenerar, generado editado a mano, cambios previos y
+    falta de SDK fallan.
+- **T050 (`scripts/ci/flutter.sh`):**
+  - **Controles:** `pub get --enforce-lockfile`, `melos analyze`, `format` y `test`, `check_deps`, anti-float Dart,
+    osv-scanner y builds de Android (APK debug) y Web (release).
+  - **Escaneo Dart:** osv-scanner (Pub) lee `flutter/pubspec.lock` con `--all-packages`. `tool/osv_coverage.dart`
+    exige que cada paquete alojado esté en el informe (102/102; los 4 del SDK no están en OSV) y `osv-gate.mjs`
+    evalúa la severidad. `dio` 4.0.0 (GHSA-9324-jv53-9cc8, 7,5) queda bloqueado.
+  - **Anti-float Dart:** PENDIENTE (nunca PASS) mientras `financial_domain/lib` no tenga código; solo comentarios o
+    `library;` no cuentan.
+  - **Negativas:** `shared_core` con Flutter, lockfile desalineado, `double` en `financial_domain` y código sin formato
+    hacen fallar el job.
+  - **iOS:** fuera de CI (Clarification 2026-11-22).
+- **T085:**
+  - **Apps:** `admin_web` (Web, shell provisional de D-ARC-03), `collector_mobile` y `client_mobile` (Android e iOS),
+    con un `ProviderScope` de Riverpod 3.5.0 (R-19).
+  - **Pantalla común:** `design_system.KuotaStartupScreen`, alimentada por `api_client.classifyCompatibility`.
+    "Compatible" solo con `client_supported: true` del servidor; `app-version-unsupported` → incompatible; red o
+    502/503/504 sin problem+json → no disponible.
+  - **Configuraciones:** `flutter/config/{local,testing,staging,production}.json`. Staging y production dejan la URL
+    vacía hasta D-ARC-04: la app muestra "configuración inválida", sin URL inventada.
+  - **Identificadores de app:** `app.kuota.*` son **PROVISIONALES**, porque ningún documento los fija. Hay que
+    confirmarlos antes de publicar en tiendas.
+  - **Plataformas:** permiso `INTERNET` en el manifiesto principal de Android, HTTP sin TLS solo en debug (emulador:
+    `--dart-define=KUOTA_API_BASE_URL=http://10.0.2.2:3000`) y `NSAllowsLocalNetworking` en iOS.
+  - **`.editorconfig`:** deja la indentación de los archivos de Xcode a Xcode.
+- **Evidencia real (2026-11-23):**
+  - **Emulador Android 14 (Pixel 3a):** `collector_mobile` y `client_mobile` muestran "Compatible con Kuota Core / API
+    1.0.0" contra el backend local, y "Kuota Core no disponible / network-error" con el backend apagado.
+  - **`api_client` desde la VM:** Compatible, Incompatible (`MIN_SUPPORTED_COLLECTOR=0.2.0`) y ApiUnavailable;
+    `/health/live` 200 y `/health/ready` 503 sin base de datos.
+- **BLOQUEOS y huecos:**
+  - **CORS (hueco de especificación):** el backend no define CORS. En Chrome, `admin_web` envía el preflight `OPTIONS`
+    (404) y nunca llega el `GET`, así que muestra "no disponible". La política de CORS (orígenes por entorno) es una
+    decisión pendiente; no se cambió el backend.
+  - **iOS local:** BLOQUEADO. Xcode 26.3 trae el SDK del simulador iOS 26.2, pero solo está instalado el runtime iOS
+    18.6 ("Found no destinations"). Falta instalar la plataforma iOS 26.2, un cambio del sistema no autorizado. Lo
+    verifica el checkpoint de T086 (SC-008).
+- **No marcadas:** T052 (workflow nunca ejecutado en GitHub) y T049 (oasdiff contra `main` sigue OMITIDO sin baseline).
+- **Intermitencia de infraestructura observada:** `test/contract/kuota-core.contract.spec.ts` falló dos veces en esta
+  sesión por Docker bajo carga, nunca por una aserción:
+  - un timeout de 30 s al publicar el puerto del contenedor;
+  - un "409 cannot remove container… is running" en el desmontaje, justo después de los builds Android.
+
+  El job `backend` lo marcó como FAIL, como debe, y al repetirlo pasó 13/13 (648/648). Pendiente: revisar el
+  arranque y desmontaje de Testcontainers de ese archivo, o los recursos de Docker del runner, antes de depender de
+  CI remoto.

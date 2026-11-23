@@ -1201,3 +1201,97 @@ implementados y probados; SC: 4/9 cumplidos, 2 solo en local.
   textos de estado de ADR-0004 y del spec desactualizados, total de tareas 96 → 97.
 - **Decisión:** no se corrigió ningún hallazgo CRITICAL, porque todos requieren tareas o decisiones de gobernanza
   nuevas. T092 sigue abierta y **bloquea abrir el PR**.
+
+### Corrección local de los hallazgos de T092 (2026-11-23, Aprobación 10)
+
+#### C1: cobertura Dart (RESUELTO)
+
+- **Texto literal (Constitución X):** "Cobertura mínima en dominio financiero: **90 % de líneas y ramas**; resto del
+  backend y paquetes compartidos: 80 %". "Paquetes compartidos" = `flutter/packages/*`; las apps no tienen mínimo.
+  Para los paquetes que no son el dominio financiero se exige 80 % de líneas y 80 % de ramas, como el backend aplica 80
+  a todas sus métricas.
+- **Exclusión única:** `lib/src/generated/**` (cliente OpenAPI de `api_client`, verificado por regeneración en T071),
+  con la misma regla que el backend (`vitest.config.ts`: `exclude: ['src/generated/**']`). Su cobertura se informa
+  aparte en cada ejecución. La Constitución no menciona el código generado: **se aplica la regla ya establecida en el
+  proyecto, pendiente de ratificación expresa.** Ningún archivo escrito a mano se excluye.
+- **Implementación:**
+  - `flutter/tool/coverage_gate.dart` (7 pruebas): lee el lcov, cuenta líneas (`DA`) y ramas (`BRDA`) sin duplicados
+    y falla si un archivo de `lib/` con código no aparece en el informe (ninguna prueba lo carga). Rutas reales: en
+    macOS `/var` es enlace de `/private/var`.
+  - `scripts/ci/check-dart-coverage.sh`: `dart test -p vm --coverage-path --branch-coverage` (Dart puro) o
+    `flutter test --coverage --branch-coverage` por paquete; pruebas fallidas o paquete sin `test/` → FAIL.
+  - Paso del job `flutter`.
+- **Cobertura medida** (líneas / ramas; "antes" = primera medición de este bloque; "después" = tras C2, que añadió
+  código y pruebas en `shared_core` y `api_client`). No hizo falta añadir pruebas solo para alcanzar los umbrales:
+
+  | Paquete | Antes | Después | Mínimo |
+  |---|---|---|---|
+  | `financial_domain` | 116/118 (98,3 %) / 63/65 (96,9 %) | igual | 90 / 90 |
+  | `shared_core` | 91/98 (92,9 %) / 57/61 (93,4 %) | 96/103 (93,2 %) / 61/65 (93,8 %) | 80 / 80 |
+  | `api_client` (propio) | 74/77 (96,1 %) / 44/47 (93,6 %) | 75/78 (96,2 %) / 45/48 (93,8 %) | 80 / 80 |
+  | `api_client` (generado, informativo) | 210/865 (24,3 %) / 84/418 (20,1 %) | igual | — |
+  | `design_system` | 78/78 (100 %) / 31/32 (96,9 %) | igual | 80 / 80 |
+- **Pruebas negativas (`prove-gates.sh`, worktree real):** código de Money sin pruebas en `money.dart` →
+  "financial_domain: líneas por debajo de 90"; archivo nuevo en `shared_core/lib` que ninguna prueba carga → "tiene
+  código y ninguna prueba lo carga". Ambos fallan por el motivo esperado; el código limpio pasa.
+
+#### C2: duplicidad entre apps (PARCIAL: requiere decisión de gobernanza)
+
+- **Responsabilidades de los archivos duplicados:**
+
+  | Pieza | Responsabilidad | Ubicación correcta según `flutter-architecture.md` §3 |
+  |---|---|---|
+  | Carga de `AppConfig` como `Result` | Configuración de entornos | `shared_core` → **movida**: `AppConfig.tryFromEnvironment/tryFromValues` |
+  | Consulta + clasificación de compatibilidad | Cliente HTTP y mapeo de errores | `api_client` → **movida**: `KuotaApiClient.checkCompatibility()` |
+  | Providers de Riverpod (config, cliente, compatibilidad) | Composición de la app (estado) | Ningún paquete actual: `shared_core` y `api_client` no dependen de Flutter; `design_system` "no contiene llamadas HTTP" y solo depende de `shared_core` |
+  | `CompatibilityStatus` → `StartupStatus` | Traducción de un resultado del cliente a estado visual | Necesita `api_client` + `design_system`; ningún paquete actual puede depender de ambos |
+  | `KuotaShellApp` y `StartupPage` | Shell (tema + página de inicio con Riverpod) | Igual que la fila anterior |
+  | `main.dart`, `app_info.dart` | Punto de entrada e identidad | **En cada app** (no son idénticos: nombre, `KuotaApp`, comentario) |
+- **Siguen idénticos** `lib/src/providers.dart` (≈ 45 líneas) y `lib/src/app.dart` (41 líneas) en las tres apps. El
+  hallazgo CRITICAL **no está cerrado**.
+- **Alternativas** (no se implementó ninguna: cambian la estructura aprobada):
+  1. **Recomendada:** paquete nuevo `flutter/packages/app_shell` (Flutter; depende de `shared_core`, `api_client`,
+     `design_system`, `flutter_riverpod`, `material_ui`), con los providers parametrizados por la identidad de la app
+     (`AppVersion`, nombre) mediante un override de Riverpod, `startupStatusFor`, `KuotaShellApp` y `StartupPage`. Cada
+     app conserva `main.dart` (`ProviderScope` con el override) y `app_info.dart`. Requiere enmendar `plan.md` (4 → 5
+     paquetes), `flutter-architecture.md` §3 y una tarea nueva; `check_deps.dart` ya impide que dependa de una app.
+  2. Ampliar `design_system` para depender de `api_client` y `flutter_riverpod`: contradice `flutter-architecture.md`
+     §3 ("No contiene: lógica de negocio, llamadas HTTP"). No recomendada.
+  3. Excepción documentada: no es posible sin enmendar la Constitución (IX dice "NO DEBE duplicarse"). No recomendada.
+
+#### T094 (CERRADA) y H1, H3
+
+- **T094:** ratificada por la Aprobación 10 tras verificar la condición. Desviación registrada en `approvals.md`.
+- **H1:** registro de autorizaciones verificadas en `approvals.md`, con citas literales y hora UTC de la transcripción
+  local de la sesión. Queda pendiente de confirmación el desglose de G4 (T016–T021), deducido del mensaje de G5.
+- **H3 (RESUELTO):** causa: con el prefijo global, `ExpressAdapter.setNotFoundHandler` monta el 404 de Nest solo bajo
+  `/v1` y en las rutas excluidas (`/health/{*path}`). Corrección: tras `app.init()`, `createApp` monta un último
+  recurso que responde con `ProblemDetailsFilter.respond` (extraído de `catch`, mismo comportamiento). Pruebas
+  (`not-found.spec.ts`, 12): 404 problem+json en `/`, `/foo`, `/metrics`, `/v2/...`, `/v1/...` y `/health/...` con
+  cualquier método; sin reflejar ruta, query ni encabezados; `X-Correlation-Id` respetado; sin `x-powered-by`; CORS y
+  preflight sin regresión; `kuota_http_errors_total{code="not-found"}` +1 y ruta `unmatched`. Contrato sin cambios.
+- **H2 (sin cambios, no autorizado en este bloque):** `contracts.sh` registra OMITIDO si falta la referencia base;
+  debería ser FAIL cuando exista el baseline de `main` (T049).
+
+#### Regresión y nueva verificación de T092 (2026-11-23)
+
+- **Regresión local**, secuencial y en verde a la primera:
+  - `general`: 5/5 PASS.
+  - `contracts`: 5 PASS + oasdiff contra `main` **OMITIDO** (T049, sin baseline).
+  - `flutter`: 15/15 PASS, incluido el nuevo gate de cobertura. 135 pruebas: `shared_core` 19, `api_client` 26,
+    `financial_domain` 42 (VM + Chrome), `design_system` 5, tres apps × 7, `tool` 22. Web release y 2 APK.
+  - `backend`: 18/18 PASS; 698/698 pruebas en 51 archivos; cobertura 98,55 / 96,9 / 98,34 / 99,64.
+  - `prove-gates.sh`: 8/8 gates probados (los 6 de T087 más 2 de cobertura Dart).
+  - iOS no se ejecutó.
+- **Estado de los hallazgos** (verificado con evidencia; no se volvió a lanzar el análisis completo):
+
+  | Hallazgo | Estado | Evidencia |
+  |---|---|---|
+  | C1 | **Resuelto** | Gate en el job `flutter` + 2 defectos de referencia en `prove-gates.sh` |
+  | C2 | **Abierto (CRITICAL)** | `providers.dart` y `app.dart` siguen idénticos en las 3 apps (md5); requiere aprobar la alternativa 1 (`app_shell`) |
+  | H1 | **Registrado** | Registro verificado en `approvals.md`; queda pendiente de confirmar el desglose de G4 |
+  | H2 | Abierto | No autorizado en este bloque; depende de T049 |
+  | H3 | **Resuelto** | `not-found.spec.ts` |
+  | T094 | **Cerrada** | Aprobación 10 |
+- **T092 sigue ABIERTA** (C2). **T091 sigue ABIERTA** (validación del mantenedor; `make up` no se ejecutó contra los
+  volúmenes existentes). **T049 y T052 siguen PENDIENTES** (sin GitHub remoto, Aprobación 10).

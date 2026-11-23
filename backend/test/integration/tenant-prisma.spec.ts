@@ -327,6 +327,51 @@ describe('intento de eludir withTenant: set_config crudo dentro de la transacci�
   });
 });
 
+describe('transaction() dentro de withTenant', () => {
+  it('rechaza el cliente activo si el tenant del contexto cambió (TenantContextMismatchError)', async () => {
+    await rejection(
+      asTenant(TENANT_A, () =>
+        tenantPrisma.withTenant(async () => {
+          await cls.run({ ifNested: 'inherit' }, () => {
+            cls.set(CLS_TENANT_ID, TENANT_B);
+            expect(() => tenantPrisma.transaction()).toThrow(TenantContextMismatchError);
+            return Promise.resolve();
+          });
+          throw new Error('fin');
+        }),
+      ),
+    );
+  });
+});
+
+describe('RIESGO RESIDUAL P2 (documentado, no mitigado): referencia filtrada del cliente transaccional', () => {
+  it('si código defectuoso comparte el `tx` de A con otra operación mientras la transacción sigue abierta, esa operación lee como A', async () => {
+    await asTenant(TENANT_A, () =>
+      tenantPrisma.withTenant((tx) => tx.dev_probe_items.create({ data: { label: 'filtrado-A' } })),
+    );
+    let leaked: TenantTransaction | undefined;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const holder = asTenant(TENANT_A, () =>
+      tenantPrisma.withTenant(async (tx) => {
+        leaked = tx;
+        await gate;
+      }),
+    );
+    while (!leaked) await new Promise((r) => setTimeout(r, 5));
+    const seenByB = await asTenant(TENANT_B, async () =>
+      (await leaked!.dev_probe_items.findMany()).map((r) => r.tenant_id),
+    );
+    release();
+    await holder;
+    // El cliente no consulta el contexto en cada llamada: hereda el app.tenant_id de su transacción.
+    expect(seenByB.length).toBeGreaterThan(0);
+    expect(seenByB.every((t) => t === TENANT_A)).toBe(true);
+    // Terminada la transacción, la referencia filtrada ya no sirve.
+    expect(await rejection(asTenant(TENANT_B, () => leaked!.dev_probe_items.findMany()))).toBeDefined();
+  });
+});
+
 describe('concurrencia: 2 tenants intercalados sobre un pool pequeño (criterio S2)', () => {
   it('100 operaciones (50 por tenant) con pool de 3: 0 filas cruzadas y backends reutilizados entre tenants', async () => {
     const concurrentPool = new Pool({ connectionString: db.appUrl, max: 3 });

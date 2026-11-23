@@ -102,6 +102,20 @@ describe('P2 — protección del contexto de tenant (ESLint)', () => {
     expect(await ruleViolations(code, BUSINESS_FILE)).toEqual([]);
   });
 
+  // LÍMITES CONOCIDOS del control estático (auditoría P2): estos patrones NO se detectan. Las pruebas fijan el hueco para
+  // que no se dé por cubierto; si una regla futura los detecta, deben actualizarse.
+  const KNOWN_GAPS: Record<string, string> = {
+    'SQL armado por concatenación en un TemplateStringsArray fabricado':
+      "declare const tx: any;\nconst q = Object.assign(['SELECT set_' + 'config($1, $2, true)'], { raw: ['x'] });\ntx.$queryRaw(q, 'app.' + 'tenant_id', 'x');\n",
+    'SET search_path (no está en la lista de SET prohibidos)':
+      'declare const tx: any;\ntx.$executeRaw`SET LOCAL search_path = pg_temp, kuota`;\n',
+  };
+  for (const [name, code] of Object.entries(KNOWN_GAPS)) {
+    it(`LÍMITE conocido (no detectado por lint): ${name}`, async () => {
+      expect(await ruleViolations(code, BUSINESS_FILE)).toEqual([]);
+    });
+  }
+
   it('permite SQL parametrizado normal en un módulo de negocio', async () => {
     const code =
       'declare const tx: any; declare const id: string;\ntx.$queryRaw`SELECT id, label FROM kuota.dev_probe_items WHERE id = ${id}`;\n';

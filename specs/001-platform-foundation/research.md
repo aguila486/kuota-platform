@@ -437,7 +437,7 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 | ADR-0002 C2-1 dice que el cliente transaccional "se guarda en CLS"; tras R3 la transacción activa vive en un `AsyncLocalStorage` privado de `TenantPrismaService` (el contexto de tenant sigue en CLS) | **Resuelto 2026-11-22:** enmienda 2 de ADR-0002 |
 | Esquema de fixtures de Money sin `inputs.currency` para `parse` | Aprobar la ampliación del esquema antes de T059 (Dart) |
 | Interpretaciones de Money no fijadas en ADR-0007 (`parse` estricto, `allocate` negativo) | Confirmar antes de T063 (Dart) |
-| T062: falta usar Money en dev-probe | G7b |
+| T062: falta usar Money en dev-probe | **Resuelto 2026-11-22 (G7b)**: `sample_amount` con `parseMoneyField`/`moneyToJson`; T062 completa |
 | Auditoría sin actor: sin `X-Kuota-Dev-Actor`, `app.actor_id` queda vacío y `audit_events.actor_id` es NOT NULL | Decidir en US6 (T077) antes de auditar escrituras de dev-probe (T078) |
 
 ## R-19 · Estado y estructura Flutter
@@ -495,3 +495,28 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 
 Ninguna bloqueante para el plan. Dependencias de decisión en ejecución: **D-ARC-01** (resultado del spike R-04) y
 validación de generador R-12; ambas tienen fallback definido.
+
+### Notas de implementación de G7b (dev-probe, 2026-11-22)
+
+Decisiones de detalle que el contrato y data-model.md no fijan. Se registran para revisión; ninguna cambia el contrato.
+
+- **Id malformado en el path → 404** (no 400): `getDevProbeItem` y `deleteDevProbeItem` no declaran 400 en el
+  contrato, y un recurso con ese id no puede existir. Se aplica igual en `updateDevProbeItem`. Un id en mayúsculas se
+  normaliza.
+- **Cursor opaco:** base64url de `v1:<id>` del último elemento, con keyset por `id` (UUIDv7, ordenado en el tiempo).
+  Un cursor inválido → 400 `validation-error` (field `cursor`). Un cursor con el id de otro tenant solo acota el
+  listado del propio tenant: no revela nada.
+- **`version` > 2147483647 → 400:** queda fuera del tipo `integer` de PostgreSQL (data-model `dev_probe_items.version`).
+- **`label`:** se cuenta en puntos de código, igual que `char_length` en PostgreSQL. No se recorta ni se normaliza.
+- **Propiedades no permitidas** (incluido `tenant_id`) → 400 nombrando el campo, nunca su valor
+  (`additionalProperties: false`; US2-3).
+- **`updated_at` en PATCH:** hora del servidor de aplicación (`new Date()`). `created_at` usa `now()` de la base.
+  Se eligió la API de modelo para no introducir SQL raw en un módulo de negocio (P2 R2).
+- **Idempotencia:** `IdempotencyKeyPipe` (`backend/src/common/idempotency/`) solo valida presencia y formato. Las
+  respuestas 409 y 422 de `createDevProbeItem` del contrato dependen de T076 (US6) y hoy no se producen. El contrato
+  no exige `Idempotency-Key` en PATCH ni en DELETE.
+- **Auditoría y actor:** dev-probe no escribe en `audit_events` en G7b, así que la falta de un actor por defecto no
+  bloquea. T077 debe decidir qué ocurre con las escrituras auditadas sin `X-Kuota-Dev-Actor` antes de T078 (ver
+  pendientes).
+- **Prueba de mutación de la suite de aislamiento:** con RLS desactivado en el contenedor efímero, 6 de los 9 casos
+  fallan (salida 1). No se versionó.

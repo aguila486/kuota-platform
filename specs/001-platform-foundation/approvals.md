@@ -109,3 +109,28 @@ no es una firma: identifica el contenido aprobado mediante los identificadores d
   decisión de Prisma, sus condiciones ni los roles existentes.
 - **Preflight de 0002:** añadido a `make up`. Es de solo lectura y no aprovisiona nada.
 - **US5a autorizada:** T066 y T067, y T095 tras verificar sus dependencias. No incluye T068–T071, US7, G12 ni 002.
+
+## Aprobación 5 — 2026-11-23: minimización de `audit_events.origin` (sin IP ni hash de IP)
+
+- **Quién:** responsable del proyecto, mediante mensaje explícito en la sesión de trabajo ("KUOTA — Minimización de
+  datos de auditoría: eliminar IP e ip-hash de origin").
+- **Decisión:** dejar de generar y almacenar direcciones IP y hashes de IP en `origin`, y conservar solo el origen
+  lógico necesario para FR-025. Resuelve la decisión 1 de `docs/security/audit-origin-privacy-assessment.md` §5 a favor
+  de minimizar.
+- **Enmienda documental autorizada de data-model.md:** solo `audit_events.origin`, en el diagrama y en la sección de la
+  entidad. Cubre propósito, valores admitidos, datos prohibidos, diferencias con `actor_id` y `correlation_id`,
+  tratamiento de HTTP y de vías futuras, justificación y compatibilidad. No toca ningún otro campo.
+- **Código:**
+  - `AuditActorGuard` fija `origin = "http"` y ya no lee la solicitud;
+  - `AuditService` solo admite valores de la lista cerrada `AUDIT_ORIGINS`.
+- **Sin cambios en:**
+  - el esquema, migraciones nuevas, RLS, roles, `withTenant`, transaction-guard y el contrato OpenAPI;
+  - la identidad del actor y `correlation_id`;
+  - la retención.
+- **Explícitamente no autorizado:**
+  - HMAC o cualquier sustituto de SHA-256(IP);
+  - un mecanismo nuevo de identificación;
+  - reescribir o borrar eventos históricos;
+  - correcciones retroactivas de datos;
+  - 002, US7, T068 y otras historias.
+- **Tareas:** no cambia ninguna tarea. T077 cita `audit_events.origin` sin fijar su formato.

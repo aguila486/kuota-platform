@@ -80,7 +80,7 @@ erDiagram
         jsonb changes "before/after, PII-free"
         timestamptz occurred_at "server time"
         timestamptz device_time "nullable"
-        text origin "ip-hash / device_id / job"
+        text origin "origen lógico: http (001); sin datos de red"
         text correlation_id
         text idempotency_key "nullable"
     }
@@ -149,6 +149,35 @@ stateDiagram-v2
   encabezado ni campo del body puede fijarlo. Desde 002 lo asigna `AuditService` a partir del rol de la membresía
   autenticada en `TenantContext` (contexto de autorización del servidor), nunca de un valor del cliente. 002 decide
   si pasa a ser obligatorio para `actor_type = USER` (cambio expand → contract, Constitución XIV).
+- `origin` (`NOT NULL`): **origen lógico** del evento, es decir, la vía por la que llegó la operación. Enmienda del
+  2026-11-23 (Aprobación 5, minimización de datos):
+  - **Valores admitidos:** lista cerrada en el servidor (`AUDIT_ORIGINS`). En 001 solo existe la vía HTTP, así que el
+    único valor es `http`, fijado por `AuditActorGuard` en toda operación `@Audited()`. Una vía nueva (apps de 002,
+    procesos o jobs, sincronización de 011) añade su categoría con una enmienda de este documento cuando exista. No se
+    adelantan valores para integraciones que todavía no existen.
+  - **Prohibido:**
+    - direcciones IPv4 o IPv6;
+    - hashes o HMAC de IP;
+    - direcciones de proxy y valores de `X-Forwarded-For`, `X-Real-IP` o `Forwarded`;
+    - cualquier identificador de red derivado;
+    - identificadores de personas o de dispositivos concretos.
+
+    Si una vía futura necesita identificar un dispositivo, se evalúa con minimización antes de persistirlo y no se hace
+    en este campo sin una enmienda.
+  - **Procedencia:** el valor lo decide el servidor. Ningún encabezado, campo del body ni parámetro de query puede fijarlo.
+  - **Diferencias con otros campos:**
+    - `origin` no es identidad: el actor está en `actor_id`/`actor_type` y sale de `TenantContext`;
+    - `origin` no se usa para autorizar;
+    - `origin` no correlaciona: la correlación por solicitud es `correlation_id`.
+  - **Justificación:** FR-025 exige registrar el origen, no la red. Ningún flujo usa un dato de red, y `audit_events` es
+    append-only y no tiene retención definida (PENDIENTE-LEGAL). Antes se guardaba `ip-hash:<sha256(IP)>`, un dato
+    personal seudonimizado de forma débil: una IPv4 se recupera por búsqueda exhaustiva
+    (`docs/security/audit-origin-privacy-assessment.md`).
+  - **Compatibilidad:**
+    - sin cambio de esquema (`text NOT NULL`);
+    - los eventos ya almacenados con `ip-hash:` no se reescriben ni se borran (append-only), así que los consumidores
+      deben tolerar ese valor histórico;
+    - la minimización se aplica a los eventos nuevos.
 
 ### Objetos de valor (no persistidos por sí mismos)
 

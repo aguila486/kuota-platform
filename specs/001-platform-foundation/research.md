@@ -662,3 +662,17 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
 - **Riesgo residual:** la copia de `effect` empaquetada en la CLI de Prisma sigue siendo 3.20.0 (sin uso de `TemplateLiteral`).
 - **Detalle:** el registro completo (explotabilidad, compatibilidad, pruebas negativas y condiciones para retirar el
   override) está en `docs/security/SEC-2026-001-effect-ghsa-7589.md`.
+
+### Minimización de `audit_events.origin` (2026-11-23, Aprobación 5)
+
+- **Cambio:**
+  - `origin` pasa a ser un origen lógico de una lista cerrada (`AUDIT_ORIGINS`, hoy solo `http`);
+  - `AuditActorGuard` ya no lee la solicitud ni calcula `ip-hash`;
+  - `AuditService` rechaza cualquier otro valor;
+  - sin cambio de esquema, y los eventos históricos no se tocan.
+- **Detalle:** data-model.md (`audit_events.origin`) y `docs/security/audit-origin-privacy-assessment.md` §6.
+- **Hallazgo pendiente:** el log de acceso de pino-http registra `remoteAddress`, `remotePort` y los encabezados de red.
+  No se corrigió, porque está fuera del alcance.
+- **Arnés de pruebas:** en `audit.spec.ts`, las llamadas HTTP posteriores a los bloques que crean y cierran un segundo
+  módulo de Nest con `ClsModule.forRoot` responden 500. Por eso las pruebas HTTP de minimización van antes de esos
+  bloques. Es un efecto de tener dos aplicaciones en el mismo proceso, no del runtime (que tiene una sola).

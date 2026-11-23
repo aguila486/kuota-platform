@@ -114,19 +114,32 @@ describe('P3/P4 — esquema efectivo tras prisma migrate deploy', () => {
         'kuota.idempotency_keys.idempotency_keys_request_hash_sha256:c',
         'kuota.idempotency_keys.idempotency_keys_response_status_range:c',
         'kuota.idempotency_keys.idempotency_keys_status_values:c',
+        'kuota.platform_audit_events.platform_audit_events_counts_non_negative:c',
+        'kuota.platform_audit_events.platform_audit_events_operation_values:c',
+        'kuota.platform_audit_events.platform_audit_events_pkey:p',
+        'kuota.platform_audit_events.platform_audit_events_result_by_status:c',
+        'kuota.platform_audit_events.platform_audit_events_result_code_format:c',
+        'kuota.platform_audit_events.platform_audit_events_run_status_unique:u',
+        'kuota.platform_audit_events.platform_audit_events_status_values:c',
       ]);
     });
 
-    it('la función de auditoría pertenece al migrador, fija search_path y PUBLIC no puede ejecutarla', async () => {
+    it('las funciones de auditoría pertenecen al migrador, fijan search_path y PUBLIC no puede ejecutarlas', async () => {
       const rows = await query<{ owner: string; config: string[] | null; public_exec: boolean; secdef: boolean }>(
         db.migratorUrl,
         `SELECT pg_get_userbyid(proowner) AS owner, proconfig AS config, prosecdef AS secdef,
                 has_function_privilege('public', p.oid, 'EXECUTE') AS public_exec
            FROM pg_proc p WHERE pronamespace = 'kuota'::regnamespace`,
       );
-      expect(rows).toEqual([
-        { owner: 'kuota_migrator', config: ['search_path=pg_catalog'], public_exec: false, secdef: false },
-      ]);
+      // audit_events (0001) y platform_audit_events: sello y append-only (0003, T099).
+      expect(rows).toEqual(
+        Array.from({ length: 3 }, () => ({
+          owner: 'kuota_migrator',
+          config: ['search_path=pg_catalog'],
+          public_exec: false,
+          secdef: false,
+        })),
+      );
     });
 
     it('tablas, triggers, políticas y grants coinciden con lo esperado', async () => {
@@ -150,9 +163,9 @@ describe('P3/P4 — esquema efectivo tras prisma migrate deploy', () => {
       );
       expect(summary).toEqual({
         owners: 'kuota_migrator',
-        forced: '3',
+        forced: '4',
         policies:
-          'audit_events:tenant_isolation:kuota_app dev_probe_items:tenant_isolation:kuota_app idempotency_keys:maintenance_delete_expired:kuota_maintenance idempotency_keys:maintenance_select_expired:kuota_maintenance idempotency_keys:tenant_isolation:kuota_app',
+          'audit_events:tenant_isolation:kuota_app dev_probe_items:tenant_isolation:kuota_app idempotency_keys:maintenance_delete_expired:kuota_maintenance idempotency_keys:maintenance_select_expired:kuota_maintenance idempotency_keys:tenant_isolation:kuota_app platform_audit_events:maintenance_insert_audit:kuota_maintenance',
         triggers: 'audit_events_append_only,audit_events_no_truncate',
         grants:
           'audit_events:INSERT,audit_events:SELECT,dev_probe_items:DELETE,dev_probe_items:INSERT,dev_probe_items:SELECT,dev_probe_items:UPDATE,idempotency_keys:DELETE,idempotency_keys:INSERT,idempotency_keys:SELECT,idempotency_keys:UPDATE',

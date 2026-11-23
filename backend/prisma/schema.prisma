@@ -80,3 +80,27 @@ model idempotency_keys {
   @@index([expires_at])
   @@schema("kuota")
 }
+
+/// Auditoría de operaciones de plataforma (T099; migración 0003). Sin tenant: solo la escribe kuota_maintenance (INSERT)
+/// y ningún rol de runtime tiene privilegios sobre ella. Append-only por triggers. La API no la usa.
+model platform_audit_events {
+  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  run_id         String   @db.Uuid
+  operation      String
+  status         String
+  executed_by    String   @default(dbgenerated("SESSION_USER"))
+  occurred_at    DateTime @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  correlation_id String   @db.Uuid
+  dry_run        Boolean
+  batch_size     Int?
+  max_batches    Int?
+  expired_before BigInt?
+  affected_rows  BigInt?
+  batches        Int?
+  result_code    String?
+
+  @@unique([run_id, status], map: "platform_audit_events_run_status_unique")
+  @@index([operation, occurred_at], map: "platform_audit_events_occurred_at_idx")
+  @@schema("kuota")
+}
+

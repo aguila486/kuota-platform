@@ -137,7 +137,7 @@ describe('catálogo tras 0002: roles, privilegios y políticas (T079)', () => {
     expect(app.rows[0]!.m).toBe(false);
   });
 
-  it('privilegios efectivos del login: solo SELECT(tenant_id, key, expires_at) y DELETE en idempotency_keys', async () => {
+  it('privilegios efectivos del login: solo SELECT(tenant_id, key, expires_at) y DELETE en idempotency_keys, e INSERT en la auditoría de plataforma (T099)', async () => {
     const { rows } = await admin.query<{ grant: string }>(
       `SELECT c.relname || ':' || p.priv AS grant
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -147,7 +147,11 @@ describe('catálogo tras 0002: roles, privilegios y políticas (T079)', () => {
                OR (p.priv IN ('SELECT','INSERT','UPDATE','REFERENCES') AND has_any_column_privilege('kuota_maintenance_login', c.oid, p.priv)))
         ORDER BY 1`,
     );
-    expect(rows.map((r) => r.grant)).toEqual(['idempotency_keys:DELETE', 'idempotency_keys:SELECT']);
+    expect(rows.map((r) => r.grant)).toEqual([
+      'idempotency_keys:DELETE',
+      'idempotency_keys:SELECT',
+      'platform_audit_events:INSERT',
+    ]);
     const cols = await admin.query<{ col: string }>(
       `SELECT attname AS col FROM pg_attribute WHERE attrelid = 'kuota.idempotency_keys'::regclass AND attnum > 0
           AND has_column_privilege('kuota_maintenance_login', attrelid, attnum, 'SELECT') ORDER BY attname`,
@@ -435,7 +439,10 @@ describe('T072 reconciliado: expiración con fixture del runtime (sin superusuar
 describe('migración 0002: precondiciones de aprovisionamiento (fallo seguro, sin cambios parciales)', () => {
   function onlyFoundation(): string {
     const dir = mkdtempSync(join(tmpdir(), 'kuota-0001-'));
-    cpSync(MIGRATIONS_DIR, dir, { recursive: true, filter: (src) => !src.includes('0002_idempotency_maintenance') });
+    cpSync(MIGRATIONS_DIR, dir, {
+      recursive: true,
+      filter: (src) => !/0002_idempotency_maintenance|0003_platform_audit/.test(src),
+    });
     return dir;
   }
 

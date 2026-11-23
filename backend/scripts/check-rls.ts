@@ -11,6 +11,9 @@
  *   esquema o puede crear objetos en él o en `public`.
  * - [US6, 0002] el rol de mantenimiento `kuota_maintenance` (y su login) tiene más que SELECT de
  *   (tenant_id, key, expires_at) y DELETE en `idempotency_keys`, atributos elevados o pertenencia a otros roles.
+ * - [T099, 0003] la auditoría de plataforma `platform_audit_events` (sin tenant) no tiene RLS habilitado y forzado, no
+ *   es de `kuota_migrator`, PUBLIC o un rol de runtime tiene privilegios, sus políticas no son EXACTAMENTE la de INSERT
+ *   de mantenimiento, o le faltan los triggers de sello y append-only. El mantenimiento solo puede hacer INSERT en ella.
  * Lista blanca de tablas sin tenant: vacía en 001 (toda excepción futura se declara aquí con justificación).
  * Políticas que no filtran por tenant: solo las de `MAINTENANCE_POLICIES`, con su definición EXACTA (US6, 0002).
  *
@@ -31,6 +34,21 @@ export const MAINTENANCE_ROLE = 'kuota_maintenance';
 export const MAINTENANCE_LOGIN = 'kuota_maintenance_login';
 const MAINTENANCE_TABLE = 'idempotency_keys';
 const MAINTENANCE_COLUMNS = ['expires_at', 'key', 'tenant_id'];
+
+/** Auditoría de plataforma (T099, migración 0003): tabla sin tenant con controles propios. */
+export const PLATFORM_AUDIT_TABLE = 'platform_audit_events';
+export const PLATFORM_AUDIT_POLICY = {
+  policy: 'maintenance_insert_audit',
+  cmd: 'a',
+  roles: [MAINTENANCE_ROLE],
+  qual: null,
+  with_check: "(operation = 'idempotency.purge'::text)",
+} as const;
+export const PLATFORM_AUDIT_TRIGGERS = [
+  'platform_audit_events_append_only',
+  'platform_audit_events_no_truncate',
+  'platform_audit_events_stamp',
+] as const;
 
 /**
  * Únicas políticas aprobadas que no filtran por tenant: purga de claves vencidas (0002). Se aceptan solo si coinciden
@@ -192,6 +210,7 @@ export async function checkRls(db: Queryable, options: CheckRlsOptions = {}): Pr
     if (r.can_create) violations.push(`rol ${r.role}: puede crear objetos en ${r.can_create}`);
   }
   violations.push(...(await checkMaintenance(db, schema)));
+  violations.push(...(await checkPlatformAudit(db, schema)));
   return violations;
 }
 
@@ -253,13 +272,86 @@ async function checkMaintenance(db: Queryable, schema: string): Promise<string[]
   ).rows;
   for (const p of privileges) {
     const allowed =
-      p.table === MAINTENANCE_TABLE &&
-      (p.privilege === 'DELETE' || (p.privilege === 'SELECT' && p.columns === MAINTENANCE_COLUMNS.join(',')));
+      (p.table === MAINTENANCE_TABLE &&
+        (p.privilege === 'DELETE' || (p.privilege === 'SELECT' && p.columns === MAINTENANCE_COLUMNS.join(',')))) ||
+      (p.table === PLATFORM_AUDIT_TABLE && p.privilege === 'INSERT' && p.columns === null);
     if (!allowed) {
       violations.push(
         `rol ${p.role}: privilegio ${p.privilege}${p.columns ? ` (${p.columns})` : ''} en ${schema}.${p.table} no permitido para mantenimiento`,
       );
     }
+  }
+  return violations;
+}
+
+/** Controles de la auditoría de plataforma (T099). Sin la tabla (base anterior a 0003) no hay nada que verificar. */
+export async function checkPlatformAudit(db: Queryable, schema: string): Promise<string[]> {
+  const name = `${schema}.${PLATFORM_AUDIT_TABLE}`;
+  const table = (
+    await db.query<{
+      rls: boolean;
+      force: boolean;
+      owner: string;
+      public_privs: string | null;
+      runtime: string | null;
+    }>(
+      `SELECT c.relrowsecurity AS rls, c.relforcerowsecurity AS force, pg_get_userbyid(c.relowner) AS owner,
+              (SELECT string_agg(p, ',' ORDER BY p) FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p
+                WHERE has_table_privilege('public', c.oid, p)) AS public_privs,
+              (SELECT string_agg(r || ':' || p, ',' ORDER BY r, p)
+                 FROM unnest($3::text[]) r
+                 CROSS JOIN unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p
+                WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) AND has_table_privilege(r, c.oid, p)) AS runtime
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = 'r'`,
+      [schema, PLATFORM_AUDIT_TABLE, [...RUNTIME_ROLES]],
+    )
+  ).rows[0];
+  if (!table) return [];
+  const violations: string[] = [];
+  if (!table.rls) violations.push(`${name}: RLS no está habilitado`);
+  if (!table.force) violations.push(`${name}: RLS no está forzado`);
+  if (table.owner !== EXPECTED_OWNER)
+    violations.push(`${name}: propietario ${table.owner}; se espera ${EXPECTED_OWNER}`);
+  if (table.public_privs) violations.push(`${name}: PUBLIC tiene privilegios (${table.public_privs})`);
+  if (table.runtime) violations.push(`${name}: un rol de runtime tiene privilegios (${table.runtime})`);
+
+  const policies = (
+    await db.query<{ policy: string; cmd: string; roles: string[]; qual: string | null; with_check: string | null }>(
+      `SELECT pol.polname AS policy, pol.polcmd::text AS cmd,
+              ARRAY(SELECT rolname FROM pg_roles WHERE oid = ANY (pol.polroles) ORDER BY rolname)::text[] AS roles,
+              pg_get_expr(pol.polqual, pol.polrelid) AS qual, pg_get_expr(pol.polwithcheck, pol.polrelid) AS with_check
+         FROM pg_policy pol JOIN pg_class c ON c.oid = pol.polrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $1 AND c.relname = $2`,
+      [schema, PLATFORM_AUDIT_TABLE],
+    )
+  ).rows;
+  const expected = PLATFORM_AUDIT_POLICY;
+  const exact =
+    policies.length === 1 &&
+    policies[0]!.policy === expected.policy &&
+    policies[0]!.cmd === expected.cmd &&
+    policies[0]!.qual === expected.qual &&
+    policies[0]!.with_check === expected.with_check &&
+    JSON.stringify(policies[0]!.roles) === JSON.stringify(expected.roles);
+  if (!exact) {
+    violations.push(
+      `${name}: las políticas deben ser exactamente ${expected.policy} (INSERT para ${MAINTENANCE_ROLE}); hay: ${
+        policies.map((p) => `${p.policy}/${p.cmd}/${p.roles.join('+')}`).join(', ') || 'ninguna'
+      }`,
+    );
+  }
+
+  const triggers = (
+    await db.query<{ name: string }>(
+      `SELECT t.tgname AS name FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $1 AND c.relname = $2 AND NOT t.tgisinternal AND t.tgenabled <> 'D'`,
+      [schema, PLATFORM_AUDIT_TABLE],
+    )
+  ).rows.map((t) => t.name);
+  for (const trigger of PLATFORM_AUDIT_TRIGGERS) {
+    if (!triggers.includes(trigger)) violations.push(`${name}: falta el trigger ${trigger} (o está deshabilitado)`);
   }
   return violations;
 }

@@ -238,7 +238,12 @@ describe('configuraciones incorrectas deliberadas (T043, base efímera)', () => 
     [
       'runtime superusuario',
       'ALTER ROLE kuota_app_login SUPERUSER',
-      ['rol kuota_app_login: es superusuario', 'rol kuota_app_login: puede crear objetos en kuota,public'],
+      [
+        'rol kuota_app_login: es superusuario',
+        'rol kuota_app_login: puede crear objetos en kuota,public',
+        // T099: un superusuario de runtime también tiene privilegios sobre la auditoría de plataforma.
+        'kuota.platform_audit_events: un rol de runtime tiene privilegios (kuota_app_login:DELETE,kuota_app_login:INSERT,kuota_app_login:REFERENCES,kuota_app_login:SELECT,kuota_app_login:TRIGGER,kuota_app_login:TRUNCATE,kuota_app_login:UPDATE)',
+      ],
     ],
     [
       'runtime puede crear en kuota',

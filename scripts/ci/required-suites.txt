@@ -14,6 +14,7 @@ test/integration/foundation-schema.spec.ts
 test/integration/migration-governance.spec.ts
 test/integration/migration-preflight.spec.ts
 test/integration/idempotency-maintenance.spec.ts
+test/integration/platform-audit.spec.ts
 # Idempotencia y auditoría (US6)
 test/integration/idempotency.spec.ts
 test/integration/audit.spec.ts

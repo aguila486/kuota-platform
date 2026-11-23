@@ -13,6 +13,9 @@ import { applyMigrations, MigrateDeployError, startTestDatabase, type TestDataba
  */
 
 const TABLES = ['audit_events', 'dev_probe_items', 'idempotency_keys'] as const;
+/** Tablas sin tenant con controles propios (T099, migración 0003); no llevan la política tenant_isolation. */
+const PLATFORM_TABLES = ['platform_audit_events'] as const;
+const ALL_TABLES = [...TABLES, ...PLATFORM_TABLES].sort();
 const TENANT_A = randomUUID();
 const TENANT_B = randomUUID();
 const BIGINT_MIN = '-9223372036854775808';
@@ -81,7 +84,7 @@ describe('G2 — migración 0001_foundation', () => {
       const tables = await migrator.query<{ tablename: string; tableowner: string }>(
         "SELECT tablename, tableowner FROM pg_tables WHERE schemaname = 'kuota' ORDER BY tablename",
       );
-      expect(tables.rows).toEqual(TABLES.map((tablename) => ({ tablename, tableowner: 'kuota_migrator' })));
+      expect(tables.rows).toEqual(ALL_TABLES.map((tablename) => ({ tablename, tableowner: 'kuota_migrator' })));
     });
 
     it('define las columnas, tipos y nulabilidad de data-model.md', async () => {
@@ -123,6 +126,20 @@ describe('G2 — migración 0001_foundation', () => {
         'idempotency_keys.response_body:jsonb:YES',
         'idempotency_keys.created_at:timestamp with time zone:NO',
         'idempotency_keys.expires_at:timestamp with time zone:NO',
+        'platform_audit_events.id:uuid:NO',
+        'platform_audit_events.run_id:uuid:NO',
+        'platform_audit_events.operation:text:NO',
+        'platform_audit_events.status:text:NO',
+        'platform_audit_events.executed_by:text:NO',
+        'platform_audit_events.occurred_at:timestamp with time zone:NO',
+        'platform_audit_events.correlation_id:uuid:NO',
+        'platform_audit_events.dry_run:boolean:NO',
+        'platform_audit_events.batch_size:integer:YES',
+        'platform_audit_events.max_batches:integer:YES',
+        'platform_audit_events.expired_before:bigint:YES',
+        'platform_audit_events.affected_rows:bigint:YES',
+        'platform_audit_events.batches:integer:YES',
+        'platform_audit_events.result_code:text:YES',
       ]);
     });
 
@@ -149,7 +166,7 @@ describe('G2 — migración 0001_foundation', () => {
            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
           WHERE n.nspname = 'kuota' AND c.relkind = 'r' ORDER BY c.relname`,
       );
-      expect(rls.rows).toEqual(TABLES.map((relname) => ({ relname, enabled: true, forced: true })));
+      expect(rls.rows).toEqual(ALL_TABLES.map((relname) => ({ relname, enabled: true, forced: true })));
       const policies = await migrator.query<{
         tablename: string;
         roles: string;
@@ -162,12 +179,13 @@ describe('G2 — migración 0001_foundation', () => {
       );
       // Las únicas otras políticas son las de purga de 0002 (US6), exclusivas de kuota_maintenance y de filas vencidas.
       const others = await migrator.query<{ policy: string }>(
-        `SELECT tablename || ':' || policyname || ':' || cmd || ':' || roles::text || ':' || qual AS policy FROM pg_policies
+        `SELECT tablename || ':' || policyname || ':' || cmd || ':' || roles::text || ':' || coalesce(qual, '') || ':' || coalesce(with_check, '') AS policy FROM pg_policies
           WHERE schemaname = 'kuota' AND policyname <> 'tenant_isolation' ORDER BY policyname`,
       );
       expect(others.rows.map((r) => r.policy)).toEqual([
-        'idempotency_keys:maintenance_delete_expired:DELETE:{kuota_maintenance}:(expires_at <= now())',
-        'idempotency_keys:maintenance_select_expired:SELECT:{kuota_maintenance}:(expires_at <= now())',
+        'idempotency_keys:maintenance_delete_expired:DELETE:{kuota_maintenance}:(expires_at <= now()):',
+        "platform_audit_events:maintenance_insert_audit:INSERT:{kuota_maintenance}::(operation = 'idempotency.purge'::text)",
+        'idempotency_keys:maintenance_select_expired:SELECT:{kuota_maintenance}:(expires_at <= now()):',
       ]);
       expect(policies.rows.map((p) => p.tablename)).toEqual([...TABLES]);
       for (const policy of policies.rows) {
@@ -188,6 +206,10 @@ describe('G2 — migración 0001_foundation', () => {
       expect(triggers.rows.map((t) => t.def)).toEqual([
         expect.stringMatching(/BEFORE DELETE OR UPDATE ON kuota\.audit_events FOR EACH ROW/),
         expect.stringMatching(/BEFORE TRUNCATE ON kuota\.audit_events FOR EACH STATEMENT/),
+        // T099 (0003): auditoría de plataforma, también append-only, con sello del servidor.
+        expect.stringMatching(/BEFORE DELETE OR UPDATE ON kuota\.platform_audit_events FOR EACH ROW/),
+        expect.stringMatching(/BEFORE TRUNCATE ON kuota\.platform_audit_events FOR EACH STATEMENT/),
+        expect.stringMatching(/BEFORE INSERT ON kuota\.platform_audit_events FOR EACH ROW/),
       ]);
     });
 
@@ -515,7 +537,11 @@ describe('G2/P1 — migración 0001 con prisma migrate deploy (transacción expl
   });
 
   it('kuota_migrator la aplica desde cero, queda registrada y una segunda ejecución no tiene cambios pendientes', async () => {
-    expect(await applyMigrations(db.migratorUrl)).toEqual(['0001_foundation', '0002_idempotency_maintenance']);
+    expect(await applyMigrations(db.migratorUrl)).toEqual([
+      '0001_foundation',
+      '0002_idempotency_maintenance',
+      '0003_platform_audit',
+    ]);
     const client = await connect(db.migratorUrl);
     try {
       const history = await client.query<{ migration_name: string; steps: number; owner: string }>(
@@ -526,10 +552,15 @@ describe('G2/P1 — migración 0001 con prisma migrate deploy (transacción expl
       expect(history.rows).toEqual([
         { migration_name: '0001_foundation', steps: 1, owner: 'kuota_migrator' },
         { migration_name: '0002_idempotency_maintenance', steps: 1, owner: 'kuota_migrator' },
+        { migration_name: '0003_platform_audit', steps: 1, owner: 'kuota_migrator' },
       ]);
-      expect(await applyMigrations(db.migratorUrl)).toEqual(['0001_foundation', '0002_idempotency_maintenance']);
+      expect(await applyMigrations(db.migratorUrl)).toEqual([
+        '0001_foundation',
+        '0002_idempotency_maintenance',
+        '0003_platform_audit',
+      ]);
       const count = await client.query<{ n: string }>('SELECT count(*) AS n FROM public._prisma_migrations');
-      expect(count.rows[0]?.n).toBe('2');
+      expect(count.rows[0]?.n).toBe('3');
       const tables = await client.query("SELECT tablename FROM pg_tables WHERE schemaname = 'kuota'");
       expect(tables.rowCount).toBe(3);
     } finally {

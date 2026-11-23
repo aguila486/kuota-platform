@@ -179,6 +179,36 @@ stateDiagram-v2
       deben tolerar ese valor histórico;
     - la minimización se aplica a los eventos nuevos.
 
+### `platform_audit_events` (T099; Constitución III y VII; migración `0003_platform_audit`)
+
+Auditoría de **operaciones de plataforma** (cross-tenant), separada de `audit_events`, que exige `tenant_id`: nunca se
+usa un tenant ficticio. Propietario lógico: `common/audit`. Hoy la escribe solo la purga de idempotencia (T079).
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `id` | `uuid` PK | `uuidv7()` |
+| `run_id` | `uuid` NOT NULL | Ejecución; `UNIQUE (run_id, status)` y un solo resultado (`started` → `succeeded` o `failed`) |
+| `operation` | `text` NOT NULL | Lista cerrada: `idempotency.purge` |
+| `status` | `text` NOT NULL | `started` · `succeeded` · `failed` |
+| `executed_by` | `text` NOT NULL | `session_user`, fijado por trigger: el ejecutor no puede falsearlo |
+| `occurred_at` | `timestamptz` NOT NULL | `clock_timestamp()`, fijado por trigger |
+| `correlation_id` | `uuid` NOT NULL | Correlación con el proceso que lanza la operación |
+| `dry_run` | `boolean` NOT NULL | Modo inspección |
+| `batch_size`, `max_batches` | `integer` NULL | Parámetros de la ejecución |
+| `expired_before`, `affected_rows` | `bigint` NULL | Recuentos (nunca claves, tenants ni contenidos) |
+| `batches` | `integer` NULL | Lotes completados |
+| `result_code` | `text` NULL | `ok` o código acotado (`^[a-z0-9-]{1,40}$`, p. ej. `sqlstate-55p03`); nunca mensajes |
+
+- **Permisos:** `kuota_maintenance` solo `INSERT` (sin lectura); `kuota_app` y PUBLIC, ninguno. RLS habilitada y
+  forzada con una única política (`maintenance_insert_audit`, INSERT). Sin política de lectura: ni el runtime, ni el
+  mantenimiento, ni el propietario leen filas. El rol de lectura de plataforma llega con 002.
+- **Append-only:** triggers que rechazan `UPDATE`, `DELETE` y `TRUNCATE` incluso al propietario y al superusuario.
+  Retención: sin mecanismo de borrado; la política de retención de la auditoría sigue pendiente de decisión.
+- **Transacción:** el inicio se confirma antes de borrar (si no puede escribirse, no se purga); cada lote es su
+  transacción; el resultado se escribe al final. Un `started` sin resultado identifica una ejecución incompleta.
+- **Verificación:** `db:check-rls` comprueba RLS forzada, propietario, ausencia de privilegios de PUBLIC y runtime, la
+  política exacta y los triggers.
+
 ### Objetos de valor (no persistidos por sí mismos)
 
 - **Money** (ADR-0007, D-FIN-01): `amountMinor` (entero con signo dentro del rango de `BIGINT`; `bigint` en TS,

@@ -17,7 +17,7 @@ import { rejection } from '../support/tenant-data.js';
 const BACKEND_DIR = join(__dirname, '../..');
 const REPO_ROOT = join(BACKEND_DIR, '..');
 const MIGRATIONS_DIR = join(BACKEND_DIR, 'prisma/migrations');
-const ALL = ['0001_foundation', '0002_idempotency_maintenance'];
+const ALL = ['0001_foundation', '0002_idempotency_maintenance', '0003_platform_audit'];
 const cleanups: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
@@ -39,7 +39,10 @@ async function connect(url: string): Promise<Client> {
 async function onlyFoundation(db: TestDatabase): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), 'kuota-0001-'));
   try {
-    cpSync(MIGRATIONS_DIR, dir, { recursive: true, filter: (src) => !src.includes('0002_idempotency_maintenance') });
+    cpSync(MIGRATIONS_DIR, dir, {
+      recursive: true,
+      filter: (src) => !/0002_idempotency_maintenance|0003_platform_audit/.test(src),
+    });
     expect(await applyMigrations(db.migratorUrl, dir)).toEqual(['0001_foundation']);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -93,7 +96,7 @@ describe('preflight de migraciones (0002)', () => {
     expect(await migrationPreflight(migrator)).toEqual({
       ok: true,
       newDatabase: false,
-      pending: ['0002_idempotency_maintenance'],
+      pending: ['0002_idempotency_maintenance', '0003_platform_audit'],
       problems: [],
     });
   }, 180_000);
@@ -108,7 +111,11 @@ describe('preflight de migraciones (0002)', () => {
     const before = await snapshot(superuser);
     const migrator = await connect(db.migratorUrl);
     const result = await migrationPreflight(migrator);
-    expect(result).toMatchObject({ ok: false, newDatabase: false, pending: ['0002_idempotency_maintenance'] });
+    expect(result).toMatchObject({
+      ok: false,
+      newDatabase: false,
+      pending: ['0002_idempotency_maintenance', '0003_platform_audit'],
+    });
     expect(result.problems).toHaveLength(1);
     expect(result.problems[0]).toContain('kuota_maintenance y no existe');
     expect(result.problems[0]).toContain('infra/docker/postgres/init/02-maintenance-roles.sql');

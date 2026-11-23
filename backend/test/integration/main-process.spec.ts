@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
-import { createServer } from 'node:net';
+import { type AddressInfo, createServer } from 'node:net';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -51,15 +51,33 @@ describe('proceso main.ts (T025)', () => {
 
   it('arranca con configuración válida, responde problem+json y emite logs JSON', async () => {
     const port = await freePort();
+    const metricsPort = await freePort();
     const proc = run(
       validEnv({
         PORT: String(port),
+        KUOTA_METRICS_PORT: String(metricsPort),
+        KUOTA_METRICS_TOKEN: STRONG_TOKEN,
         DATABASE_URL_APP: 'postgresql://kuota_app_login:ficticio-secreto-db@127.0.0.1:55432/kuota',
       }),
       true,
     );
     try {
       await proc.ready;
+      // T094: el proceso abre la escucha de métricas protegida, separada del puerto de la API.
+      const metricsUrl = `http://127.0.0.1:${metricsPort}/metrics`;
+      const scrape = async (headers: Record<string, string> = {}) => {
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            return await fetch(metricsUrl, { headers });
+          } catch (error) {
+            if (attempt >= 50) throw error;
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+        }
+      };
+      expect((await scrape()).status).toBe(401);
+      expect((await scrape({ authorization: `Bearer ${STRONG_TOKEN}` })).status).toBe(200);
+      expect((await fetch(`http://127.0.0.1:${port}/metrics`)).status).toBe(404);
       const res = await fetch(`http://127.0.0.1:${port}/v1/no-existe`);
       expect(res.status).toBe(404);
       expect(res.headers.get('content-type')).toMatch(/^application\/problem\+json/);
@@ -91,5 +109,31 @@ describe('proceso main.ts (T025)', () => {
     expect(stderr + stdout).not.toContain('ficticio-secreto-db');
     expect(stderr + stdout).not.toContain(STRONG_TOKEN);
     expect(stdout).not.toContain('Nest application successfully started');
+  });
+
+  it('termina con código 1 si la escucha de métricas no puede abrirse (puerto ocupado), sin revelar el token', async () => {
+    const busy = createServer();
+    await new Promise<void>((resolve) => busy.listen(0, '127.0.0.1', resolve));
+    const metricsPort = (busy.address() as AddressInfo).port;
+    try {
+      const proc = run(
+        validEnv({
+          PORT: String(await freePort()),
+          KUOTA_METRICS_PORT: String(metricsPort),
+          KUOTA_METRICS_TOKEN: STRONG_TOKEN,
+          DATABASE_URL_APP: 'postgresql://kuota_app_login:ficticio-secreto-db@127.0.0.1:55432/kuota',
+        }),
+        false,
+      );
+      expect(await proc.exited).toBe(1);
+      const { stdout, stderr } = proc.output();
+      const fatal = JSON.parse(stderr.trim().split('\n').at(-1)!) as { level: string; msg: string; reason: string };
+      expect(fatal).toMatchObject({ level: 'fatal', reason: 'EADDRINUSE' });
+      expect(fatal.msg).toMatch(/métricas/);
+      expect(stderr + stdout).not.toContain(STRONG_TOKEN);
+      expect(stderr + stdout).not.toContain('ficticio-secreto-db');
+    } finally {
+      await new Promise<void>((resolve) => busy.close(() => resolve()));
+    }
   });
 });

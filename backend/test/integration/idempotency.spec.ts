@@ -5,19 +5,24 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/bootstrap.js';
 import { loadConfig } from '../../src/common/config/load-config.js';
 import { idempotencyLockId } from '../../src/common/idempotency/request-hash.js';
+import { CLS_CORRELATION_ID } from '../../src/common/logging/logger-options.js';
+import { establishTenantContext } from '../../src/common/tenant-context/establish-context.js';
+import { TenantPrismaService } from '../../src/common/tenant-context/tenant-prisma.service.js';
+import { ClsService } from 'nestjs-cls';
+import { purgeExpiredIdempotencyKeys } from '../../scripts/purge-idempotency.js';
 import { validEnv } from '../support/env.js';
 import { startTestDatabase, type TestDatabase } from '../support/postgres.js';
-import { asTenantSql } from '../support/tenant-data.js';
 
 /**
  * T072 (US6-1..3; FR-023, FR-024; data-model.md `idempotency_keys`) sobre la aplicación real y PostgreSQL 18:
  * `createDevProbeItem` con `@Idempotent()`. `KUOTA_IDEMPOTENCY_REPETITIONS` fija las repeticiones del escenario
  * principal (10 en `pnpm test`; 100 en `pnpm test:idempotency`, SC-006).
  *
- * Desviación de T072 (pendiente de enmienda, research.md): la tarea pide fijar `expires_at` en el pasado "con
- * kuota_migrator". Con FORCE RLS y la política `TO kuota_app`, el migrador no ve ni modifica filas (decisión de 0001).
- * El fixture lo fija `kuota_app_login` dentro del contexto del propio tenant (sin credenciales elevadas), y la
- * expiración se comprueba también con la identidad de mantenimiento en `idempotency-maintenance.spec.ts`.
+ * Expiración (T072, texto enmendado y aprobado el 2026-11-23, approvals.md, Aprobación 4): la clave vencida se prepara
+ * con la identidad de runtime `kuota_app_login`, dentro del contexto de su tenant y a través de `withTenant` (cliente
+ * protegido, RLS y FORCE RLS activos). La comprobación y la purga se hacen con la identidad de mantenimiento
+ * (`kuota_maintenance_login`). No se usa `kuota_migrator` ni el superusuario para los fixtures funcionales. El
+ * superusuario del contenedor efímero solo LEE conteos de verificación.
  */
 const REPETITIONS = Number(process.env['KUOTA_IDEMPOTENCY_REPETITIONS'] ?? '10');
 const PATH = '/v1/dev/probe-items';
@@ -60,6 +65,40 @@ const auditEvents = (tenant: string, key: string) =>
   count('SELECT count(*) AS n FROM kuota.audit_events WHERE tenant_id = $1 AND idempotency_key = $2', [tenant, key]);
 const keyRows = (tenant: string, key: string) =>
   count('SELECT count(*) AS n FROM kuota.idempotency_keys WHERE tenant_id = $1 AND key = $2', [tenant, key]);
+
+/** Fixture de T072: vence una clave con kuota_app_login, en el contexto de su tenant y vía withTenant (sin SQL directo). */
+async function expireViaWithTenant(tenant: string, key: string): Promise<void> {
+  const cls = app.get(ClsService);
+  const tenantPrisma = app.get(TenantPrismaService);
+  const updated = await cls.run(() => {
+    establishTenantContext(cls, { tenantId: tenant, actorId: 'dev:t072-fixture', actorType: 'DEV' });
+    cls.set(CLS_CORRELATION_ID, randomUUID());
+    return tenantPrisma.withTenant((tx) =>
+      tx.idempotency_keys.updateMany({
+        where: { key },
+        data: { created_at: new Date(Date.now() - 31 * 86_400_000), expires_at: new Date(Date.now() - 86_400_000) },
+      }),
+    );
+  });
+  expect(updated.count).toBe(1);
+}
+
+async function withMaintenance<T>(fn: (c: Client) => Promise<T>): Promise<T> {
+  const client = new Client({ connectionString: db.maintenanceUrl });
+  await client.connect();
+  try {
+    return await fn(client);
+  } finally {
+    await client.end();
+  }
+}
+const maintenanceSees = (key: string) =>
+  withMaintenance(async (c) =>
+    Number(
+      (await c.query<{ n: string }>('SELECT count(*) AS n FROM kuota.idempotency_keys WHERE key = $1', [key])).rows[0]!
+        .n,
+    ),
+  );
 
 beforeAll(async () => {
   db = await startTestDatabase();
@@ -162,12 +201,9 @@ describe('idempotencia de createDevProbeItem (T072)', () => {
       [tenant, key],
     );
     expect(fresh.rows[0]!.ok).toBe(true);
-    await asTenantSql(db.appUrl, tenant, (c) =>
-      c.query(
-        "UPDATE kuota.idempotency_keys SET created_at = now() - interval '31 days', expires_at = now() - interval '1 day' WHERE key = $1",
-        [key],
-      ),
-    );
+    await expireViaWithTenant(tenant, key);
+    // La identidad de mantenimiento la ve como vencida (sus políticas solo exponen expires_at <= now()).
+    expect(await maintenanceSees(key)).toBe(1);
     const again = await post(tenant, key, { label: 'tras-expirar' });
     expect(again).toMatchObject({ status: 201, replayed: null });
     expect(await effects(tenant, 'antes-de-expirar')).toBe(1);
@@ -180,11 +216,31 @@ describe('idempotencia de createDevProbeItem (T072)', () => {
     expect(renewed.rows[0]!.ok).toBe(true);
   });
 
+  it('expiración (T072): la purga con la identidad de mantenimiento retira la clave vencida y conserva la vigente', async () => {
+    const tenant = randomUUID();
+    const [expiredKey, liveKey] = [randomUUID(), randomUUID()];
+    expect((await post(tenant, expiredKey, { label: 'a-purgar' })).status).toBe(201);
+    expect((await post(tenant, liveKey, { label: 'se-conserva' })).status).toBe(201);
+    await expireViaWithTenant(tenant, expiredKey);
+    expect(await maintenanceSees(liveKey)).toBe(0);
+    const result = await withMaintenance((c) => purgeExpiredIdempotencyKeys(c));
+    expect(result.deleted).toBeGreaterThanOrEqual(1);
+    expect(await keyRows(tenant, expiredKey)).toBe(0);
+    expect(await keyRows(tenant, liveKey)).toBe(1);
+    expect(await effects(tenant, 'a-purgar')).toBe(1);
+    // Purgada la clave, la misma clave vuelve a producir un efecto nuevo.
+    expect(await post(tenant, expiredKey, { label: 'a-purgar' })).toMatchObject({ status: 201, replayed: null });
+    expect(await effects(tenant, 'a-purgar')).toBe(2);
+  });
+
   it('fallo del comando (error de PostgreSQL): la clave no queda registrada y un reintento produce el efecto', async () => {
     const tenant = randomUUID();
     const key = randomUUID();
     const body = { label: 'falla-comando' };
-    await admin.query(
+    // Inyección de fallo con la identidad de DDL (propietaria de la tabla), no con el superusuario.
+    const migrator = new Client({ connectionString: db.migratorUrl });
+    await migrator.connect();
+    await migrator.query(
       "ALTER TABLE kuota.dev_probe_items ADD CONSTRAINT t072_falla CHECK (label <> 'falla-comando') NOT VALID",
     );
     try {
@@ -195,7 +251,8 @@ describe('idempotencia de createDevProbeItem (T072)', () => {
       expect(await keyRows(tenant, key)).toBe(0);
       expect(await auditEvents(tenant, key)).toBe(0);
     } finally {
-      await admin.query('ALTER TABLE kuota.dev_probe_items DROP CONSTRAINT t072_falla');
+      await migrator.query('ALTER TABLE kuota.dev_probe_items DROP CONSTRAINT t072_falla');
+      await migrator.end();
     }
     const retry = await post(tenant, key, body);
     expect(retry).toMatchObject({ status: 201, replayed: null });

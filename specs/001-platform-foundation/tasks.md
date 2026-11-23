@@ -186,8 +186,8 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T066 [P] [US5] Crear el helper `expectToMatchContract(res, operationId)` con Ajv 2020 sobre el bundle de Redocly (R-14) en `backend/test/contract/support/contract-matcher.ts`
-- [ ] T067 [US5] Escribir las pruebas de contrato para `getLiveness`, `getReadiness` (200 y 503), `getCompatibility`, las 5 operaciones de `dev-probe` y sus respuestas de error problem+json (US5-2, US5-4), excepto 409 `idempotency-request-in-progress` y 422 `idempotency-key-reused` de `createDevProbeItem`, que se prueban en T095 (US6), en `backend/test/contract/kuota-core.contract.spec.ts`
+- [X] T066 [P] [US5] Crear el helper `expectToMatchContract(res, operationId)` con Ajv 2020 sobre el bundle de Redocly (R-14) en `backend/test/contract/support/contract-matcher.ts`
+- [X] T067 [US5] Escribir las pruebas de contrato para `getLiveness`, `getReadiness` (200 y 503), `getCompatibility`, las 5 operaciones de `dev-probe` y sus respuestas de error problem+json (US5-2, US5-4), excepto 409 `idempotency-request-in-progress` y 422 `idempotency-key-reused` de `createDevProbeItem`, que se prueban en T095 (US6), en `backend/test/contract/kuota-core.contract.spec.ts`
 - [ ] T068 [P] [US5] Escribir la prueba de detección de cambios incompatibles: eliminar un campo requerido de `CompatibilityInfo` en una copia temporal hace fallar `scripts/contracts/breaking.sh`, en `scripts/ci/tests/breaking.test.sh`
 
 ### Implementation for User Story 5
@@ -208,18 +208,18 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 
 ### Tests for User Story 6 ⚠️
 
-- [ ] T072 [P] [US6] Escribir la prueba de integración de idempotencia (US6-1..3):
+- [X] T072 [P] [US6] Escribir la prueba de integración de idempotencia (US6-1..3):
   - 10 envíos con la misma clave, 5 de ellos en paralelo, producen 1 fila y respuestas equivalentes con `Idempotent-Replayed`.
   - Misma clave con otro body → 422 `idempotency-key-reused`.
   - Primera solicitud aún en curso (simulada tomando desde otra conexión el mismo `pg_advisory_lock` con la función de hash exportada por el módulo) → 409 `idempotency-request-in-progress` con `Retry-After: 1`; al reintentar tras completarse → respuesta original con `Idempotent-Replayed: true` y sin nuevo efecto.
   - 10 envíos (5 concurrentes): exactamente 1 efecto; las respuestas son 201 equivalentes (reproducciones marcadas) o 409 con `Retry-After` (US6-1).
-  - Expiración: una fila con `idempotency_keys.expires_at` en el pasado (fijada con `kuota_migrator`) no bloquea; la misma clave produce un nuevo efecto, incluso con otro body; `idempotency_keys.expires_at` de una clave nueva es `created_at` + 30 días.
+  - Expiración: una fila con `idempotency_keys.expires_at` en el pasado no bloquea; la misma clave produce un nuevo efecto, incluso con otro body; `idempotency_keys.expires_at` de una clave nueva es `created_at` + 30 días. La preparación de claves de idempotencia vencidas para pruebas se realiza mediante la identidad runtime `kuota_app_login` dentro del contexto de un tenant y respetando `withTenant` y RLS. La comprobación y purga de las claves vencidas se efectúa con la identidad de mantenimiento autorizada. No se emplea `kuota_migrator` como identidad de acceso a los datos de negocio ni se desactiva FORCE RLS. *(Enmienda aprobada el 2026-11-23, approvals.md, Aprobación 4.)*
   - Fallo del comando: la clave no queda registrada y un reintento produce el efecto.
   - La misma clave en 2 tenants produce 2 efectos.
   - Una clave con formato inválido → 400 (data-model.md `idempotency_keys.key`).
   - Archivo: `backend/test/integration/idempotency.spec.ts`.
 - [X] T073 [P] [US6] Escribir la prueba de auditoría (US6-4, US6-5): cada escritura de dev-probe crea un `audit_event` con los campos de data-model.md (`audit_events.actor_id`, `audit_events.actor_type`, `audit_events.action`, `audit_events.entity_type`, `audit_events.entity_id`, `audit_events.occurred_at`, `audit_events.correlation_id`, `audit_events.idempotency_key`) y sin PII en `audit_events.changes`; `audit_events.actor_role` es `NULL` aunque la solicitud envíe un rol en un encabezado (p. ej. `X-Kuota-Dev-Role`) o en el body; un `UPDATE`/`DELETE` con `kuota_app_login` falla, y también lo bloquea el trigger. Archivo: `backend/test/integration/audit.spec.ts`
-- [ ] T095 [P] [US6] Escribir las pruebas de contrato de idempotencia de `createDevProbeItem` con `expectToMatchContract` (T066): 201 reproducido con `Idempotent-Replayed: true`, 409 `idempotency-request-in-progress` con `Retry-After` (requerido) y 422 `idempotency-key-reused` cumplen el contrato (US5-2 aplicado a US6), en `backend/test/contract/idempotency.contract.spec.ts`
+- [X] T095 [P] [US6] Escribir las pruebas de contrato de idempotencia de `createDevProbeItem` con `expectToMatchContract` (T066): 201 reproducido con `Idempotent-Replayed: true`, 409 `idempotency-request-in-progress` con `Retry-After` (requerido) y 422 `idempotency-key-reused` cumplen el contrato (US5-2 aplicado a US6), en `backend/test/contract/idempotency.contract.spec.ts`
 - [X] T074 [P] [US6] Escribir la prueba de hash canónico: el mismo JSON con distinto orden de claves produce el mismo `idempotency_keys.request_hash` (data-model.md), en `backend/test/unit/idempotency/request-hash.spec.ts`
 
 ### Implementation for User Story 6

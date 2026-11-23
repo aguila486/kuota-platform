@@ -75,7 +75,7 @@ no es una firma: identifica el contenido aprobado mediante los identificadores d
   - **(C)** analizar `ip-hash` y proponer HMAC, **sin** cambiar el algoritmo.
 - **No autorizado:** US5, G12, US7 y 002.
 
-### Propuesta de enmienda (PENDIENTE de aprobación): texto de T072
+### Propuesta de enmienda de T072 (APROBADA el 2026-11-23: ver Aprobación 4)
 
 - **Texto vigente:** "Expiración: una fila con `idempotency_keys.expires_at` en el pasado (fijada con `kuota_migrator`)
   no bloquea…".
@@ -87,3 +87,25 @@ no es una firma: identifica el contenido aprobado mediante los identificadores d
   cambia.
 - **Estado:** T072 queda **sin marcar** hasta que se apruebe la enmienda. Las pruebas ya usan el texto propuesto
   (`idempotency.spec.ts`, `idempotency-maintenance.spec.ts`).
+
+## Aprobación 4 — 2026-11-23: enmienda de T072, alineación de ADR-0004, preflight de 0002 y US5a (T066, T067, T095)
+
+- **Quién:** responsable del proyecto, mediante mensaje explícito en la sesión de trabajo ("KUOTA — T072, ADR-0004,
+  protección de migraciones y US5a").
+- **Enmienda de T072 aprobada.** Texto aplicado en `tasks.md`, sustituyendo "(fijada con `kuota_migrator`)":
+  "La preparación de claves de idempotencia vencidas para pruebas se realiza mediante la identidad runtime
+  `kuota_app_login` dentro del contexto de un tenant y respetando `withTenant` y RLS. La comprobación y purga de las
+  claves vencidas se efectúa con la identidad de mantenimiento autorizada. No se emplea `kuota_migrator` como
+  identidad de acceso a los datos de negocio ni se desactiva FORCE RLS."
+- **Comparación con la propuesta de la Aprobación 3:**
+  - El texto aprobado coincide en la identidad (`kuota_app_login` en el contexto del tenant) y en el papel del
+    mantenimiento.
+  - Exige además dos cosas que la propuesta no decía: hacer el fixture **a través de `withTenant`** (antes SQL directo
+    con `set_config`) y **purgar** con la identidad de mantenimiento (antes solo se comprobaba que la veía vencida).
+  - No amplía el alcance de T072, así que se aplicó y se adaptó la prueba: `idempotency.spec.ts` usa `withTenant` para
+    el fixture, comprueba la visibilidad con `kuota_maintenance_login` y añade la purga.
+  - Los demás criterios de T072 no cambian.
+- **ADR-0004:** registrar `kuota_maintenance` y `kuota_maintenance_login` (enmienda documental), sin modificar la
+  decisión de Prisma, sus condiciones ni los roles existentes.
+- **Preflight de 0002:** añadido a `make up`. Es de solo lectura y no aprovisiona nada.
+- **US5a autorizada:** T066 y T067, y T095 tras verificar sus dependencias. No incluye T068–T071, US7, G12 ni 002.

@@ -9,9 +9,7 @@
 #   PATH de los scripts empieza por el SDK de FVM: `dart`/`flutter` dentro de un script son los fijados, no los
 #   globales. Los scripts no invocan `melos` (no hay binario global): usan `exec:` con `packageFilters` y `steps`.
 #
-# Miembros (T080 en dos etapas, Aprobación 7): (A) los que existen; (B) composición final con 3 apps y 4 paquetes.
-# `packages/api_client` lo añadió T070. Las tres apps (`apps/admin_web`, `apps/collector_mobile`, `apps/client_mobile`) las
-# añade T085, y con ellas se cierra la etapa B: hasta entonces T080 sigue abierta.
+# Miembros (T080 en dos etapas, Aprobación 7): composición final con 3 apps (T085) y 4 paquetes (`api_client`, T070).
 name: kuota_workspace
 publish_to: none
 
@@ -19,6 +17,9 @@ environment:
   sdk: ^3.14.0
 
 workspace:
+  - apps/admin_web
+  - apps/client_mobile
+  - apps/collector_mobile
   - packages/api_client
   - packages/shared_core
   - packages/financial_domain

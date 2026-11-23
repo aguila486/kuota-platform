@@ -1,0 +1,4 @@
+{
+  "KUOTA_ENV": "local",
+  "KUOTA_API_BASE_URL": "http://localhost:3000"
+}

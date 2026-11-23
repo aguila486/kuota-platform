@@ -1048,3 +1048,53 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
   Kuota Core / API 1.0.0" (las apps nativas no envían `Origin`; CORS no les afecta).
 - Volúmenes `kuota_kuota-pgdata` y `kuota-g6check_kuota-pgdata` intactos; ningún contenedor de Testcontainers residual.
 - iOS: BLOQUEADO (ver arriba). T052 sigue abierta: GitHub Actions no se ha ejecutado.
+
+### US4 Dart: T063, T059 y T065 (2026-11-23, Aprobación 9)
+
+- **Validación local de iOS DIFERIDA** por decisión arquitectónica (Aprobación 9: falta de espacio en disco). No se
+  descargó, instaló ni ejecutó ningún componente de iOS. SC-008 y el checkpoint de US7 siguen **PENDIENTES DE
+  VALIDACIÓN iOS**; Android, Web y Dart VM no los sustituyen.
+- **T063 (`flutter/packages/financial_domain/lib/src/money/`):**
+  - Misma API, semántica y códigos que `backend/src/common/money/`: `Money.of/zero/parse/fromJson`, `add`,
+    `subtract`, `multiply(Decimal, [RoundingMode?])`, `format`, `toJson`, igualdad por valor; `RoundingMode` con los
+    seis modos y sus nombres compartidos (`HALF_UP`…); `MoneyError` con `MoneyErrorCode` (`code` idéntico al de TS);
+    catálogo cerrado `moneyCurrencies`; `divideRounded`.
+  - **Diferencia de forma, no de semántica:** Dart no tiene uniones, así que `allocate(n | ratios)` de TS se expone
+    como `allocate(int parts)` y `allocateRatios(List<int> ratios)`. Las partes y proporciones son pesos, no montos.
+  - **Exactitud:** montos siempre `BigInt` (nunca `int`, `double` ni `num`, tampoco en web); `multiply` usa la
+    fracción exacta del factor (`Decimal.toRational()`) y redondea con `BigInt`, sin intermedios redondeados.
+  - **Sin reglas nuevas:** replica las "interpretaciones a confirmar" de R-08 que ya aplica TS (`parse` estricto,
+    reparto simétrico de negativos, `HALF_UP` alejándose de cero, argumentos inválidos como `RangeError`/
+    `ArgumentError`). Siguen pendientes de confirmación formal; D-FIN-02 (qué modo usa cada operación de negocio) sigue
+    pendiente y no se fija.
+- **T059 (`test/money_fixtures_test.dart`, `dart_test.yaml` con `platforms: [vm, chrome]`):** los 104 casos de
+  `contracts/fixtures/money/core.json`, el catálogo contra `currencies.json`, la ida y vuelta Money → JSON → Money de
+  todo monto válido y el rechazo de los `from_json` inválidos. Los archivos se leen en un isolate híbrido de la VM
+  (`spawnHybridCode`), porque en el navegador no hay `dart:io`; la misma suite corre en la VM y en Chrome (dart2js).
+  - **Paridad:** TypeScript, Dart VM y Flutter Web (dart2js) producen exactamente los valores esperados de los mismos
+    fixtures: 104/104 en cada plataforma. Los esperados vienen del oráculo independiente de T056, no de ninguna
+    implementación.
+  - **No vacía:** 7 mutaciones de Money Dart (HALF_UP, HALF_EVEN, desempate de `allocate`, dominio asimétrico,
+    `from_json` con ceros a la izquierda, `parse` sin `TOO_MANY_DECIMALS` y catálogo alterado) fallan en VM y en Chrome.
+  - `test/money_test.dart` (14 pruebas, VM y Chrome) cubre lo que los fixtures no cubren, como en `money.spec.ts`.
+- **T065 (parte Dart):**
+  - `financial_domain/test/fixtures/float-violation.dart.txt`: archivo defectuoso de referencia (5 líneas marcadas
+    `ANTI-FLOAT`: `double` en un monto, `num` y `List<num>`, `double.parse`, `toDouble()`, `num.tryParse`) y trampas
+    de falsos positivos (comentarios, literales e identificadores como `doubled`).
+  - `scripts/ci/check-no-float-dart-reference.sh`: exige que la regla real marque exactamente esas líneas y ninguna
+    trampa.
+  - El job `flutter` ejecuta la referencia, la autoprueba Dart (`tests/check-no-float.test.sh dart`, 18 casos) y la
+    regla sobre el código real de `financial_domain/lib` (5 archivos con código): **PASS**, ya no PENDIENTE.
+  - Un `toDouble()` inyectado en `money.dart` hace fallar la regla.
+  - Los gates de TypeScript no cambiaron.
+- **Quickstart §5:** `pnpm --filter backend test:money` no existía; se sustituyó por el comando real.
+- **CI remoto (T052):** `dart test` en Chrome necesita Chrome en el runner de GitHub (las imágenes `ubuntu-latest` lo
+  incluyen). No se ha verificado en GitHub.
+- **Regresión local:**
+  - `general`: 5/5 PASS.
+  - `contracts`: 5 PASS + oasdiff **OMITIDO**.
+  - `flutter`: 14/14 PASS; 128 pruebas (`financial_domain` 42 = 23 VM + 19 Chrome; el resto, como antes), Web release
+    y 2 APK.
+  - `backend`: 18/18 PASS; 675/675 pruebas en 49 archivos; cobertura 98,53 / 97,28 / 98,12 / 99,6.
+  - Volúmenes intactos.
+- **US4: todas sus tareas (T056–T065) están completas** y SC-005 se cumple en backend, Dart VM y Flutter Web.

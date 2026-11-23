@@ -96,9 +96,10 @@ fvm flutter run -d <id-del-simulador> --dart-define-from-file=../../config/local
 fvm flutter build ios --simulator --debug --dart-define-from-file=../../config/local.json
 ```
 
-iOS no se compila en CI (Clarification 2026-11-22); se verifica localmente (SC-008). **Pendiente:** estos comandos de
-iOS aún no se han podido ejecutar en la máquina de referencia porque falta la plataforma iOS 26.2 (ver `research.md`,
-"Cierre de conectividad Web, iOS y Testcontainers").
+iOS no se compila en CI (Clarification 2026-11-22). **La validación local de iOS está DIFERIDA** por decisión
+arquitectónica (Aprobación 9 en `specs/001-platform-foundation/approvals.md`, falta de espacio en disco): mientras siga
+vigente, no se descargan runtimes ni se ejecutan los comandos de arriba. Estos comandos **no se han probado** en la
+máquina de referencia y SC-008 sigue pendiente de validación en iOS.
 
 ### Qué debe verse
 

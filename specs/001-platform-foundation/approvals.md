@@ -205,3 +205,36 @@ no es una firma: identifica el contenido aprobado mediante los identificadores d
 - **Criterios que NO se debilitan:** T049 y T052 siguen abiertas; el checkpoint de US7 exige SC-008 con iOS verificado
   localmente.
 
+## Aprobación 9 — 2026-11-23: validación local de iOS diferida (desviación temporal controlada) y cierre de US4 Dart
+
+- **Quién:** responsable del proyecto (Product Owner / Arquitectura), mediante mensaje explícito en la sesión de
+  trabajo ("KUOTA — Continuidad del desarrollo sin validación iOS").
+- **Decisión:** se **posponen temporalmente todas las validaciones locales de iOS** (build, runtime, simulador y
+  pruebas) en la fase actual y en las siguientes funcionalidades, hasta que se revoque expresamente. iOS **sigue dentro
+  del alcance del producto**; solo se aplazan sus compilaciones, simulaciones y pruebas.
+  - **Motivo:** espacio insuficiente. Runtime iOS 26.2 (arm64) de unos 7,81 GiB con 10,30 GiB libres (disco al 98 %);
+    instalarlo comprometería el espacio de Docker, Flutter, PostgreSQL y los builds de Android.
+  - **Alcance:** validación local de iOS (`flutter build ios`, `flutter run` en simuladores iOS, pruebas instrumentadas
+    de iOS, descarga o instalación de runtimes y simuladores). Prohibido además: `xcodebuild -downloadPlatform`,
+    eliminar runtimes antiguos, actualizar Xcode y limpiar cachés del sistema sin autorización. Se pueden mantener los
+    archivos de configuración iOS sin ejecutar herramientas que necesiten el runtime.
+  - **Plataformas alternativas verificadas:** Android, Flutter Web y Dart VM. **No sustituyen** a iOS en los informes:
+    reducen riesgos compartidos, pero no demuestran compatibilidad nativa con iOS.
+  - **Riesgo aceptado:** defectos específicos de iOS no detectados temporalmente (configuración nativa, ATS, red local,
+    compilación con el SDK 26.2).
+  - **Responsable de reactivarla:** Product Owner / Arquitectura.
+  - **Condición de reactivación:** autorización expresa y espacio suficiente.
+- **Criterios que NO se debilitan:**
+  - La Constitución no exige iOS y no se modifica.
+  - **SC-008 y el checkpoint de US7 siguen PENDIENTES DE VALIDACIÓN iOS.** No se declaran cumplidos.
+  - Las tareas individuales que cumplan literalmente sus criterios pueden cerrarse según las reglas del proyecto.
+- **Matriz de validación vigente:** backend NestJS, Dart VM, Flutter Web y Android OBLIGATORIAS; iOS DIFERIDA.
+- **Autorizado:** T059, T063 y T065 (US4 Dart) según su texto literal, sin inventar reglas de redondeo de negocio
+  (D-FIN-02 sigue pendiente).
+- **No autorizado:**
+  - push, merge, rebase, nuevas ramas y despliegues;
+  - cambios no autorizados en contratos, Constitución o migraciones;
+  - borrar cachés o runtimes;
+  - limpieza destructiva de Docker;
+  - iniciar el siguiente bloque sin aprobación.
+

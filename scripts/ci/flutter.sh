@@ -3,7 +3,8 @@
 # `run-local.sh flutter`.
 #   1. Flutter/Dart EXACTOS de flutter/.fvmrc (FVM en local; en CI, archivo oficial verificado por sha256,
 #      scripts/ci/setup-flutter.sh). Sin SDK válido, el job falla.
-#   2. `flutter pub get --enforce-lockfile`: resolución única del workspace sin cambiar flutter/pubspec.lock.
+#   2. `flutter pub get --enforce-lockfile`: resolución única del workspace sin cambiar flutter/pubspec.lock; un solo
+#      pubspec.lock y todos los miembros con `resolution: workspace` (check-single-lockfile.sh y su autoprueba, T086).
 #   3. `melos run analyze`, `melos run format` y `melos run test` (todo el workspace: paquetes, apps y tool/).
 #   4. `tool/check_deps.dart` (US7-4, FR-033).
 #   5. `check-no-float-dart.sh` sobre financial_domain/lib: PENDIENTE (nunca PASS) mientras no haya código (T063).
@@ -72,6 +73,10 @@ builds() {
 }
 
 check "Resolución del workspace (flutter pub get --enforce-lockfile)" flutter pub get --enforce-lockfile
+check "Un solo pubspec.lock y miembros con resolution: workspace (T086, US7-1)" \
+  "$KUOTA_ROOT/scripts/ci/check-single-lockfile.sh" "$FLUTTER_DIR"
+check "Autoverificación del control de lockfile único (scripts/ci/tests/single-lockfile.test.sh)" \
+  "$KUOTA_ROOT/scripts/ci/tests/single-lockfile.test.sh"
 check "Análisis estático (melos run analyze, --fatal-infos)" melos analyze
 check "Formato (melos run format)" melos format
 check "Pruebas (melos run test: paquetes, apps y tool/)" melos test

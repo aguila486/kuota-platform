@@ -94,8 +94,8 @@ pnpm --filter backend test:contract   # respuestas reales vs esquema (Ajv)
 cd flutter && fvm flutter pub get           # resolución única del workspace
 fvm dart run melos run analyze && fvm dart run melos run test
 fvm dart run tool/check_deps.dart           # apps no dependen de apps (US7-4)
-fvm flutter run -d chrome -t apps/admin_web/lib/main.dart --dart-define-from-file=config/local.json
-# collector_mobile / client_mobile en emulador Android; iOS se compila localmente (no en CI)
+(cd apps/admin_web && fvm flutter run -d chrome --web-port 8080 --dart-define-from-file=../../config/local.json)  # origen permitido por CORS
+# collector_mobile / client_mobile en emulador Android; iOS se compila localmente (no en CI). Comandos: flutter/README.md
 ```
 
 Esperado: cada app muestra nombre, entorno, versión y el resultado de `/v1/meta/compatibility`.

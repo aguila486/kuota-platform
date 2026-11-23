@@ -3,10 +3,13 @@
 # cada infracción marcada del archivo defectuoso; la regla de Dart detecta double/num fuera de comentarios y literales
 # y devuelve PENDIENTE (3), nunca PASS, si el paquete no existe; check-no-float.sh falla si el verificador falla; y los
 # archivos afectados activan el job correcto. Sin red ni Docker.
+# Uso: tests/check-no-float.test.sh [all|dart]   (`dart`: solo los casos de Dart, sin Node; lo usa el job `flutter`).
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 source "$ROOT/scripts/ci/lib.sh"
-use_project_node
+MODE="${1:-all}"
+case "$MODE" in all | dart) ;; *) echo "uso: $0 [all|dart]" >&2; exit 2 ;; esac
+[ "$MODE" = dart ] || use_project_node
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 FAILED=0
@@ -16,6 +19,7 @@ expect() { # nombre esperado obtenido
 ts_check() { (cd "$ROOT/backend" && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-no-float.ts "$@" >/dev/null 2>&1); echo $?; }
 dart_check() { "$ROOT/scripts/ci/check-no-float-dart.sh" "$@" >/dev/null 2>&1; echo $?; }
 
+if [ "$MODE" = all ]; then
 echo "Anti-float TypeScript (backend/scripts/check-no-float.ts)"
 expect "archivo defectuoso de referencia (T060): todas las infracciones rechazadas" 0 "$(ts_check)"
 cat >"$TMP/corregido.ts.txt" <<'EOF'
@@ -35,6 +39,8 @@ printf 'export const = ; // ANTI-FLOAT\n' >"$TMP/roto.ts.txt"
 expect "archivo que ESLint no puede analizar" 1 "$(ts_check "$TMP/roto.ts.txt")"
 KUOTA_FLOAT_FIXTURE="$TMP/corregido.ts.txt" "$ROOT/scripts/ci/check-no-float.sh" ts >/dev/null 2>&1
 expect "check-no-float.sh ts falla si la regla no rechaza el archivo defectuoso" 1 "$?"
+
+fi
 
 echo "Anti-float Dart (scripts/ci/check-no-float-dart.sh)"
 expect "paquete inexistente → PENDIENTE (3), no PASS" 3 "$(dart_check "$TMP/no-existe")"
@@ -68,12 +74,26 @@ dart_case "identificadores que solo contienen las palabras" 0 'final doubled = B
 dart_case "comillas dentro de un comentario no ocultan código posterior" 1 "// don't
 double amount = 0;"
 
+echo "Archivo defectuoso de referencia de Dart (scripts/ci/check-no-float-dart-reference.sh)"
+ref_check() { "$ROOT/scripts/ci/check-no-float-dart-reference.sh" "$@" >/dev/null 2>&1; echo $?; }
+expect "archivo de referencia real: exactamente las líneas marcadas" 0 "$(ref_check)"
+printf 'final BigInt amountMinor = BigInt.zero;\n' >"$TMP/sin-marcas.dart.txt"
+expect "referencia sin líneas marcadas → no probaría nada" 1 "$(ref_check "$TMP/sin-marcas.dart.txt")"
+printf 'final BigInt a = BigInt.one; // ANTI-FLOAT: marcada pero no infringe\n' >"$TMP/marca-falsa.dart.txt"
+expect "línea marcada que la regla no detecta" 1 "$(ref_check "$TMP/marca-falsa.dart.txt")"
+printf 'double a = 0; // ANTI-FLOAT: detectada\nnum b = 1;\n' >"$TMP/sin-marcar.dart.txt"
+expect "infracción sin marcar (desajuste entre marcadas y detectadas)" 1 "$(ref_check "$TMP/sin-marcar.dart.txt")"
+expect "código real de Money (financial_domain/lib): sin infracciones" 0 "$(dart_check)"
+
+if [ "$MODE" = all ]; then
 echo "Selección de jobs (scripts/ci/affected.sh)"
 affected_of() { KUOTA_CHANGED_FILES="$1" "$ROOT/scripts/ci/affected.sh" | tr '\n' ' ' | sed 's/ $//'; }
 expect "archivo defectuoso de referencia → backend" "general backend" "$(affected_of backend/test/fixtures/float-violation.ts.txt)"
 expect "código de Money → backend" "general backend" "$(affected_of backend/src/common/money/money.ts)"
 expect "financial_domain → flutter" "general flutter" "$(affected_of flutter/packages/financial_domain/lib/src/money/money.dart)"
 expect "script del gate → suite completa" "general backend contracts flutter" "$(affected_of scripts/ci/check-no-float.sh)"
+
+fi
 
 [ "$FAILED" -eq 0 ] && echo "Resultado: gate anti punto flotante correcto en todos los casos." || echo "Resultado: $FAILED caso(s) fallaron."
 exit "$FAILED"

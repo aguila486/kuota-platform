@@ -3,10 +3,12 @@
 #   ts   1. ESLint (configuración real) DEBE rechazar cada infracción del archivo defectuoso de referencia
 #           (backend/test/fixtures/float-violation.ts.txt, T060) en las rutas protegidas: backend/scripts/check-no-float.ts.
 #        2. El lint real del backend DEBE pasar.
-#   dart 3. scripts/ci/check-no-float-dart.sh sobre flutter/packages/financial_domain/lib. Mientras el paquete no exista
-#           (T082, US7) se registra PENDIENTE, nunca PASS.
+#   dart 3. La regla Dart DEBE rechazar exactamente las líneas marcadas del archivo defectuoso de referencia
+#           (flutter/packages/financial_domain/test/fixtures/float-violation.dart.txt): check-no-float-dart-reference.sh.
+#        4. scripts/ci/check-no-float-dart.sh sobre flutter/packages/financial_domain/lib (el código real de Money, T063).
+#           Sin código que analizar se registra PENDIENTE, nunca PASS.
 #   all  ts + dart (por defecto).
-# El job `backend` ejecuta `ts`; el job `flutter` (T050, pendiente de US7) ejecutará `dart`.
+# El job `backend` ejecuta `ts`; el job `flutter` ejecuta los pasos 3 y 4 (scripts/ci/flutter.sh).
 # Variable (solo pruebas): KUOTA_FLOAT_FIXTURE, archivo defectuoso alternativo.
 # Salida: 0 sin fallos (revisa PENDIENTE); 1 si alguna verificación falló; 2 uso incorrecto.
 set -uo pipefail
@@ -29,7 +31,7 @@ dart_rule() {
   case "$status" in
     0) record PASS "Anti-float Dart: sin double/num en financial_domain/lib" ;;
     3) record PENDIENTE "Anti-float Dart: sin double/num en financial_domain/lib" \
-      "flutter/packages/financial_domain no existe (T082, US7)" ;;
+      "financial_domain/lib no tiene código Dart que verificar" ;;
     *) record FAIL "Anti-float Dart: sin double/num en financial_domain/lib" "salida $status" ;;
   esac
 }
@@ -40,6 +42,8 @@ if [ "$MODE" != dart ]; then
   check "Anti-float TS: el lint real del backend pasa" pnpm --filter backend run lint
 fi
 if [ "$MODE" != ts ]; then
+  check "Anti-float Dart: la regla rechaza exactamente las líneas marcadas del archivo defectuoso" \
+    "$KUOTA_ROOT/scripts/ci/check-no-float-dart-reference.sh"
   step "Anti-float Dart: sin double/num en financial_domain/lib"
   dart_rule
 fi

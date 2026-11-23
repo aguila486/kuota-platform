@@ -7,7 +7,9 @@
 #      pubspec.lock y todos los miembros con `resolution: workspace` (check-single-lockfile.sh y su autoprueba, T086).
 #   3. `melos run analyze`, `melos run format` y `melos run test` (todo el workspace: paquetes, apps y tool/).
 #   4. `tool/check_deps.dart` (US7-4, FR-033).
-#   5. `check-no-float-dart.sh` sobre financial_domain/lib: PENDIENTE (nunca PASS) mientras no haya código (T063).
+#   5. Anti-float Dart (T065): la regla rechaza exactamente las líneas marcadas del archivo defectuoso de referencia
+#      (check-no-float-dart-reference.sh), su autoprueba (tests/check-no-float.test.sh dart) y `check-no-float-dart.sh`
+#      sobre el código real de financial_domain/lib (Money, T063); sin código, PENDIENTE (nunca PASS).
 #   6. osv-scanner sobre flutter/pubspec.lock (`--all-packages`): cobertura exigida (cada paquete alojado escaneado,
 #      tool/osv_coverage.dart) y severidad con el mismo gate que el backend (scripts/ci/osv-gate.mjs: falla en
 #      alta/crítica o informe inválido).
@@ -81,6 +83,10 @@ check "Análisis estático (melos run analyze, --fatal-infos)" melos analyze
 check "Formato (melos run format)" melos format
 check "Pruebas (melos run test: paquetes, apps y tool/)" melos test
 check "Dependencias entre apps y paquetes (tool/check_deps.dart)" dart run tool/check_deps.dart
+check "Anti-float Dart: el archivo defectuoso de referencia se rechaza línea a línea (T065)" \
+  "$KUOTA_ROOT/scripts/ci/check-no-float-dart-reference.sh"
+check "Autoverificación de la regla anti-float Dart (scripts/ci/tests/check-no-float.test.sh dart)" \
+  "$KUOTA_ROOT/scripts/ci/tests/check-no-float.test.sh" dart
 step "Anti-float Dart: sin double/num en financial_domain/lib"
 anti_float_dart
 check "Dependencias Dart: osv-scanner sobre pubspec.lock (cobertura completa; falla en alta/crítica)" dependency_scan

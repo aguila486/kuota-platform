@@ -562,7 +562,7 @@ describe('G2/P1 — migración 0001 con prisma migrate deploy (transacción expl
       const count = await client.query<{ n: string }>('SELECT count(*) AS n FROM public._prisma_migrations');
       expect(count.rows[0]?.n).toBe('3');
       const tables = await client.query("SELECT tablename FROM pg_tables WHERE schemaname = 'kuota'");
-      expect(tables.rowCount).toBe(3);
+      expect(tables.rowCount).toBe(4);
     } finally {
       await client.end();
     }

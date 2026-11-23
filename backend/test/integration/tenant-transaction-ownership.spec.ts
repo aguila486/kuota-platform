@@ -22,7 +22,7 @@ import {
 import { MODEL_OPERATIONS } from '../../src/common/tenant-context/transaction-guard.js';
 import { validEnv } from '../support/env.js';
 import { startTestDatabase, type TestDatabase } from '../support/postgres.js';
-import { rejection, TENANT_A, TENANT_B } from '../support/tenant-data.js';
+import { rejection, sqlState, TENANT_A, TENANT_B } from '../support/tenant-data.js';
 
 /**
  * Riesgo R3 de P2 (docs/security/p2-tenant-context-risk-assessment.md): un cliente transaccional retenido por código
@@ -582,13 +582,43 @@ describe('4.9 encapsulación (caso 15)', () => {
         });
       }),
     );
-    expect(shape.keys).toEqual(['$executeRaw', '$queryRaw', 'audit_events', 'dev_probe_items', 'idempotency_keys']);
+    // T099: el cliente expone todos los modelos de Prisma, incluido platform_audit_events (necesario en schema.prisma
+    // para P4); el runtime no tiene privilegios sobre él (ver la prueba siguiente). Excluir los modelos de plataforma
+    // del cliente de tenant exige cambiar common/tenant-context y queda como tarea propuesta.
+    expect(shape.keys).toEqual([
+      '$executeRaw',
+      '$queryRaw',
+      'audit_events',
+      'dev_probe_items',
+      'idempotency_keys',
+      'platform_audit_events',
+    ]);
     expect(shape.symbols).toBe(0);
     expect(shape.proto).toBeNull();
     expect(shape.frozen).toBe(true);
     expect(shape.forbidden).toEqual([]);
     expect(shape.delegateKeys).toEqual([...MODEL_OPERATIONS].sort());
     expect(shape.delegateProto).toBeNull();
+  });
+
+  it('T099: una transacción de tenant no puede leer ni escribir la auditoría de plataforma (42501 en la base)', async () => {
+    const uses: Array<(tx: TenantTransaction) => PromiseLike<unknown>> = [
+      (tx: TenantTransaction) => tx.platform_audit_events.findMany(),
+      (tx: TenantTransaction) =>
+        tx.platform_audit_events.create({
+          data: {
+            run_id: randomUUID(),
+            operation: 'idempotency.purge',
+            status: 'started',
+            correlation_id: randomUUID(),
+            dry_run: false,
+          },
+        }),
+    ];
+    for (const use of uses) {
+      const error = await rejection(request(TENANT_A, () => tenantPrisma.withTenant(async (tx) => await use(tx))));
+      expect(sqlState(error)).toBe('42501');
+    }
   });
 
   it('el servicio no expone el PrismaClient base ni el pool (campos privados de ECMAScript)', () => {

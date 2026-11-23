@@ -52,7 +52,8 @@ module.exports = {
     },
     {
       name: 'dominio-solo-codigo-propio',
-      comment: 'El dominio de un módulo solo importa su propio dominio y common/money (ni infraestructura ni contexto).',
+      comment:
+        'El dominio de un módulo solo importa su propio dominio y common/money (ni infraestructura ni contexto).',
       severity: 'error',
       from: { path: '^src/modules/([^/]+)/domain/' },
       to: { path: '^src/', pathNot: ['^src/modules/$1/domain/', '^src/common/money/'] },

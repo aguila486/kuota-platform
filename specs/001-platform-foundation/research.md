@@ -433,7 +433,8 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 | ~~ADR-0002 nombra `public-api.ts`; la decisión de G7a es `index.ts`~~ | **Resuelto**: enmienda 1 de ADR-0002 (2026-11-22) |
 | T042 acepta `sample_amount` (Money) y su validación en la frontera es T062 (US4); `tasks.md` declara US2 independiente de US4 | Antes de autorizar G7b: reordenar o aprobar la dependencia |
 | P2: gate de CI de las reglas de contexto y fuente de identidad real | G12 y 002 |
-| P2 R3: el cliente transaccional compartido por código defectuoso lee como su tenant (`docs/security/p2-tenant-context-risk-assessment.md`) | Decidir antes de G7b (propuesta: proxy que verifique el tenant en cada llamada; cambia T039) |
+| P2 R3: el cliente transaccional compartido por código defectuoso lee como su tenant (`docs/security/p2-tenant-context-risk-assessment.md`) | **Resuelto 2026-11-22** (opción a aprobada): hardening de T039, §8 de la evaluación. P2 sigue parcial |
+| ADR-0002 C2-1 dice que el cliente transaccional "se guarda en CLS"; tras R3 la transacción activa vive en un `AsyncLocalStorage` privado de `TenantPrismaService` (el contexto de tenant sigue en CLS) | Confirmar si basta la cláusula "equivalente propio" o se aclara el texto del ADR |
 | Esquema de fixtures de Money sin `inputs.currency` para `parse` | Aprobar la ampliación del esquema antes de T059 (Dart) |
 | Interpretaciones de Money no fijadas en ADR-0007 (`parse` estricto, `allocate` negativo) | Confirmar antes de T063 (Dart) |
 | T062: falta usar Money en dev-probe | G7b |

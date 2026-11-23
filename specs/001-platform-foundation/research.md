@@ -1295,3 +1295,62 @@ implementados y probados; SC: 4/9 cumplidos, 2 solo en local.
   | T094 | **Cerrada** | Aprobación 10 |
 - **T092 sigue ABIERTA** (C2). **T091 sigue ABIERTA** (validación del mantenedor; `make up` no se ejecutó contra los
   volúmenes existentes). **T049 y T052 siguen PENDIENTES** (sin GitHub remoto, Aprobación 10).
+
+### C2 resuelto con `app_shell` (T098, Aprobación 11; 2026-11-23)
+
+- **Grafo de dependencias internas** (pubspec, sin las externas):
+
+  | Miembro | Antes | Después |
+  |---|---|---|
+  | `admin_web`, `collector_mobile`, `client_mobile` | `api_client`, `design_system`, `shared_core` (+ `flutter_riverpod`, `material_ui`) | **`app_shell`** (dev: `api_client`, `shared_core`, `dio` solo para la prueba) |
+  | `app_shell` | — | `shared_core`, `api_client`, `design_system` (+ `flutter_riverpod`, `material_ui`) |
+  | `api_client` | `shared_core` | igual |
+  | `design_system` | `shared_core` (declarado en la arquitectura; hoy sin dependencia efectiva) | igual |
+  | `financial_domain` | `decimal` (`shared_core` permitido) | igual |
+  | `shared_core` | — | igual |
+- **Eliminación de la duplicidad:** desaparecen `lib/src/providers.dart`, `lib/src/app.dart` y `test/startup_test.dart`
+  de las tres apps. En cada app quedan dos archivos (42 líneas en total en las tres apps):
+  - `main.dart`: `void main() => runKuotaApp(AppInfo.identity);`
+  - `app_info.dart`: un `AppIdentity` constante con su nombre, `KuotaApp`, versión y build.
+
+  Sin comentarios, los dos archivos son una línea de declaración por app. La única diferencia son los valores de
+  identidad, que son precisamente lo que cada app debe aportar. Los 6 estados de arranque se prueban una sola vez en
+  `app_shell` (`startup_test.dart`, `app_shell_test.dart`: 14 pruebas). Cada app conserva 2 pruebas propias: identidad
+  contra `pubspec.yaml` y arranque con su nombre y su `X-App-Version`.
+- **`check_deps.dart`** (27 pruebas en `tool/`), con reglas nuevas y sus pruebas negativas:
+  - grafo de `flutter-architecture.md` §3 (por `pubspec`, `path` e `import`; un paquete sin reglas también falla);
+  - `dio`/`http` solo en `api_client` (`dependencies` e imports de `lib/`);
+  - con `app_shell` presente, toda app debe depender de él.
+- **Cobertura de `app_shell`:** 51/52 líneas (98,1 %) y 31/32 ramas (96,9 %), mínimo 80/80, sin exclusiones. Con 40
+  ramas sin pruebas añadidas de forma temporal en el árbol de trabajo, el gate cae a 54,8 % / 42,5 % y falla (exit 1).
+- **Lockfile:** `flutter/pubspec.lock` sin cambios (8 miembros, uno solo).
+- **Validación funcional:**
+  - regresión local en verde a la primera: `general` 5/5; `contracts` 5 + OMITIDO (incluye la regeneración
+    determinista de `api_client`); `flutter` 15/15 con 139 pruebas, Web release y 2 APK; `backend` 18/18 con
+    698/698; `prove-gates` 8/8;
+  - en vivo contra Kuota Core local (CORS activo): `admin_web` en Chrome headless y `collector_mobile` y
+    `client_mobile` en el emulador Android 14 muestran su nombre, entorno `local`, versión 0.1.0+1 y "Compatible con
+    Kuota Core / API 1.0.0" (3 consultas en el log del backend);
+  - con el backend detenido, Collector muestra "Kuota Core no disponible / network-error" y "Reintentar".
+  - iOS: DIFERIDO POR DECISIÓN ARQUITECTÓNICA — NO PROBADO.
+
+### T092 tras C2 y comportamiento requerido de H2 (2026-11-23)
+
+- **Verificación dirigida** (no se repitió el análisis completo):
+  - **C1 resuelto** (gate de cobertura Dart);
+  - **C2 resuelto** (sin archivos de composición duplicados; `check_deps` exige `app_shell`);
+  - **H3 resuelto** (problem+json en todo 404);
+  - **H1 registrado** (sigue pendiente de confirmar el desglose de G4, deducido y no confirmado);
+  - **H2 abierto**;
+  - MEDIUM y LOW sin cambios.
+- **T092 sigue ABIERTA:** su criterio literal exige ejecutar `/speckit-converge`, que añade tareas a `tasks.md`. Eso
+  requiere aprobación (no es silencioso) y no se ejecutó; solo se hizo su equivalente de solo lectura.
+- **H2: comportamiento requerido cuando exista el baseline** (no implementado; no se inventa ningún baseline):
+  - mientras `main` no contenga `contracts/openapi/kuota-core.v1.yaml` (antes de la primera fusión), OMITIDO con el
+    motivo, como hoy;
+  - en cuanto `main` contenga el contrato, el baseline pasa a ser **obligatorio**: la ausencia de la referencia base en
+    el checkout (p. ej. clon superficial) debe ser **FAIL**, no OMITIDO, y un `main` que haya perdido el contrato
+    también;
+  - propuesta: una variable versionada (p. ej. `KUOTA_CONTRACT_BASELINE_REQUIRED=true` en el workflow, activada en el
+    mismo cambio que fusione el contrato) con una prueba en `breaking.test.sh` de "referencia ausente → FAIL". Requiere
+    autorización y depende de T049.

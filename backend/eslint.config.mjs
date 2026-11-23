@@ -30,6 +30,57 @@ const ESTABLISH_CONTEXT_PATTERN = {
 const DYNAMIC_SQL_MESSAGE =
   'SQL dinámico prohibido fuera de src/common/tenant-context: usa $queryRaw/$executeRaw con plantilla parametrizada (ADR-0004, P2).';
 
+// Restricciones de sintaxis de seguridad (P2 + T038). Se reutilizan en los bloques que redefinen no-restricted-syntax:
+// ESLint no combina las listas de una misma regla entre bloques, las reemplaza.
+const SECURITY_RESTRICTED_SYNTAX = [
+  {
+    selector: `CallExpression[callee.property.name=/^(set|setIfUndefined)$/][arguments.0.value=${CONTEXT_KEYS}]`,
+    message: CONTEXT_WRITE_MESSAGE,
+  },
+  {
+    selector: `CallExpression[callee.property.name=/^(set|setIfUndefined)$/][arguments.0.name=${CONTEXT_KEY_CONSTANTS}]`,
+    message: CONTEXT_WRITE_MESSAGE,
+  },
+  { selector: `Literal[value=${TENANT_CONTEXT_SQL}]`, message: TENANT_CONTEXT_MESSAGE },
+  { selector: `TemplateElement[value.raw=${TENANT_CONTEXT_SQL}]`, message: TENANT_CONTEXT_MESSAGE },
+  {
+    selector: 'CallExpression[callee.property.name=/^\\$(queryRawUnsafe|executeRawUnsafe)$/]',
+    message: DYNAMIC_SQL_MESSAGE,
+  },
+  { selector: "MemberExpression[object.name='Prisma'][property.name='raw']", message: DYNAMIC_SQL_MESSAGE },
+];
+
+// Regla anti punto flotante (T064; R-10; Constitución IV; ADR-0007) en src/common/money/** y src/**/domain/**: prohíbe el
+// tipo `number` en parámetros, variables y propiedades cuyo nombre contenga amount|balance|rate|fee|money, y
+// `parseFloat`, `Number(…)`, `toFixed` y `Math.round`. El dinero es `bigint` en unidades mínimas (Money).
+const FLOAT_MESSAGE =
+  'Prohibido punto flotante en código financiero: usa Money (bigint en unidades mínimas) o Decimal. R-10, ADR-0007.';
+const MONEY_NAMES = '/(amount|balance|rate|fee|money)/i';
+const ANTI_FLOAT_RESTRICTED_SYNTAX = [
+  { selector: `Identifier[name=${MONEY_NAMES}] > TSTypeAnnotation TSNumberKeyword`, message: FLOAT_MESSAGE },
+  {
+    selector: `TSPropertySignature[key.name=${MONEY_NAMES}] > TSTypeAnnotation TSNumberKeyword`,
+    message: FLOAT_MESSAGE,
+  },
+  {
+    selector: `PropertyDefinition[key.name=${MONEY_NAMES}] > TSTypeAnnotation TSNumberKeyword`,
+    message: FLOAT_MESSAGE,
+  },
+  {
+    selector: `TSParameterProperty > Identifier[name=${MONEY_NAMES}] > TSTypeAnnotation TSNumberKeyword`,
+    message: FLOAT_MESSAGE,
+  },
+  { selector: "CallExpression[callee.name='parseFloat']", message: FLOAT_MESSAGE },
+  {
+    selector: "CallExpression[callee.object.name='Number'][callee.property.name='parseFloat']",
+    message: FLOAT_MESSAGE,
+  },
+  { selector: "CallExpression[callee.name='Number']", message: FLOAT_MESSAGE },
+  { selector: "NewExpression[callee.name='Number']", message: FLOAT_MESSAGE },
+  { selector: "CallExpression[callee.property.name='toFixed']", message: FLOAT_MESSAGE },
+  { selector: "CallExpression[callee.object.name='Math'][callee.property.name='round']", message: FLOAT_MESSAGE },
+];
+
 export default defineConfig(
   { ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'src/generated/**'] },
   eslint.configs.recommended,
@@ -61,24 +112,15 @@ export default defineConfig(
           ],
         },
       ],
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: `CallExpression[callee.property.name=/^(set|setIfUndefined)$/][arguments.0.value=${CONTEXT_KEYS}]`,
-          message: CONTEXT_WRITE_MESSAGE,
-        },
-        {
-          selector: `CallExpression[callee.property.name=/^(set|setIfUndefined)$/][arguments.0.name=${CONTEXT_KEY_CONSTANTS}]`,
-          message: CONTEXT_WRITE_MESSAGE,
-        },
-        { selector: `Literal[value=${TENANT_CONTEXT_SQL}]`, message: TENANT_CONTEXT_MESSAGE },
-        { selector: `TemplateElement[value.raw=${TENANT_CONTEXT_SQL}]`, message: TENANT_CONTEXT_MESSAGE },
-        {
-          selector: 'CallExpression[callee.property.name=/^\\$(queryRawUnsafe|executeRawUnsafe)$/]',
-          message: DYNAMIC_SQL_MESSAGE,
-        },
-        { selector: "MemberExpression[object.name='Prisma'][property.name='raw']", message: DYNAMIC_SQL_MESSAGE },
-      ],
+      'no-restricted-syntax': ['error', ...SECURITY_RESTRICTED_SYNTAX],
+    },
+  },
+  {
+    // T064: código financiero (Money y dominios). Mantiene las restricciones de seguridad y añade la regla anti-float.
+    files: ['src/common/money/**/*.ts', 'src/**/domain/**/*.ts'],
+    ignores: ['src/common/tenant-context/**'],
+    rules: {
+      'no-restricted-syntax': ['error', ...SECURITY_RESTRICTED_SYNTAX, ...ANTI_FLOAT_RESTRICTED_SYNTAX],
     },
   },
   {

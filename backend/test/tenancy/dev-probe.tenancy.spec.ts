@@ -17,6 +17,8 @@ describeTenantIsolation({
   createBody: (marker) => ({ label: marker, sample_amount: { amount_minor: '-123456789012345678', currency: 'MXN' } }),
   updateBody: (item: Json, marker) => ({ label: marker, version: item['version'] }),
   createHeaders: () => ({ 'idempotency-key': randomUUID() }),
+  // create y update están auditadas (US6): exigen actor explícito.
+  contextHeaders: (tenant) => ({ 'x-kuota-dev-tenant': tenant, 'x-kuota-dev-actor': 'dev:tenancy' }),
   async setup() {
     const db = await startTestDatabase();
     const app = await createApp(

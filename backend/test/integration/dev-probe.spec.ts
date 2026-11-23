@@ -36,6 +36,8 @@ async function call(
 ): Promise<Res> {
   const headers: Record<string, string> = { ...(options.headers ?? {}) };
   if (options.tenant !== null) headers['x-kuota-dev-tenant'] = options.tenant ?? TENANT;
+  // create y update están auditadas (US6): por defecto con actor; las pruebas de actor ausente lo quitan.
+  if (options.tenant !== null && !('x-kuota-dev-actor' in headers)) headers['x-kuota-dev-actor'] = 'dev:http';
   const payload = options.raw ?? (options.body === undefined ? undefined : JSON.stringify(options.body));
   if (payload !== undefined) headers['content-type'] ??= 'application/json';
   const res = await fetch(`${url}${path}`, { method, headers, ...(payload !== undefined ? { body: payload } : {}) });

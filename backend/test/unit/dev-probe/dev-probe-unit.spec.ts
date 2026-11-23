@@ -7,6 +7,8 @@ import {
   type DevProbePage,
   type UpdateOutcome,
 } from '../../../src/modules/dev-probe/application/dev-probe.repository.js';
+import type { AuditService } from '../../../src/common/audit/audit.service.js';
+import type { TenantPrismaService } from '../../../src/common/tenant-context/tenant-prisma.service.js';
 import { DevProbeService } from '../../../src/modules/dev-probe/application/dev-probe.service.js';
 import {
   DevProbeInvariantError,
@@ -209,7 +211,10 @@ describe('casos de uso DevProbeService (T042)', () => {
     delete = () => Promise.resolve(this.deleted);
   }
   const repo = new FakeRepository();
-  const service = new DevProbeService(repo);
+  const recorded: unknown[] = [];
+  const tenantPrisma = { withTenant: <T>(fn: () => Promise<T>) => fn() } as unknown as TenantPrismaService;
+  const audit = { record: (event: unknown) => Promise.resolve(void recorded.push(event)) } as unknown as AuditService;
+  const service = new DevProbeService(repo, tenantPrisma, audit);
 
   it('get/delete inexistente → not-found; update → not-found o version-conflict según el repositorio', async () => {
     await expect(service.getDevProbeItem(ID)).rejects.toMatchObject({ code: 'not-found' });
@@ -218,7 +223,7 @@ describe('casos de uso DevProbeService (T042)', () => {
     repo.outcome = { kind: 'version-conflict' };
     await expect(service.updateDevProbeItem(ID, 'x', 1)).rejects.toMatchObject({ code: 'version-conflict' });
     const item = DevProbeItem.fromRecord(record());
-    repo.outcome = { kind: 'updated', item };
+    repo.outcome = { kind: 'updated', item, previous: { label: 'antes', version: 1 } };
     await expect(service.updateDevProbeItem(ID, 'x', 1)).resolves.toBe(item);
     repo.found = item;
     await expect(service.getDevProbeItem(ID)).resolves.toBe(item);
@@ -226,6 +231,25 @@ describe('casos de uso DevProbeService (T042)', () => {
     await expect(service.deleteDevProbeItem(ID)).resolves.toBeUndefined();
     await expect(service.createDevProbeItem('nuevo', null)).resolves.toMatchObject({ label: 'nuevo' });
     await expect(service.listDevProbeItems(10, null)).resolves.toEqual({ items: [], nextAfterId: null });
+    // Solo las escrituras confirmadas se auditan (aquí: el update y el create exitosos), con la lista permitida.
+    expect(recorded).toEqual([
+      {
+        action: 'dev_probe.updated',
+        entityType: 'dev_probe',
+        entityId: ID,
+        changes: { label: { before: 'antes', after: 'ok' }, version: { before: 1, after: 1 } },
+      },
+      {
+        action: 'dev_probe.created',
+        entityType: 'dev_probe',
+        entityId: ID,
+        changes: {
+          label: 'nuevo',
+          sample_amount: { amount_minor: '9223372036854775807', currency: 'USD' },
+          version: 1,
+        },
+      },
+    ]);
   });
 
   it('valida label y version antes de tocar el repositorio', async () => {

@@ -18,6 +18,7 @@
     "test": "pnpm run prisma:generate && vitest run",
     "test:cov": "pnpm run prisma:generate && vitest run --coverage",
     "test:tenancy": "pnpm run prisma:generate && vitest run test/tenancy",
+    "test:idempotency": "pnpm run prisma:generate && KUOTA_IDEMPOTENCY_REPETITIONS=100 vitest run test/integration/idempotency.spec.ts",
     "spike:rls": "KUOTA_SPIKE=1 vitest run --reporter=verbose",
     "prisma:generate": "prisma generate --no-hints",
     "db:check-rls": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-rls.ts"

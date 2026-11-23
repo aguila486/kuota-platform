@@ -1,20 +1,45 @@
 import { Injectable } from '@nestjs/common';
+import { AuditService } from '../../../common/audit/audit.service.js';
 import { KuotaProblemError } from '../../../common/errors/problem.js';
-import type { Money } from '../../../common/money/index.js';
+import { type Money, moneyToJson } from '../../../common/money/index.js';
+import { TenantPrismaService } from '../../../common/tenant-context/tenant-prisma.service.js';
 import { type DevProbeItem, newDevProbeItem, validateLabel, validateVersion } from '../domain/dev-probe-item.js';
 import { type DevProbePage, DevProbeRepository } from './dev-probe.repository.js';
 
 /**
- * Casos de uso de `dev-probe` (T042). Un recurso de otro tenant es indistinguible de uno inexistente: RLS lo oculta y
- * la respuesta es 404 `not-found` (US2-1). La idempotencia completa (reproducción, 409, 422) y la auditoría llegan en
- * US6 (T076–T078); aquí no se escriben `idempotency_keys` ni `audit_events`.
+ * Casos de uso de `dev-probe` (T042, T078). Un recurso de otro tenant es indistinguible de uno inexistente: RLS lo oculta
+ * y la respuesta es 404 `not-found` (US2-1).
+ *
+ * Crear y actualizar son UN caso de uso con UNA transacción (`withTenant`; ADR-0002 C2-1): la escritura de negocio y su
+ * `audit_event` se confirman o revierten juntos (R-07). Si la auditoría falla, la escritura tampoco se confirma. Solo se
+ * auditan operaciones confirmadas: un rechazo (validación, 404, 409) no genera eventos (spec.md, Auditable Events).
+ * Eliminar NO se audita todavía: el contrato de `deleteDevProbeItem` no admite el 400 que exige la política de actor
+ * (bloqueo contractual registrado en research.md, US6).
  */
 @Injectable()
 export class DevProbeService {
-  constructor(private readonly repository: DevProbeRepository) {}
+  constructor(
+    private readonly repository: DevProbeRepository,
+    private readonly tenantPrisma: TenantPrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   createDevProbeItem(label: string, sampleAmount: Money | null): Promise<DevProbeItem> {
-    return this.repository.create(newDevProbeItem(label, sampleAmount));
+    const input = newDevProbeItem(label, sampleAmount);
+    return this.tenantPrisma.withTenant(async () => {
+      const item = await this.repository.create(input);
+      await this.audit.record({
+        action: 'dev_probe.created',
+        entityType: 'dev_probe',
+        entityId: item.id,
+        changes: {
+          label: item.label,
+          sample_amount: item.sampleAmount === null ? null : moneyToJson(item.sampleAmount),
+          version: item.version,
+        },
+      });
+      return item;
+    });
   }
 
   listDevProbeItems(limit: number, afterId: string | null): Promise<DevProbePage> {
@@ -28,14 +53,27 @@ export class DevProbeService {
   }
 
   async updateDevProbeItem(id: string, label: string, version: number): Promise<DevProbeItem> {
-    const outcome = await this.repository.updateLabel(id, validateLabel(label), validateVersion(version));
-    if (outcome.kind === 'not-found') throw new KuotaProblemError('not-found');
-    if (outcome.kind === 'version-conflict') {
-      throw new KuotaProblemError('version-conflict', {
-        detail: 'La versión enviada no es la vigente; vuelve a leer el registro',
+    const newLabel = validateLabel(label);
+    const expected = validateVersion(version);
+    return this.tenantPrisma.withTenant(async () => {
+      const outcome = await this.repository.updateLabel(id, newLabel, expected);
+      if (outcome.kind === 'not-found') throw new KuotaProblemError('not-found');
+      if (outcome.kind === 'version-conflict') {
+        throw new KuotaProblemError('version-conflict', {
+          detail: 'La versión enviada no es la vigente; vuelve a leer el registro',
+        });
+      }
+      await this.audit.record({
+        action: 'dev_probe.updated',
+        entityType: 'dev_probe',
+        entityId: outcome.item.id,
+        changes: {
+          label: { before: outcome.previous.label, after: outcome.item.label },
+          version: { before: outcome.previous.version, after: outcome.item.version },
+        },
       });
-    }
-    return outcome.item;
+      return outcome.item;
+    });
   }
 
   async deleteDevProbeItem(id: string): Promise<void> {

@@ -8,7 +8,12 @@ export interface DevProbePage {
 }
 
 export type UpdateOutcome =
-  | { readonly kind: 'updated'; readonly item: DevProbeItem }
+  | {
+      readonly kind: 'updated';
+      readonly item: DevProbeItem;
+      /** Valores vigentes antes de la actualización (para la auditoría `dev_probe.updated`). */
+      readonly previous: { readonly label: string; readonly version: number };
+    }
   | { readonly kind: 'not-found' }
   | { readonly kind: 'version-conflict' };
 

@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { KuotaProblemError } from '../../../common/errors/problem.js';
-import { IdempotencyKeyHeader, IdempotencyKeyPipe } from '../../../common/idempotency/idempotency-key.pipe.js';
+import { Audited } from '../../../common/audit/audit-actor.guard.js';
+import { Idempotent } from '../../../common/idempotency/idempotent.interceptor.js';
 import { DevTenantGuard } from '../../../common/tenant-context/dev-tenant.guard.js';
 import { DevProbeService } from '../application/dev-probe.service.js';
 import {
@@ -35,14 +36,13 @@ export class DevProbeController {
   constructor(private readonly service: DevProbeService) {}
 
   /**
-   * `createDevProbeItem`: exige `Idempotency-Key` válida (formato). La deduplicación y la auditoría son US6
-   * (T076, T078): hoy la clave se valida pero no se almacena.
+   * `createDevProbeItem`: idempotente (`@Idempotent()`: `Idempotency-Key` obligatoria, reproducción, 409 y 422) y
+   * auditada (`@Audited()`: exige actor → 400 si falta). Orden: guard de contexto → actor → idempotencia → handler.
    */
   @Post()
-  async create(
-    @IdempotencyKeyHeader(IdempotencyKeyPipe) _idempotencyKey: string,
-    @Body() body: unknown,
-  ): Promise<DevProbeItemJson> {
+  @Audited()
+  @Idempotent()
+  async create(@Body() body: unknown): Promise<DevProbeItemJson> {
     const input = parseCreateBody(body);
     const item = await asValidationError(() => this.service.createDevProbeItem(input.label, input.sampleAmount));
     return toJson(item);
@@ -59,7 +59,9 @@ export class DevProbeController {
     return toJson(await this.service.getDevProbeItem(requireId(id)));
   }
 
+  /** `updateDevProbeItem`: auditada (`dev_probe.updated`); sin actor → 400 antes de escribir. */
   @Patch(':id')
+  @Audited()
   async update(@Param('id') id: string, @Body() body: unknown): Promise<DevProbeItemJson> {
     const input = parseUpdateBody(body);
     const itemId = requireId(id);
@@ -67,6 +69,10 @@ export class DevProbeController {
     return toJson(item);
   }
 
+  /**
+   * `deleteDevProbeItem`: NO auditada todavía. La política de actor exige 400 sin actor, pero el contrato de esta
+   * operación no declara 400. Pendiente de decisión contractual (research.md, US6).
+   */
   @Delete(':id')
   @HttpCode(204)
   async remove(@Param('id') id: string): Promise<void> {

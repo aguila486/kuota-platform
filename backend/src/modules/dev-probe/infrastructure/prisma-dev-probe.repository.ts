@@ -67,12 +67,17 @@ export class PrismaDevProbeRepository extends DevProbeRepository {
 
   updateLabel(id: string, label: string, expectedVersion: number): Promise<UpdateOutcome> {
     return this.tenantPrisma.withTenant(async (tx): Promise<UpdateOutcome> => {
+      // Valor anterior (auditoría). Si otra transacción cambia la fila, cambia la versión y la actualización de abajo no
+      // la toca (version-conflict): el label leído es siempre el de `expectedVersion` cuando la actualización ocurre.
+      const before = await tx.dev_probe_items.findFirst({ where: { id, version: expectedVersion } });
       // Bloqueo optimista: solo actualiza si la versión vigente es la esperada (una sentencia, atómica).
       const [row] = await tx.dev_probe_items.updateManyAndReturn({
         where: { id, version: expectedVersion },
         data: { label, version: { increment: 1 }, updated_at: new Date() },
       });
-      if (row) return { kind: 'updated', item: toDomain(row) };
+      if (row && before) {
+        return { kind: 'updated', item: toDomain(row), previous: { label: before.label, version: before.version } };
+      }
       const exists = await tx.dev_probe_items.count({ where: { id } });
       return exists === 0 ? { kind: 'not-found' } : { kind: 'version-conflict' };
     });

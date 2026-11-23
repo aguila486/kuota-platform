@@ -14,6 +14,7 @@ describe('loadConfig', () => {
       minSupported: { admin: '0.1.0', collector: '0.1.0', client: '0.1.0' },
       metrics: { host: '127.0.0.1', port: 9464, token: undefined },
       database: { appUrl: 'postgresql://kuota_app_login:ficticio@127.0.0.1:55432/kuota' },
+      cors: { allowedOrigins: [] },
     });
   });
 
@@ -52,5 +53,55 @@ describe('loadConfig', () => {
     expect(loadConfig(validEnv({ LOG_LEVEL: 'debug' })).logLevel).toBe('debug');
     expect(loadConfig(validEnv({ MIN_SUPPORTED_COLLECTOR: '1.4.2+120' })).minSupported.collector).toBe('1.4.2+120');
     expect(() => loadConfig(validEnv({ MIN_SUPPORTED_CLIENT: '1.4' }))).toThrow(/MIN_SUPPORTED_CLIENT/);
+  });
+
+  describe('KUOTA_CORS_ALLOWED_ORIGINS (Aprobación 8)', () => {
+    const origins = (env: Record<string, string>) => loadConfig(validEnv(env)).cors.allowedOrigins;
+
+    it('sin variable (o vacía) no hay orígenes permitidos', () => {
+      expect(origins({})).toEqual([]);
+      expect(origins({ KUOTA_CORS_ALLOWED_ORIGINS: '  ' })).toEqual([]);
+    });
+
+    it('acepta orígenes exactos separados por comas, sin duplicados', () => {
+      expect(
+        origins({ KUOTA_CORS_ALLOWED_ORIGINS: 'http://localhost:8080, http://127.0.0.1:8080,http://localhost:8080' }),
+      ).toEqual(['http://localhost:8080', 'http://127.0.0.1:8080']);
+      expect(
+        origins({
+          KUOTA_ENV: 'production',
+          KUOTA_METRICS_TOKEN: 'x'.repeat(32),
+          KUOTA_CORS_ALLOWED_ORIGINS: 'https://admin.example.test',
+        }),
+      ).toEqual(['https://admin.example.test']);
+    });
+
+    it.each([
+      ['*', /comodines/],
+      ['https://*.example.test', /comodines/],
+      ['null', /origen válido/],
+      ['localhost:8080', /http o https/],
+      ['ftp://example.test', /http o https/],
+      ['http://localhost:8080/', /exacto y canónico/],
+      ['http://localhost:8080/admin', /exacto y canónico/],
+      ['http://LOCALHOST:8080', /exacto y canónico/],
+      ['http://localhost:80', /exacto y canónico/],
+      ['http://user:pw@localhost:8080', /exacto y canónico/],
+      ['http://localhost:8080,', /\[1\] está vacío/],
+    ])('rechaza %s', (value, message) => {
+      expect(() => origins({ KUOTA_CORS_ALLOWED_ORIGINS: value })).toThrow(message);
+    });
+
+    it('fuera de local/testing exige https y prohíbe loopback', () => {
+      const prod = (value: string) =>
+        origins({ KUOTA_ENV: 'staging', KUOTA_METRICS_TOKEN: 'x'.repeat(32), KUOTA_CORS_ALLOWED_ORIGINS: value });
+      expect(() => prod('http://admin.example.test')).toThrow(/https fuera de local\/testing/);
+      expect(() => prod('https://localhost:8080')).toThrow(/loopback/);
+      expect(() => prod('https://127.0.0.1')).toThrow(/loopback/);
+      expect(() => prod('https://[::1]:8443')).toThrow(/loopback/);
+      expect(origins({ KUOTA_ENV: 'testing', KUOTA_CORS_ALLOWED_ORIGINS: 'http://127.0.0.1:8080' })).toEqual([
+        'http://127.0.0.1:8080',
+      ]);
+    });
   });
 });

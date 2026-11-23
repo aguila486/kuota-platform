@@ -17,6 +17,11 @@ export interface AppConfig {
   readonly metrics: { readonly host: string; readonly port: number; readonly token: string | undefined };
   /** Solo la credencial de runtime (kuota_app_login). La de migración nunca se carga en la API. */
   readonly database: { readonly appUrl: string };
+  /**
+   * CORS (Aprobación 8): orígenes exactos que pueden leer las respuestas desde un navegador (Kuota Admin en Flutter
+   * Web). Vacío → sin CORS: el navegador bloquea toda lectura de otro origen. Nunca comodines ni orígenes reflejados.
+   */
+  readonly cors: { readonly allowedOrigins: readonly string[] };
 }
 
 /** Token de inyección de la configuración. */

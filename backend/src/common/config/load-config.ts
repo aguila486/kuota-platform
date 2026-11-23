@@ -31,6 +31,45 @@ function isLoopback(host: string): boolean {
   return isIP(host) === 4 && host.startsWith('127.');
 }
 
+/**
+ * KUOTA_CORS_ALLOWED_ORIGINS (Aprobación 8): lista separada por comas de orígenes EXACTOS y canónicos
+ * (`esquema://host[:puerto]`, como los envía el navegador en `Origin`). Se rechazan comodines, `null`, rutas, barras
+ * finales, credenciales y puertos por defecto explícitos. Fuera de local/testing solo `https` y nunca loopback.
+ */
+function parseCorsOrigins(raw: string | undefined, development: boolean, issues: string[]): string[] {
+  if (raw === undefined) return [];
+  const name = 'KUOTA_CORS_ALLOWED_ORIGINS';
+  const origins: string[] = [];
+  raw.split(',').forEach((part, index) => {
+    const entry = part.trim();
+    const position = `${name}[${index}]`;
+    if (entry === '') return void issues.push(`${position} está vacío`);
+    if (entry.includes('*')) return void issues.push(`${position}: no se admiten comodines`);
+    let url: URL;
+    try {
+      url = new URL(entry);
+    } catch {
+      return void issues.push(`${position} no es un origen válido (esquema://host[:puerto])`);
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return void issues.push(`${position} debe usar http o https`);
+    }
+    if (url.origin !== entry) {
+      return void issues.push(
+        `${position} debe ser un origen exacto y canónico, sin ruta, barra final ni credenciales`,
+      );
+    }
+    if (!development) {
+      if (url.protocol !== 'https:') issues.push(`${position} debe usar https fuera de local/testing`);
+      if (isLoopback(url.hostname.replace(/^\[|\]$/g, ''))) {
+        issues.push(`${position} no puede ser loopback fuera de local/testing`);
+      }
+    }
+    if (!origins.includes(entry)) origins.push(entry);
+  });
+  return origins;
+}
+
 export function loadConfig(env: Env): AppConfig {
   const issues: string[] = [];
   const read = (name: string): string | undefined => {
@@ -114,6 +153,12 @@ export function loadConfig(env: Env): AppConfig {
     }
   }
 
+  const allowedOrigins = parseCorsOrigins(
+    read('KUOTA_CORS_ALLOWED_ORIGINS'),
+    rawEnv === undefined || isDevelopmentEnv(kuotaEnv),
+    issues,
+  );
+
   const appPort = port('PORT', 3000);
   if (issues.length > 0) throw new ConfigValidationError(issues);
 
@@ -126,5 +171,6 @@ export function loadConfig(env: Env): AppConfig {
     minSupported,
     metrics: { host: metricsHost, port: metricsPort, token: metricsToken },
     database: { appUrl: appUrl! },
+    cors: { allowedOrigins },
   };
 }

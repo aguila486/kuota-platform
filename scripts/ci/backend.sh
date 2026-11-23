@@ -7,7 +7,8 @@
 #   4. Suites obligatorias ejecutadas y sin omisiones (scripts/ci/required-suites.txt).
 #   5. test:idempotency (SC-006: 100 repeticiones).
 #   6. Gate de PostgreSQL efímero: aprovisionamiento → preflight → migrate deploy → db:check-rls, con autoverificación.
-#   7. osv-scanner sobre pnpm-lock.yaml: falla con severidad alta o crítica.
+#   7. Autoverificación del gate de dependencias y osv-scanner sobre pnpm-lock.yaml: falla con severidad alta o crítica
+#      o con un informe inválido (SEC-2026-001).
 # Salida: 0 sin fallos; 1 si alguna verificación falló. Requiere Docker.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -37,7 +38,7 @@ dependency_scan() {
     tail -5 "$REPORT_DIR/osv.log"
     return "$status"
   fi
-  node scripts/ci/osv-gate.mjs "$REPORT_DIR/osv.json"
+  node scripts/ci/osv-gate.mjs "$REPORT_DIR/osv.json" "$status"
 }
 
 check "Instalación reproducible (pnpm install --frozen-lockfile)" pnpm install --frozen-lockfile
@@ -49,5 +50,6 @@ check "Pruebas: unitarias, integración, tenancy y contrato, con cobertura y umb
 check "Suites obligatorias ejecutadas y sin omisiones" required_suites
 check "Idempotencia: test:idempotency (100 repeticiones, SC-006)" pnpm --filter backend run test:idempotency
 check "PostgreSQL 18 efímero, preflight y db:check-rls (scripts/ci/db-gate.sh)" "$KUOTA_ROOT/scripts/ci/db-gate.sh"
+check "Autoverificación del gate de dependencias (scripts/ci/tests/osv-gate.test.sh)" scripts/ci/tests/osv-gate.test.sh
 check "Dependencias: osv-scanner sobre pnpm-lock.yaml (falla en alta/crítica)" dependency_scan
 finish backend

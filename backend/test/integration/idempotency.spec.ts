@@ -7,15 +7,17 @@ import { loadConfig } from '../../src/common/config/load-config.js';
 import { idempotencyLockId } from '../../src/common/idempotency/request-hash.js';
 import { validEnv } from '../support/env.js';
 import { startTestDatabase, type TestDatabase } from '../support/postgres.js';
+import { asTenantSql } from '../support/tenant-data.js';
 
 /**
  * T072 (US6-1..3; FR-023, FR-024; data-model.md `idempotency_keys`) sobre la aplicación real y PostgreSQL 18:
  * `createDevProbeItem` con `@Idempotent()`. `KUOTA_IDEMPOTENCY_REPETITIONS` fija las repeticiones del escenario
  * principal (10 en `pnpm test`; 100 en `pnpm test:idempotency`, SC-006).
  *
- * Desviación documentada: la tarea pide fijar `expires_at` en el pasado "con kuota_migrator". Con FORCE RLS y la
- * política `TO kuota_app`, el migrador no ve ni modifica filas (data-model.md, decisión de implementación de 0001), así
- * que se usa el superusuario del contenedor efímero, solo para preparar el escenario.
+ * Desviación de T072 (pendiente de enmienda, research.md): la tarea pide fijar `expires_at` en el pasado "con
+ * kuota_migrator". Con FORCE RLS y la política `TO kuota_app`, el migrador no ve ni modifica filas (decisión de 0001).
+ * El fixture lo fija `kuota_app_login` dentro del contexto del propio tenant (sin credenciales elevadas), y la
+ * expiración se comprueba también con la identidad de mantenimiento en `idempotency-maintenance.spec.ts`.
  */
 const REPETITIONS = Number(process.env['KUOTA_IDEMPOTENCY_REPETITIONS'] ?? '10');
 const PATH = '/v1/dev/probe-items';
@@ -160,9 +162,11 @@ describe('idempotencia de createDevProbeItem (T072)', () => {
       [tenant, key],
     );
     expect(fresh.rows[0]!.ok).toBe(true);
-    await admin.query(
-      "UPDATE kuota.idempotency_keys SET created_at = now() - interval '31 days', expires_at = now() - interval '1 day' WHERE tenant_id = $1 AND key = $2",
-      [tenant, key],
+    await asTenantSql(db.appUrl, tenant, (c) =>
+      c.query(
+        "UPDATE kuota.idempotency_keys SET created_at = now() - interval '31 days', expires_at = now() - interval '1 day' WHERE key = $1",
+        [key],
+      ),
     );
     const again = await post(tenant, key, { label: 'tras-expirar' });
     expect(again).toMatchObject({ status: 201, replayed: null });

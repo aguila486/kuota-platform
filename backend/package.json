@@ -21,7 +21,8 @@
     "test:idempotency": "pnpm run prisma:generate && KUOTA_IDEMPOTENCY_REPETITIONS=100 vitest run test/integration/idempotency.spec.ts",
     "spike:rls": "KUOTA_SPIKE=1 vitest run --reporter=verbose",
     "prisma:generate": "prisma generate --no-hints",
-    "db:check-rls": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-rls.ts"
+    "db:check-rls": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-rls.ts",
+    "idempotency:purge": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/purge-idempotency.ts"
   },
   "dependencies": {
     "@nestjs/common": "12.6.0",

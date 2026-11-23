@@ -310,11 +310,12 @@ describe('4.4 transacción terminada (casos 5, 6)', () => {
     let late: Promise<unknown> | undefined;
     await request(TENANT_A, () =>
       tenantPrisma.withTenant(async (tx) => {
-        late = sleep(30).then(() => tx.dev_probe_items.findMany());
+        // `rejection` engancha el manejador ya: si el COMMIT tarda más de 30 ms el rechazo no queda sin manejar.
+        late = rejection(sleep(30).then(() => tx.dev_probe_items.findMany()));
         return Promise.resolve();
       }),
     );
-    expect(await rejection(late!)).toBeInstanceOf(TenantTransactionClosedError);
+    expect(await late!).toBeInstanceOf(TenantTransactionClosedError);
   });
 });
 

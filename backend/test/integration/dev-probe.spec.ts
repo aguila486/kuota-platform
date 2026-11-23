@@ -167,7 +167,8 @@ describe('createDevProbeItem', () => {
       const res = await create({ label: 'money-invalido', sample_amount: value });
       expectValidation(res, field);
       if (typeof value === 'object' && value !== null && 'amount_minor' in value) {
-        expect(res.text).not.toContain(String(value.amount_minor));
+        // Solo `errors[]` puede reflejar la entrada: el texto completo incluye un correlation_id aleatorio (UUID con "-0…").
+        expect(JSON.stringify(res.body['errors'])).not.toContain(String(value.amount_minor));
       }
       expect((await rows()).length).toBe(before);
     });
@@ -200,7 +201,7 @@ describe('createDevProbeItem', () => {
     for (const key of [null, '1234567', 'a'.repeat(129), 'con espacio', 'ñandú-1234', 'abc$defgh']) {
       const res = await create({ label: 'clave' }, key);
       expectValidation(res, 'Idempotency-Key');
-      if (key) expect(res.text).not.toContain(key);
+      if (key) expect(JSON.stringify(res.body['errors'])).not.toContain(key);
     }
     const repeated = await new Promise<number>((resolve, reject) => {
       const target = new URL(`${url}${PATH}`);

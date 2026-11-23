@@ -649,3 +649,16 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
   TypeScript roto, contrato inválido, respuesta con tipo fuera de contrato, dependencia arquitectónica prohibida,
   prueba unitaria fallida, política RLS ausente (migración que la borra, vía el gate de PostgreSQL), migración sin
   prerrequisitos, cobertura bajo el umbral, suite obligatoria omitida o con `skip`, y job afectado saltado.
+
+### Hotfix de seguridad G12: effect GHSA-7589-6fvf-x4pw (2026-11-23)
+
+- **Hallazgo:** `effect@3.20.0`, ALTA (CVSS 8,7, CVE-2026-121707), llega solo por `prisma@7.10.1` →
+  `@prisma/config@7.10.1`, que la fija de forma exacta. Prisma no tiene una 7.x estable posterior: `7.11.0-dev.2` ya
+  usa 3.22.1, pero es prerelease.
+- **Decisión:** override de pnpm acotado al consumidor, `'@prisma/config>effect': 3.22.1`, en `pnpm-workspace.yaml`.
+  No añade dependencias nuevas: es la misma, en su versión corregida.
+- **Endurecimiento de `osv-gate.mjs`:** ahora falla en cerrado ante informes inválidos o incoherentes, y lo cubre la
+  prueba `scripts/ci/tests/osv-gate.test.sh`.
+- **Riesgo residual:** la copia de `effect` empaquetada en la CLI de Prisma sigue siendo 3.20.0 (sin uso de `TemplateLiteral`).
+- **Detalle:** el registro completo (explotabilidad, compatibilidad, pruebas negativas y condiciones para retirar el
+  override) está en `docs/security/SEC-2026-001-effect-ghsa-7589.md`.

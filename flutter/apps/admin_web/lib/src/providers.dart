@@ -6,13 +6,7 @@ import 'package:shared_core/shared_core.dart';
 import 'app_info.dart';
 
 /// Configuración del entorno (`--dart-define-from-file`). Inválida → `Err`, nunca un valor por defecto inventado.
-final appConfigProvider = Provider<Result<AppConfig>>((ref) {
-  try {
-    return Ok(AppConfig.fromEnvironment());
-  } on AppConfigError catch (error) {
-    return Err(Failure('config-invalid', message: '${error.field}: ${error.reason}'));
-  }
-});
+final appConfigProvider = Provider<Result<AppConfig>>((ref) => AppConfig.tryFromEnvironment());
 
 /// Cliente de Kuota Core (api_client) para la configuración válida; `null` si la configuración no lo es.
 final apiClientProvider = Provider<KuotaApiClient?>((ref) {
@@ -27,7 +21,7 @@ final apiClientProvider = Provider<KuotaApiClient?>((ref) {
 final compatibilityProvider = FutureProvider<CompatibilityStatus?>((ref) async {
   final client = ref.watch(apiClientProvider);
   if (client == null) return null;
-  return classifyCompatibility(await client.getCompatibility());
+  return client.checkCompatibility();
 });
 
 /// Estado que muestra la pantalla de inicio. Nunca "compatible" sin una respuesta válida del servidor.

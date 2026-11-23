@@ -52,4 +52,25 @@ void main() {
     expect((result as Err).failure.code, ApiFailureCodes.serviceUnavailable);
     expect(classifyCompatibility(result), isA<ApiUnavailable>());
   });
+
+  test('checkCompatibility consulta y clasifica en una sola llamada (la usan las tres apps)', () async {
+    KuotaApiClient client(List<FakeReply> replies) => KuotaApiClient(
+      baseUrl: Uri.parse('https://api.kuota.example'),
+      appVersion: AppVersion(KuotaApp.collector, '0.1.0', build: 1),
+      httpClientAdapter: FakeAdapter(replies),
+    );
+    final body = {
+      'api_version': '1.0.0',
+      'min_supported': {'admin': '0.1.0', 'collector': '0.2.0', 'client': '0.1.0'},
+      'client_supported': false,
+      'server_time': '2026-11-23T12:00:00Z',
+    };
+    final incompatible = await client([FakeReply(200, body)]).checkCompatibility();
+    expect(incompatible, isA<Incompatible>());
+    expect((incompatible as Incompatible).info!.minSupported.collector, '0.2.0');
+    expect(
+      await client([const FakeReply(503, '<html/>', contentType: 'text/html')]).checkCompatibility(),
+      isA<ApiUnavailable>(),
+    );
+  });
 }

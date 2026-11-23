@@ -9,6 +9,28 @@ import 'package:test/test.dart';
 void main() {
   Map<String, String> values(String env, String url) => {AppConfig.environmentKey: env, AppConfig.apiBaseUrlKey: url};
 
+  group('AppConfig.tryFromValues / tryFromEnvironment', () {
+    test('válida → Ok con la misma configuración que fromValues', () {
+      final result = AppConfig.tryFromValues(values('local', 'http://localhost:3000'));
+      expect(result, isA<Ok<AppConfig>>());
+      expect((result as Ok<AppConfig>).value.apiBaseUrl, Uri.parse('http://localhost:3000'));
+    });
+
+    test('inválida → Err config-invalid con campo y motivo, sin el valor recibido', () {
+      final result = AppConfig.tryFromValues(values('qa', 'http://secreto.example'));
+      expect(result, isA<Err<AppConfig>>());
+      final failure = (result as Err<AppConfig>).failure;
+      expect(failure.code, AppConfig.invalidFailureCode);
+      expect(failure.message, startsWith('${AppConfig.environmentKey}:'));
+      expect(failure.message, isNot(contains('qa')));
+      expect(AppConfig.tryFromValues(values('staging', '')), isA<Err<AppConfig>>());
+    });
+
+    test('sin --dart-define (como en las pruebas) tryFromEnvironment no lanza: devuelve Err', () {
+      expect(AppConfig.tryFromEnvironment(), isA<Err<AppConfig>>());
+    });
+  });
+
   group('AppConfig.fromValues', () {
     test('acepta los cuatro entornos con su URL', () {
       for (final env in KuotaEnvironment.values) {

@@ -1,3 +1,5 @@
+import '../result/result.dart';
+
 /// Entorno de ejecución de una app Kuota. Coincide con `KUOTA_ENV` del backend (`local`, `testing`, `staging`,
 /// `production`).
 enum KuotaEnvironment {
@@ -48,6 +50,25 @@ final class AppConfig {
     environmentKey: String.fromEnvironment(environmentKey),
     apiBaseUrlKey: String.fromEnvironment(apiBaseUrlKey),
   });
+
+  /// Código de [Failure] de una configuración inválida.
+  static const invalidFailureCode = 'config-invalid';
+
+  /// Como [AppConfig.fromEnvironment], pero devuelve `Err(Failure('config-invalid'))` en lugar de lanzar: nunca un valor
+  /// por defecto inventado. El mensaje nombra el campo y el motivo, nunca el valor.
+  static Result<AppConfig> tryFromEnvironment() => tryFromValues(const {
+    environmentKey: String.fromEnvironment(environmentKey),
+    apiBaseUrlKey: String.fromEnvironment(apiBaseUrlKey),
+  });
+
+  /// Como [AppConfig.fromValues], pero con [Result] (mismo contrato de error que [tryFromEnvironment]).
+  static Result<AppConfig> tryFromValues(Map<String, String> values) {
+    try {
+      return Ok(AppConfig.fromValues(values));
+    } on AppConfigError catch (error) {
+      return Err(Failure(invalidFailureCode, message: '${error.field}: ${error.reason}'));
+    }
+  }
 
   /// Valida y construye la configuración a partir de pares clave/valor. Lanza [AppConfigError] si no es válida.
   factory AppConfig.fromValues(Map<String, String> values) {

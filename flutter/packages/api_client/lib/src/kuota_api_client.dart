@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:shared_core/shared_core.dart';
 
+import 'compatibility_status.dart';
 import 'generated/generated.dart';
 import 'headers.dart';
 
@@ -67,6 +68,10 @@ final class KuotaApiClient {
   /// `GET /v1/meta/compatibility` (FR-032): versión de la API, versiones mínimas por app y, si se envió
   /// `X-App-Version`, si esta app está soportada.
   Future<Result<CompatibilityInfo>> getCompatibility() => _call(() => _api.getMetaApi().getCompatibility());
+
+  /// [getCompatibility] clasificada (FR-032): compatible, incompatible, Kuota Core no disponible o respuesta inesperada.
+  /// Nunca "compatible" sin una respuesta válida del servidor.
+  Future<CompatibilityStatus> checkCompatibility() async => classifyCompatibility(await getCompatibility());
 
   /// Libera las conexiones del cliente.
   void close({bool force = false}) => _api.dio.close(force: force);

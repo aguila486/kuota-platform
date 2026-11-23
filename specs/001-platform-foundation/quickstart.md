@@ -111,6 +111,26 @@ scripts/ci/prove-gates.sh          # aplica 6 cambios defectuosos de referencia 
                                    # y verifica que cada gate falla (secreto, float, RLS, contrato, dependencia, cobertura)
 ```
 
+### Duración de CI para un cambio solo de documentación (SC-004, T088)
+
+```bash
+KUOTA_CHANGED_FILES=docs/architecture/api-contracts.md scripts/ci/run-local.sh affected
+```
+
+Medición del 2026-11-23 (MacBook arm64, 8 núcleos, Docker Desktop 4.43.2; imágenes de gitleaks, editorconfig-checker y
+actionlint ya descargadas):
+
+| Ejecución | Jobs afectados | Resultado | Duración |
+|---|---|---|---|
+| 1–3 (`docs/architecture/vision.md`) | `general` | 0 fallos | 4 s cada una |
+| 4 (`docs/architecture/api-contracts.md`) | `general` | 0 fallos | 4 s |
+
+- **Local: cumple** el objetivo de ≤ 3 min. Un cambio solo de `docs/`, `README.md` o `specs/` ejecuta únicamente
+  `general` (`scripts/ci/affected.sh`).
+- **No medido:** la duración en GitHub Actions. Incluye el checkout, la descarga de imágenes y la preparación del
+  runner, y depende de T052 (el workflow nunca se ha ejecutado en GitHub). SC-004 queda verificado solo en local hasta
+  esa ejecución.
+
 ## 9. Criterio de "hecho" de 001
 
 - Todas las secciones anteriores pasan en una máquina limpia, ejecutadas por alguien distinto de quien implementó (SC-001; con mantenedor único, el mantenedor valida lo

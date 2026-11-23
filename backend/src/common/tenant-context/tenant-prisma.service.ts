@@ -183,6 +183,14 @@ export class TenantPrismaService implements OnModuleDestroy {
     return active.client;
   }
 
+  /**
+   * Estado del pool para las métricas técnicas (T094; FR-039): solo contadores, sin datos de conexión. El pool sigue
+   * siendo privado; esto no da acceso a conexiones ni cambia `withTenant`.
+   */
+  poolStats(): { total: number; idle: number; waiting: number } {
+    return { total: this.#pool.totalCount, idle: this.#pool.idleCount, waiting: this.#pool.waitingCount };
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.#prisma.$disconnect();
     if (this.#ownsPool) await this.#pool.end();

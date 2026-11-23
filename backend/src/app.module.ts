@@ -5,6 +5,7 @@ import { type AppConfig, devTenantContextEnabled } from './common/config/app-con
 import { ConfigModule } from './common/config/config.module.js';
 import { ProblemDetailsFilter } from './common/errors/problem.filter.js';
 import { LoggingModule } from './common/logging/logging.module.js';
+import { MetricsModule } from './common/metrics/metrics.module.js';
 import { TenantContextModule } from './common/tenant-context/tenant-context.module.js';
 import { DEV_ONLY_MODULES } from './dev-modules.js';
 import { HealthModule } from './modules/health/health.module.js';
@@ -38,6 +39,7 @@ export class AppModule {
         ConfigModule.forConfig(config),
         LoggingModule.forRoot(options.logStream ? { stream: options.logStream } : {}),
         TenantContextModule,
+        MetricsModule,
         HealthModule,
         MetaModule,
         ...devModules,

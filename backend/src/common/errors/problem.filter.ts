@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, Logger } from '@nestjs/common';
+import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, Logger, Optional } from '@nestjs/common';
 import { CORRELATION_HEADER, correlationIdFor } from '../logging/correlation.js';
+import { MetricsRuntime } from '../metrics/metrics.module.js';
 import {
   KuotaProblemError,
   PROBLEM_CODES,
@@ -61,6 +62,9 @@ function toProblem(exception: unknown): MappedProblem & { unmapped?: true } {
 export class ProblemDetailsFilter implements ExceptionFilter {
   private readonly logger = new Logger('ProblemDetails');
 
+  /** Métricas (T094): el contador de errores por código estable se alimenta aquí. Opcional en pruebas aisladas. */
+  constructor(@Optional() private readonly metrics?: MetricsRuntime) {}
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
     const req = http.getRequest<IncomingMessage>();
@@ -93,6 +97,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     }
 
     if (res.headersSent) return;
+    this.metrics?.metrics.recordError(problem.code);
     res.statusCode = problem.status;
     res.setHeader('Content-Type', 'application/problem+json; charset=utf-8');
     res.setHeader(CORRELATION_HEADER, correlationId);

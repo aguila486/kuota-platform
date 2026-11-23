@@ -1,0 +1,18 @@
+// Archivo defectuoso de referencia para la regla anti punto flotante (T060; R-10; Constitución IV; ADR-0007).
+//
+// NO es código del proyecto. La extensión `.ts.txt` lo excluye del build y del typecheck (tsconfig solo incluye
+// `*.ts`), de ESLint (`eslint .` solo analiza `*.ts`/`*.js`) y de Vitest (`*.spec.ts`).
+// `scripts/ci/check-no-float.sh` lo analiza con la configuración REAL de ESLint como si estuviera en
+// `src/common/money/`, y EXIGE que cada línea marcada con `ANTI-FLOAT` produzca el error de la regla. Si alguna deja
+// de detectarse, el gate falla.
+//
+// Infracciones de referencia exigidas por T060: el tipo `number` en un campo `amount`, `parseFloat` y `toFixed`.
+
+export interface PaymentRequest {
+  amount: number; // ANTI-FLOAT: tipo number en un campo amount
+}
+
+export function parseAmount(text: string): string {
+  const value = parseFloat(text); // ANTI-FLOAT: parseFloat
+  return value.toFixed(2); // ANTI-FLOAT: toFixed
+}

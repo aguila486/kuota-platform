@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Job `backend` de CI (T048; FR-035; R-17). Lo invoca .github/workflows/ci.yml y lo reproduce `run-local.sh backend`.
 #   1. Instalación reproducible (pnpm install --frozen-lockfile).
-#   2. Lint (ESLint + dependency-cruiser), typecheck, formato (Prettier) y build.
+#   2. Lint (ESLint + dependency-cruiser), gate anti punto flotante (T065: archivo defectuoso rechazado, más su
+#      autoverificación), typecheck, formato (Prettier) y build.
 #   3. Todas las pruebas con cobertura y umbrales (unitarias, integración con Testcontainers, tenancy y contrato):
 #      `vitest run --coverage`; los umbrales de vitest.config.ts hacen fallar si no se alcanzan.
 #   4. Suites obligatorias ejecutadas y sin omisiones (scripts/ci/required-suites.txt).
@@ -43,6 +44,10 @@ dependency_scan() {
 
 check "Instalación reproducible (pnpm install --frozen-lockfile)" pnpm install --frozen-lockfile
 check "Lint: ESLint + dependency-cruiser" pnpm --filter backend run lint
+check "Anti punto flotante TS: el archivo defectuoso se rechaza y el lint real pasa (check-no-float.sh ts; T065)" \
+  scripts/ci/check-no-float.sh ts
+check "Autoverificación del gate anti punto flotante (scripts/ci/tests/check-no-float.test.sh)" \
+  scripts/ci/tests/check-no-float.test.sh
 check "Typecheck" pnpm --filter backend run typecheck
 check "Formato (Prettier)" pnpm --filter backend run format:check
 check "Build" pnpm --filter backend run build

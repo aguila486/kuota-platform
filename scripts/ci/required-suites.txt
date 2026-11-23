@@ -22,6 +22,7 @@ test/unit/idempotency/request-hash.spec.ts
 test/unit/money/fixtures.spec.ts
 test/unit/money/money.spec.ts
 test/unit/money/anti-float-rule.spec.ts
+test/property/money.property.spec.ts
 # Contrato (US5, T066, T067, T095)
 test/contract/support/contract-matcher.spec.ts
 test/contract/kuota-core.contract.spec.ts

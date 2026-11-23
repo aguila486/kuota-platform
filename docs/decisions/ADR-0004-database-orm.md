@@ -4,6 +4,8 @@
   el ORM principal de Kuota. La aceptación **no** implica que las condiciones P1–P8 estén mitigadas: su estado está en
   *Condiciones de la aceptación*. Kysely sigue documentado como alternativa si aparece una limitación obligatoria que
   Prisma no pueda superar. Texto corregido antes del spike (C4-1…C4-6) para alinearlo con research R-04 y data-model.
+  **Enmienda 1 (2026-11-23):** roles de mantenimiento de idempotencia en C4-1 (ver §Enmiendas); no cambia la decisión ni
+  P1–P8.
 - **Fecha:** 2026-11-22
 - **Decisores:** Responsable técnico
 - **Relacionado:** Constitución III, IV, V, XIV; D-ARC-01; ADR-0002 (C2-1, propagación transaccional); ADR-0005;
@@ -70,6 +72,8 @@ Drizzle se evaluó (research R-04) y no es fallback: menor madurez en migracione
 | `kuota_worker` | Proceso worker (ADR-0002, C2-3) | Como `kuota_app` + DML en tablas de cola/outbox; sujeto a RLS | Primera feature con jobs |
 | `kuota_platform` | Módulo `platform-admin` | Cross-tenant solo vía funciones `SECURITY DEFINER` auditadas; conexión separada | 002 |
 | `kuota_readonly` | Reportes y soporte | Solo `SELECT`, sujeto a RLS | Cuando se requiera |
+| `kuota_maintenance` | Purga de claves de idempotencia vencidas (enmienda 1) | `NOLOGIN`, sin `BYPASSRLS`; solo `SELECT (tenant_id, key, expires_at)` y `DELETE` en `idempotency_keys`, con políticas limitadas a `expires_at <= now()` | 001 (US6; aprovisionamiento + migración 0002) |
+| `kuota_maintenance_login` | Credencial de la purga manual (enmienda 1) | `LOGIN`, miembro solo de `kuota_maintenance`; `CONNECTION LIMIT 2` | 001 (US6; aprovisionamiento) |
 
 ## Consecuencias
 
@@ -147,6 +151,43 @@ Responsable de todas: responsable técnico del proyecto (mantenedor único). Est
 | P6 | `kuota_worker` solo con permisos heredados de `kuota_app` cuando corresponda | Media | **Pendiente**: dirección aprobada; rol no creado. Herencia verificada solo con roles simulados | Pruebas reales de aislamiento y herencia en su tarea | Primera feature con jobs |
 | P7 | TypedSQL fuera del alcance aprobado | Media | **Pendiente (no adoptado)** | Evaluación independiente de tipos, transacciones, RLS y mantenibilidad | Antes de adoptarlo (p. ej. 006) |
 | P8 | Solo los scripts de instalación imprescindibles para Prisma | Media | **Cumplida**: `allowBuilds` permite solo `prisma` y `@prisma/engines`; versiones exactas 7.10.1 | Revisión de `pnpm-workspace.yaml`; escaneo de dependencias en CI | Continua; escaneo en G12 |
+
+## Enmiendas
+
+### Enmienda 1 (2026-11-23) — roles de mantenimiento de idempotencia (C4-1)
+
+- **Aprobación:** responsable del proyecto (`specs/001-platform-foundation/approvals.md`, Aprobaciones 3 y 4).
+  Documental: registra roles ya implementados y probados en bases efímeras. No cambia la elección de Prisma, P1–P8 ni
+  los roles anteriores, y no amplía los privilegios de ninguno.
+- **Propósito:**
+  - `kuota_maintenance` es el rol de privilegios para borrar claves de idempotencia vencidas (FR-024, T079);
+  - `kuota_maintenance_login` es la identidad de conexión con la que se ejecuta la purga manual
+    (`pnpm --filter backend idempotency:purge`).
+
+  Ambos están separados de la API (`kuota_app_login`) y del migrador (`kuota_migrator`).
+- **Atributos:**
+  - ninguno es `SUPERUSER`, `BYPASSRLS`, `CREATEROLE`, `CREATEDB` ni `REPLICATION`;
+  - `kuota_maintenance` es `NOLOGIN` y no pertenece a ningún rol;
+  - `kuota_maintenance_login` pertenece solo a `kuota_maintenance` (sin opción de administración) y no es miembro de
+    `kuota_app` ni de `kuota_migrator`.
+- **Privilegios mínimos** (migración `0002_idempotency_maintenance`):
+  - `USAGE` en el esquema `kuota`;
+  - `SELECT (tenant_id, key, expires_at)` y `DELETE` en `kuota.idempotency_keys`;
+  - políticas `maintenance_select_expired` y `maintenance_delete_expired`, limitadas a `expires_at <= now()`.
+
+  Sin acceso a `request_hash`, `response_body` ni al resto de columnas. Sin `INSERT`, `UPDATE`, `TRUNCATE`, `TRIGGER`
+  ni `REFERENCES`. Sin ningún privilegio en tablas de negocio (`dev_probe_items`) ni de auditoría (`audit_events`).
+  FORCE RLS y las políticas `tenant_isolation` no cambian. `db:check-rls` verifica todo esto en el catálogo.
+- **Aprovisionamiento frente a migración:**
+  - Los roles se crean en el **aprovisionamiento de plataforma**
+    (`infra/docker/postgres/init/02-maintenance-roles.sql`), que ejecuta el administrador del clúster: crear roles
+    exige `CREATEROLE`, y `kuota_migrator` no lo tiene.
+  - La **migración 0002**, aplicada por `kuota_migrator`, solo concede privilegios y crea políticas. Además verifica
+    que el rol existe con atributos mínimos y aborta sin cambios si no.
+- **Dependencia:**
+  - El aprovisionamiento debe ejecutarse **antes** de 0002.
+  - Para migrar basta con que exista `kuota_maintenance` (sin login). El login solo hace falta para ejecutar la purga.
+  - `make up` lo comprueba antes de migrar con el preflight de solo lectura `scripts/migration-preflight.ts`.
 
 ## Revisión
 

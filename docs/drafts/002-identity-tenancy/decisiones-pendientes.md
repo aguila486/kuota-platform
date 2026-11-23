@@ -66,4 +66,17 @@
 | **Catálogo inicial de roles** | Sin decisión | Ningún documento lo fija ("roles con permisos financieros") | Ver la propuesta de `spec-borrador.md` §7 | Partir de pocos roles con permisos explícitos | Permisos excesivos o arbitrarios | Lista de roles y permisos iniciales |
 | **Almacenamiento seguro móvil** | Contradicción documental | `flutter-architecture.md` §3 pone el wrapper en `shared_core` (Dart puro por FR-033); `flutter_secure_storage` es un plugin Flutter | Wrapper en `app_shell` · paquete nuevo de plataforma · interfaz en `shared_core` e implementación en `app_shell` | Interfaz Dart pura en `shared_core` e implementación con el plugin en `app_shell` (no rompe FR-033) | Tokens en almacenamiento inseguro | Ubicación y la versión del plugin (dependencia nueva) |
 | **CORS con credenciales** (Admin Web) | Aprobado sin credenciales (Aprobación 8) | §3.3 propone cookie | Cookie + `credentials: true` con orígenes exactos + CSRF · tokens en memoria con refresh por cookie del mismo sitio · BFF | Decidir junto con la topología de despliegue (mismo sitio o no), que depende de D-ARC-04 | CSRF o tokens expuestos a XSS | Modelo de sesión web y, si procede, una nueva aprobación de CORS |
+| **Auditoría de plataforma en 002** | Tabla y escritura de la purga implementadas (T099); sin rol de lectura ni retención | `platform_audit_events` (migración 0003), `data-model.md` | Rol `kuota_platform` de solo lectura · lectura solo por soporte con break-glass | Rol de lectura de plataforma con MFA y su propia auditoría de acceso; nuevas operaciones (`tenant.create`, `breakglass`) en la lista cerrada | Operaciones de plataforma sin trazabilidad o lectura indebida de la auditoría | Rol de lectura, operaciones nuevas y política de retención |
 | **Contexto de identidad y pre-autenticación** | Sin decisión | `adr-propuesta-d-arc-07.md` §4.3 | `withIdentity` + funciones `SECURITY DEFINER` mínimas · rol de autenticación separado | Ambos, con pruebas negativas | Búsquedas de identidad sin control o bypass de RLS | Ampliar `common/tenant-context` (protegido) |
+
+## 4. Decisiones necesarias antes de crear tenants, usuarios y sesiones
+
+| Antes de crear… | Decisión | Por qué bloquea |
+|---|---|---|
+| Cualquier tabla de 002 | D-ARC-07 (propiedad de tablas y su verificador) | ADR-0002 la exige antes de la primera tabla de negocio |
+| `tenants` | D-LEG-06 (datos del alta); rol `kuota_platform` y operaciones de plataforma auditadas | El alta es una operación de plataforma (Constitución III) |
+| `identities` y credenciales | D-AUTH-02 (staff), D-AUTH-01 (clientes), D-AUTH-03 (encaje en §II); contexto `withIdentity` y pre-autenticación | Definen qué se guarda, cómo se busca una identidad antes de autenticar y qué endpoints son puntos de entrada |
+| `memberships`, `roles`, `permissions` | Catálogo inicial de roles y permisos | Sin él, los permisos serían arbitrarios |
+| `sessions`, `refresh_tokens` | Modelo de sesión web (cookie + CSRF + CORS con credenciales, u otro) y custodia de llaves de firma (D-ARC-04 en entornos reales) | Determinan el formato y la protección de los tokens |
+| `devices` | D-SYNC-03, D-LEG-02 y la ubicación del almacenamiento seguro móvil | Enrolamiento, PIN/biometría y sesión offline |
+

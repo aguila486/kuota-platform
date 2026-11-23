@@ -66,6 +66,10 @@ Es una **descomposición** concreta; puede aplicarse con la regla A (cada módul
 | **Identidad global** | Quién es la persona y cómo se autentica, sin datos de negocio | `identity` (tablas globales, RLS por `app.identity_id`) | teléfono verificado, credenciales, factores |
 | **Identidad por tenant** | Qué es esa persona *en* una empresa | `access` (membresías de staff/cobrador) y, en 003, `customers` (cliente) | membresía de cobrador en el tenant X |
 | **Autorización por tenant** | Qué puede hacer en esa empresa | `access` (roles y permisos por tenant) | permiso `loan.disburse` en el tenant X |
+| **Auditoría de plataforma** | Qué hicieron los operadores y procesos de plataforma, fuera de cualquier tenant | `common/audit` → `platform_audit_events` (existe desde T099) | purga de idempotencia; en 002, alta de tenant y break-glass |
+
+La auditoría **por tenant** (`audit_events`, con `tenant_id`) y la **de plataforma** (`platform_audit_events`, sin
+tenant) no se mezclan: una operación dentro de un tenant nunca escribe en la de plataforma ni al revés.
 
 ### 4.2 Módulos y tablas propuestas
 
@@ -84,6 +88,7 @@ Es una **descomposición** concreta; puede aplicarse con la regla A (cada módul
 | `otp_challenges` | `identity` | global (pre-autenticación) | Sin acceso de `kuota_app`; solo funciones `SECURITY DEFINER` | Vida ≤ 5 min, un solo uso, intentos limitados |
 | `platform_operators` | `platform-admin` | platform | Sin acceso de `kuota_app`; rol `kuota_platform` | MFA resistente a phishing; break-glass auditado |
 | `audit_events` | `common` (sin cambios) | tenant | sin cambios | Los actores pasan de `dev:*` a identidades reales |
+| `platform_audit_events` | `common/audit` (**ya existe**, T099, migración 0003) | platform | RLS forzada; solo INSERT de `kuota_maintenance`; sin lectura para runtime ni tenants | Auditoría de operaciones de plataforma. En 002 se amplía `operation` (alta de tenant, break-glass) y se decide el rol de lectura (`kuota_platform`) y quién inserta desde `platform-admin` |
 
 ### 4.3 Contextos de ejecución (impacto en `common/tenant-context`)
 

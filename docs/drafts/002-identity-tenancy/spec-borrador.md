@@ -48,7 +48,7 @@ offline (011); portal del cliente más allá del acceso (014); despliegue real (
 | P-FR12 | Revocación de sesiones por identidad, sesión o dispositivo |
 | P-FR13 | Límite de intentos y de tasa por IP, identidad y teléfono; respuestas idénticas exista o no la cuenta |
 | P-FR14 | Auditoría de inicio y fallo de sesión, enrolamiento, cambio de PIN, teléfono o factor, revocaciones y accesos de plataforma |
-| P-FR15 | Endpoints de plataforma con prefijo propio, rol de base de datos `kuota_platform`, MFA y motivo registrado |
+| P-FR15 | Endpoints de plataforma con prefijo propio, rol de base de datos `kuota_platform`, MFA y motivo registrado; cada operación queda en `platform_audit_events` (mecanismo de 001, T099), nunca en `audit_events` de un tenant |
 | P-FR16 | Login, OTP y recuperación registrados en Endpoint Access como puntos de entrada de autenticación con controles ⏳ D-AUTH-03 |
 
 ## 4. Requisitos no funcionales propuestos

@@ -1399,3 +1399,71 @@ implementados y probados; SC: 4/9 cumplidos, 2 solo en local.
 - **Resultado:** `tasks_appended` (10 tareas). **T092 sigue ABIERTA**: su criterio exige resolver todo hallazgo
   CRITICAL y T099 lo es; resolverlo exige decidir dónde vive la auditoría de plataforma (estructura nueva y migración
   aditiva, no autorizadas en este bloque).
+
+### T099 y T100 resueltos; cierre de T092 (2026-11-23)
+
+#### T099: auditoría de plataforma (CRITICAL → resuelto)
+
+- **Causa raíz:** la purga de idempotencia (T079) es una operación cross-tenant de plataforma (Constitución III), pero
+  solo escribía un recuento en stdout. `audit_events` exige `tenant_id NOT NULL` (lo toma de `app.tenant_id`), así que
+  no podía registrarla sin un tenant ficticio. Es la **única** operación de mantenimiento que modifica datos entre
+  tenants. `migration-preflight`, `db:check-rls` y `db-gate` solo leen el catálogo; `spike:rls` es local.
+- **Compatibilidad verificada antes de implementar:**
+  - Constitución III: no es dato de negocio, así que no lleva `tenant_id`; cumple "operaciones de plataforma
+    auditadas".
+  - Constitución VII: append-only y no editable.
+  - ADR-0002 C2-2: tabla de `common`, como exige D-ARC-07 mientras siga pendiente.
+  - ADR-0004 P1 (`BEGIN`/`COMMIT`), P3 y P4.
+- **Solución:** migración aditiva `0003_platform_audit` con `kuota.platform_audit_events`, documentada en
+  `data-model.md`.
+  - Permisos y RLS: solo `INSERT` de `kuota_maintenance`; nada para `kuota_app` ni PUBLIC; RLS forzada con una única
+    política de INSERT.
+  - Integridad: `executed_by` y `occurred_at` los fija el servidor; append-only también para el propietario y el
+    superusuario; códigos de resultado acotados; a lo sumo un `started` y un resultado por `run_id`.
+  - **Flujo de la purga:** identidad → `started` confirmado antes de borrar (sin auditoría no hay purga) → bloqueo
+    consultivo que serializa las ejecuciones → lotes → `succeeded` o `failed` con recuentos y código. Si el resultado
+    no puede escribirse, la ejecución falla y el `started` sin final la delata.
+  - **CLI:** `run_id` en la salida; correlación opcional (`KUOTA_CORRELATION_ID`, UUID).
+- **`db:check-rls`:** ampliado de forma **exacta**. El mantenimiento solo puede hacer `INSERT` en la tabla nueva;
+  además se verifican RLS forzada, propietario, ausencia de PUBLIC y de runtime, la política exacta y los 3 triggers.
+- **Pruebas:**
+  - `platform-audit.spec.ts`, 13 pruebas, añadida a `required-suites.txt`. Cubre los 12 criterios: éxito, sin
+    candidatos e inspección, fallo de la operación, fallo al escribir el inicio y el resultado, ejecución repetida,
+    concurrencia, ausencia de tenant y de datos sensibles, acceso denegado, integridad, retención, códigos acotados y
+    `db:check-rls` con 5 desviaciones.
+  - `tenant-transaction-ownership.spec.ts`: una transacción de tenant recibe `42501` al leer o escribir la auditoría.
+  - **Mutaciones detectadas 4/4:** fallo sin auditar, sin bloqueo, inicio no bloqueante y sin sello del servidor.
+- **Riesgo residual (MEDIUM, sin tarea):** `schema.prisma` debe incluir el modelo (P4: `migrate diff` vacío), así que
+  el cliente protegido de `withTenant` expone `tx.platform_audit_events`. La base lo deniega (probado), pero lo
+  correcto es excluir los modelos de plataforma del cliente de tenant. Eso cambia `common/tenant-context` (protegido):
+  **propuesta de tarea pendiente de autorización**.
+- **Bases:** la migración se aplicó solo a bases efímeras (Testcontainers y `db-gate`). La base persistente
+  `kuota_kuota-pgdata` (contenedor `kuota-postgres-1`) no tiene historial de migraciones ni la tabla nueva
+  (comprobado en solo lectura). `kuota-g6check_kuota-pgdata` no está montado en ningún contenedor.
+
+#### T100: dominio puro con listas de permitidos (HIGH → resuelto)
+
+- **Reglas nuevas en `.dependency-cruiser.cjs`** (las anteriores no cambian):
+  - paquetes: solo `decimal.js`;
+  - imports no resueltos (alias o paquetes inexistentes): prohibidos;
+  - módulos de Node de red, procesos y sistema de archivos: prohibidos;
+  - código propio: el dominio solo usa su dominio y `common/money`; `common/money` solo se usa a sí mismo y
+    `common/errors/problem.ts`;
+  - `problem.ts` no puede tener dependencias.
+- **Cobertura de formas de importar:** imports de tipo, reexportaciones e `import()` dinámico.
+- **Pruebas:** `dependency-rules.spec.ts` pasa de 7 a 23 casos (16 violaciones y 4 archivos permitidos).
+- **Mutaciones sobre el código real:** 10/10 fallan con la regla esperada (`dev-probe/domain` y `common/money`).
+
+#### T092 (CERRADA)
+
+- Criterio literal: ejecutar `/speckit-analyze` y `/speckit-converge` sobre el estado implementado y resolver todo
+  hallazgo CRITICAL.
+  - Ambos se ejecutaron sobre el estado implementado (HEAD `1831bde`); `/speckit-converge` añadió T099–T108.
+  - El único CRITICAL (T099, igual que A1 del análisis) quedó resuelto.
+  - La nueva revisión dirigida de los cambios de este bloque contra la Constitución (II, III, VII y VIII) no encontró
+    hallazgos CRITICAL nuevos; solo el riesgo MEDIUM anterior.
+- **Siguen pendientes, sin marcar:** T101–T108 (MEDIUM y LOW), T091, T049, T052 y SC-008. Las inconsistencias del
+  análisis que cambian spec, plan o el texto de tareas siguen pendientes de aprobación.
+- **Regresión:** `general` 5/5; `contracts` 5 + OMITIDO; `backend` 18/18 con 729/729 pruebas en 52 archivos
+  (cobertura 98,55 / 96,9 / 98,34 / 99,64; `db-gate` con 0003 conforme); `prove-gates` 8/8. `flutter` no se repitió
+  porque el workspace no cambió (última ejecución: 15/15).

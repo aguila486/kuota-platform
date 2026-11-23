@@ -1,7 +1,8 @@
 # ADR-0002: Backend — NestJS monolito modular con pnpm workspaces
 
 - **Estado:** Aceptado con condiciones (2026-11-22, responsable del proyecto). C2-1 y C2-3 documentados en este ADR;
-  **C2-2 (propiedad de tablas, D-ARC-07) debe resolverse antes de 002**.
+  **C2-2 (propiedad de tablas, D-ARC-07) debe resolverse antes de 002**. Enmienda 1 (2026-11-22): la API pública de
+  un módulo es su `index.ts` (ver §Enmiendas).
 - **Fecha:** 2026-11-22
 - **Decisores:** Responsable técnico
 - **Relacionado:** Constitución VIII (Clean Architecture), IX (Modularidad); ADR-0004, ADR-0005; D-ARC-04, D-ARC-07
@@ -73,7 +74,7 @@ Reglas:
 
 - Un caso de uso abre **una** transacción con `withTenant` (ADR-0004). El cliente transaccional se guarda en CLS
   (nestjs-cls) y es el único acceso a datos de los repositorios.
-- Los servicios de `public-api.ts` **no abren transacciones propias**: participan en la del llamador. Si se invocan sin
+- Los servicios de la API pública (`index.ts`, enmienda 1) **no abren transacciones propias**: participan en la del llamador. Si se invocan sin
   transacción activa, la abren mediante `withTenant`.
 - `withTenant` anidado:
 
@@ -99,7 +100,7 @@ impide con un único cliente Prisma. Mecanismo propuesto (pendiente de aprobaci�
 2. Modelos Prisma agrupados por módulo (esquema multiarchivo `prisma/schema/<módulo>.prisma`; soporte a verificar en la
    versión fijada) y regla de lint: en `modules/<m>/infrastructure/**` solo se accede a modelos de `<m>`. El SQL crudo
    vive en archivos por módulo y un script rechaza referencias a tablas de otros propietarios.
-3. Los datos de otro módulo solo se obtienen por su `public-api.ts`.
+3. Los datos de otro módulo solo se obtienen por su API pública (`index.ts`, enmienda 1).
 
 Alternativa más fuerte, no recomendada para v1: un esquema PostgreSQL y un rol por módulo con `SET LOCAL ROLE` en cada
 llamada. Aísla en la base de datos, pero complica las transacciones entre módulos y multiplica los permisos.
@@ -135,6 +136,24 @@ técnico `dev-probe`.
 
 - Lint de dependencias activo y bloqueante desde la feature 001.
 - Tiempo de CI del backend medido en cada PR.
+
+## Enmiendas
+
+### Enmienda 1 (2026-11-22) — nombre del punto de entrada público de un módulo
+
+- **Decisión original:** este ADR llamaba `public-api.ts` al único archivo de un módulo que otros módulos pueden
+  importar (§Propagación transaccional, C2-1, y regla 3 de límites).
+- **Enmienda:** ese archivo es **`index.ts`**. Aprobada por el responsable del proyecto (instrucción de revisión de P2 y
+  US4 backend, 2026-11-22), tras proponerla en G7a de 001.
+- **Justificación:** es la convención que dependency-cruiser aplica desde T010 (`modulos-solo-api-publica`); mantener
+  dos nombres obligaba a sostener dos convenciones. Compatible con la Constitución IX, que exige interfaces públicas sin
+  fijar el nombre del archivo.
+- **Controles asociados:** un módulo solo importa el `index.ts` de otro; un módulo no importa su propio `index.ts`
+  (evita ciclos por el barrel); sin ciclos. Las tres reglas tienen pruebas que las disparan
+  (`backend/test/unit/dependency-rules.spec.ts`).
+- **Alcance:** solo el nombre del archivo. No cambia C2-1, C2-3 ni el resto de condiciones. **C2-2 / D-ARC-07 sigue
+  pendiente y debe resolverse antes de 002.**
+- **Documentos alineados:** `docs/architecture/backend-architecture.md`, `docs/architecture/c4-components.md`.
 
 ## Revisión
 

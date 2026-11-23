@@ -391,7 +391,7 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 | `contracts:breaking` omite la comparación (sale con 0) mientras `main` no contiene el contrato | Cuando exista el baseline en `main`, la comparación pasa a ser obligatoria y la ausencia de base debe fallar; se integra en CI en G12 |
 | CI debe consumir `scripts/dev/path-filters.sh` | G12 |
 | La sonda de readiness usa una conexión propia, no el pool de la aplicación | Revisado en T039: se mantiene (comprueba conexiones nuevas; no comparte la cola del pool de transacciones) |
-| ADR-0002 nombra `public-api.ts`; la decisión de G7a es `index.ts` | Corregir el nombre en ADR-0002 (requiere aprobación) |
+| ~~ADR-0002 nombra `public-api.ts`; la decisión de G7a es `index.ts`~~ | **Resuelto**: enmienda 1 de ADR-0002 (2026-11-22) |
 | T042 acepta `sample_amount` (Money) y su validación en la frontera es T062 (US4); `tasks.md` declara US2 independiente de US4 | Antes de autorizar G7b: reordenar o aprobar la dependencia |
 | P2: gate de CI de las reglas de contexto y fuente de identidad real | G12 y 002 |
 

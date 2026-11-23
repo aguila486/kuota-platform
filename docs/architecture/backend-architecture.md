@@ -56,8 +56,8 @@ Reglas verificadas con `dependency-cruiser` en CI:
 - `common/**` no importa `modules/**`.
 
 **Decisión (G7a de 001, 2026-11-22):** la API pública de un módulo es su `index.ts` (la convención que ya aplicaba
-dependency-cruiser desde T010). Sustituye al nombre `public-api.ts` usado en versiones anteriores de este documento;
-donde ADR-0002 dice `public-api.ts` debe leerse `index.ts` (corrección de nombre pendiente de aprobación en ese ADR).
+dependency-cruiser desde T010). Sustituye al nombre `public-api.ts` usado en versiones anteriores de este documento.
+Registrada como enmienda 1 de ADR-0002 (aprobada el 2026-11-22).
 
 ## 3. Contexto de tenant
 

@@ -1,0 +1,39 @@
+# Análisis estático compartido por todo el workspace Flutter/Dart (T080; ADR-0003: "lints compartidos (estrictos)").
+# Cada miembro hereda este archivo (el analizador busca el más cercano hacia arriba); un miembro solo añade el suyo con
+# justificación. `melos run analyze` usa `--fatal-infos`: cualquier aviso hace fallar.
+include: package:lints/recommended.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+  errors:
+    missing_required_param: error
+    missing_return: error
+    unused_import: error
+    dead_code: error
+
+linter:
+  rules:
+    - always_declare_return_types
+    - avoid_dynamic_calls
+    - avoid_print
+    - avoid_relative_lib_imports
+    - avoid_slow_async_io
+    - cancel_subscriptions
+    - close_sinks
+    - directives_ordering
+    - only_throw_errors
+    - prefer_final_fields
+    - prefer_final_locals
+    - prefer_single_quotes
+    - test_types_in_equals
+    - throw_in_finally
+    - unawaited_futures
+    - unnecessary_statements
+    - unsafe_variance
+
+formatter:
+  # Mismo ancho que el resto del monorepo (Prettier del backend: 120).
+  page_width: 120

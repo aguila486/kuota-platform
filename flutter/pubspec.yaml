@@ -1,0 +1,72 @@
+# Raíz del workspace Flutter/Dart de Kuota (T080; ADR-0003; D-ENV-01; R-19).
+#
+# - Pub workspaces: una sola resolución de dependencias y un único `flutter/pubspec.lock` para todos los miembros.
+#   Cada miembro declara `resolution: workspace`.
+# - SDK fijado por proyecto con FVM (`flutter/.fvmrc`: Flutter 3.50.1, Dart 3.14.0). Usa siempre `fvm flutter …` y
+#   `fvm dart …`; la instalación global no se modifica.
+# - Melos 8 solo para scripts (sección `melos:`), no para bootstrap ni enlazado: eso lo resuelve pub workspaces.
+#   Se ejecuta con `fvm dart run melos run <script>` (dependencia de desarrollo fijada, sin instalación global). Así el
+#   PATH de los scripts empieza por el SDK de FVM: `dart`/`flutter` dentro de un script son los fijados, no los
+#   globales. Los scripts no invocan `melos` (no hay binario global): usan `exec:` con `packageFilters` y `steps`.
+#
+# Miembros (2026-11-23): solo los que existen. Pub rechaza un workspace con miembros inexistentes, así que las tres
+# apps (`apps/admin_web`, `apps/collector_mobile`, `apps/client_mobile`, T085) y `packages/api_client` (T069/T070) se
+# añaden aquí cuando se creen. T080 queda abierta hasta entonces (ver research.md, US7a).
+name: kuota_workspace
+publish_to: none
+
+environment:
+  sdk: ^3.14.0
+
+workspace:
+  - packages/shared_core
+  - packages/financial_domain
+  - packages/design_system
+
+# Dependencias del paquete raíz: herramientas del workspace (tool/check_deps.dart y sus pruebas) y lints compartidos.
+dev_dependencies:
+  lints: 6.1.0
+  melos: 8.10.1
+  path: 1.9.1
+  test: 1.32.0
+  yaml: 3.1.4
+
+melos:
+  scripts:
+    analyze:
+      description: Análisis estático estricto de todo el workspace (paquetes, apps y tool/).
+      run: dart analyze --fatal-infos .
+    format:
+      description: Comprueba el formato de todo el workspace (falla si algún archivo no está formateado).
+      run: dart format --output=none --set-exit-if-changed .
+    test:
+      description: Todas las pruebas del workspace (paquetes Dart puro, paquetes Flutter y tool/).
+      steps:
+        - test:dart
+        - test:flutter
+        - test:tool
+    test:dart:
+      description: Pruebas de los miembros Dart puro (`dart test`).
+      exec: dart test
+      packageFilters:
+        dirExists: test
+        noDependsOn: flutter
+    test:flutter:
+      description: Pruebas de los miembros que dependen de Flutter (`flutter test`).
+      exec: flutter test
+      packageFilters:
+        dirExists: test
+        dependsOn: flutter
+    test:tool:
+      description: Pruebas de las herramientas del workspace (tool/check_deps.dart).
+      run: dart test tool/test
+    test:financial:
+      description: Pruebas de financial_domain (Money y fixtures compartidos llegan con T063 y T059).
+      exec: dart test
+      packageFilters:
+        scope: financial_domain
+    generate:
+      description: Regenera el cliente Dart desde contracts/openapi (T069). PENDIENTE mientras no exista el generador.
+      run: >-
+        if [ -x ../scripts/contracts/generate-dart-client.sh ]; then ../scripts/contracts/generate-dart-client.sh;
+        else echo "PENDIENTE: scripts/contracts/generate-dart-client.sh no existe (T069)"; exit 3; fi

@@ -1,0 +1,13 @@
+# Núcleo compartido de las apps Kuota (T081; flutter-architecture.md §3): configuración por entorno, `Result`/`Failure`
+# y logging con redacción. Dart puro: NO depende de `flutter` (lo verifica tool/check_deps.dart, FR-033).
+name: shared_core
+description: Núcleo compartido de Kuota (configuración por entorno, Result y logging sin PII). Dart puro.
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+dev_dependencies:
+  test: 1.32.0

@@ -1,0 +1,21 @@
+# Sistema de diseño común de las apps (T083; US7-3; flutter-architecture.md §3): tema claro/oscuro y la variante de
+# alto contraste reservada para recibos futuros. Sin lógica de negocio ni llamadas HTTP.
+name: design_system
+description: Tema común de las apps Kuota (claro, oscuro y alto contraste para recibos).
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Material desacoplado del framework (flutter.dev): `package:flutter/material.dart` está deprecado desde Flutter 3.47
+  # y el SDK indica migrar a `package:material_ui`. Ver research.md, US7a.
+  material_ui: 1.11.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

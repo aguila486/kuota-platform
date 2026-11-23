@@ -822,3 +822,14 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
   ```
 
   El `flutter/README.md` con los comandos móviles es parte de T086.
+
+### Enmienda de T080 en dos etapas (2026-11-23, Aprobación 7)
+
+- **Ciclo:** T070 → T080 → (`api_client` de T070 y apps de T085) → T070. Pub no admite miembros inexistentes.
+- **Resolución:**
+  - T080 tiene una etapa **A** (inicialización, cumplida en `b9cffcf`) y una etapa **B** (3 apps y 4 paquetes en
+    `workspace:`), ambas obligatorias para marcarla;
+  - T059, T063 y T070 dependen de A;
+  - T070 añade `api_client` y T085 añade las apps, con lo que cierra B.
+- **Estado:** T080 sigue **sin marcar**. La propuesta anterior (que la etapa B "dejara de exigirse") se descarta: no se
+  debilita el criterio final.

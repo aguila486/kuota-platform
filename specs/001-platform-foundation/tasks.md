@@ -240,16 +240,16 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 
 **Independent Test**: quickstart.md §7. `analyze`, `test` y `check_deps` pasan, y cada app muestra nombre, entorno, versión y compatibilidad.
 
-**Nota de orden**: T080–T082 pueden adelantarse en paralelo a US4 y US5, porque T059, T063 y T070 dependen de T080.
+**Nota de orden**: T080 (etapa A), T081 y T082 pueden adelantarse en paralelo a US4 y US5, porque T059, T063 y T070 dependen de la etapa A de T080. La etapa B de T080 se cumple al final, cuando T070 y T085 han creado `api_client` y las apps (enmienda del 2026-11-23, Aprobación 7).
 
 ### Implementation & Tests for User Story 7
 
-- [ ] T080 [US7] Crear `flutter/.fvmrc` (Flutter 3.50.1, D-ENV-01) y el `flutter/pubspec.yaml` raíz del workspace (`workspace:` con 3 apps y 4 paquetes, `environment.sdk ^3.14.0`, sección `melos:` con scripts `analyze`, `test`, `test:financial`, `format` y `generate`, R-19), además de `flutter/analysis_options.yaml`
+- [ ] T080 [US7] Crear `flutter/.fvmrc` (Flutter 3.50.1, D-ENV-01) y el `flutter/pubspec.yaml` raíz del workspace (`environment.sdk ^3.14.0`, sección `melos:` con scripts `analyze`, `test`, `test:financial`, `format` y `generate`, R-19), además de `flutter/analysis_options.yaml`. Dos etapas, ambas obligatorias para marcar la tarea (enmienda del 2026-11-23, Aprobación 7): **(A) inicialización**: SDK, Melos, análisis y `workspace:` con los miembros que existen; desbloquea T059, T063 y T070; **(B) composición final**: `workspace:` con 3 apps y 4 paquetes; se cumple cuando T070 crea `api_client` y T085 crea las apps, y se verifica con `fvm flutter pub get` y `tool/check_deps.dart`
 - [X] T081 [P] [US7] Crear el paquete `shared_core` (`AppConfig` por entorno desde `--dart-define-from-file`, `Result`, logger sin PII; sin dependencia de `flutter`) con sus pruebas, en `flutter/packages/shared_core/`
 - [X] T082 [P] [US7] Crear el paquete `financial_domain` (Dart puro, `resolution: workspace`, dependencia `decimal`) con la estructura `lib/src/money/` para T063, en `flutter/packages/financial_domain/`
 - [X] T083 [P] [US7] Crear el paquete `design_system` (tema claro/oscuro y variante `highContrastReceipt`) con prueba de widget del tema (US7-3), en `flutter/packages/design_system/`
 - [X] T084 [P] [US7] Crear `flutter/tool/check_deps.dart` y su prueba con un `pubspec` defectuoso de referencia. Debe fallar si una app depende de otra app, si un paquete depende de una app, o si `financial_domain` o `shared_core` dependen de `flutter` (US7-4, FR-033). Archivos: `flutter/tool/check_deps.dart` y `flutter/tool/test/check_deps_test.dart`
-- [ ] T085 [US7] Crear las apps `admin_web` (Flutter Web **provisional**, D-ARC-03 pendiente: solo scaffolding, entorno, arranque, build Web e integración; sin pantallas administrativas), `collector_mobile` y `client_mobile` (Android e iOS). Cada una muestra una pantalla de inicio con nombre, entorno, versión y el resultado de `getCompatibility` vía `api_client`, usa un `ProviderScope` Riverpod mínimo, configs `flutter/config/{local,testing,staging,production}.json` y una prueba de widget (US7-2, FR-032). En `flutter/apps/*/`
+- [ ] T085 [US7] Crear las apps `admin_web` (Flutter Web **provisional**, D-ARC-03 pendiente: solo scaffolding, entorno, arranque, build Web e integración; sin pantallas administrativas), `collector_mobile` y `client_mobile` (Android e iOS). Cada una muestra una pantalla de inicio con nombre, entorno, versión y el resultado de `getCompatibility` vía `api_client`, usa un `ProviderScope` Riverpod mínimo, configs `flutter/config/{local,testing,staging,production}.json` y una prueba de widget (US7-2, FR-032). Añade las 3 apps a `workspace:` del `flutter/pubspec.yaml` raíz (cierra la etapa B de T080). En `flutter/apps/*/`
 - [ ] T086 [US7] Verificar la resolución única del workspace: un solo `flutter/pubspec.lock` y ningún `pubspec.lock` por paquete (US7-1). Documentar los comandos móviles en `flutter/README.md`
 
 **Checkpoint**: quickstart.md §7 pasa y se cumple SC-008 (iOS verificado localmente).
@@ -278,8 +278,8 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 - **US3 (P1)**: depende de Foundational. Sus gates se completan a medida que existen US2, US4 y US5; la prueba integral de gates está en T087.
 - **US4 (P2)**:
   - La parte TypeScript (T056–T058, T060–T062, T064–T065) solo depende de Foundational.
-  - La parte Dart (T059, T063) depende de T080 y T082.
-- **US5 (P2)**: depende de Foundational (T022–T024). T070 depende de T080. T067 depende de los controladores existentes (T028, T029, T042); no requiere US6.
+  - La parte Dart (T059, T063) depende de la etapa A de T080 y de T082.
+- **US5 (P2)**: depende de Foundational (T022–T024). T070 depende de la etapa A de T080 y añade `api_client` a `workspace:`. T067 depende de los controladores existentes (T028, T029, T042); no requiere US6.
 - **US6 (P2)**: depende de US2 (dev-probe, `withTenant`, `IdempotencyKeyPipe`). T095 depende de T066 (helper de contrato).
 - **US7 (P3)**: depende de Foundational y de D-ENV-01 (aprobada). T085 depende de T070 (`api_client`).
 - **Polish**: depende de todas las historias.
@@ -291,10 +291,11 @@ flowchart LR
   S[Setup] --> F[Foundational<br/>spike RLS gate]
   F --> US1 & US2 & US3 & US4 & US5
   US2 --> US6
-  F --> US7a[US7: T080-T084]
+  F --> US7a[US7: T080 etapa A, T081-T084]
   US7a --> US4d[US4 Dart: T059,T063]
   US7a --> T070[US5: T070]
   T070 --> T085[US7: T085]
+  T085 --> T080B[US7: T080 etapa B]
   US1 & US2 & US3 & US4 & US5 & US6 & T085 --> P[Polish T087-T092]
 ```
 

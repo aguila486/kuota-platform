@@ -149,7 +149,7 @@ no es una firma: identifica el contenido aprobado mediante los identificadores d
 - **Sin cambios en `spec.md`, `plan.md` ni `tasks.md`:** el cambio refuerza FR-009 y FR-010 sin modificar su texto.
 - **Detalle:** `docs/security/http-log-minimization.md`.
 
-### Propuesta de enmienda de T080 (PENDIENTE de aprobación, 2026-11-23)
+### Propuesta de enmienda de T080 (sustituida por la Aprobación 7, 2026-11-23)
 
 - **Texto vigente:** "`flutter/pubspec.yaml` raíz del workspace (`workspace:` con 3 apps y 4 paquetes, …)".
 - **Problema:** las 3 apps se crean en T085 y `api_client` en T069/T070, ambas fuera del alcance de US7a. Pub rechaza
@@ -160,3 +160,27 @@ no es una firma: identifica el contenido aprobado mediante los identificadores d
   resto de T080 no cambia.
 - **Estado:** T080 queda **sin marcar** hasta que se apruebe la enmienda. Lo demás de T080 está implementado:
   `.fvmrc`, `sdk`, la sección `melos:` y `analysis_options.yaml`.
+
+## Aprobación 7 — 2026-11-23: enmienda de T080 (dos etapas) y T068–T070
+
+- **Quién:** responsable del proyecto, mediante mensaje explícito en la sesión de trabajo ("KUOTA — Desbloquear T080 e
+  implementar T068–T070: cliente API Dart").
+- **Causa del bloqueo (ciclo de planificación):**
+  - T070 dependía de T080;
+  - T080 exigía `workspace:` con `api_client` (que crea T070) y las 3 apps (que crea T085, que a su vez depende de T070);
+  - pub rechaza miembros inexistentes.
+- **Enmienda aplicada en tasks.md** (sustituye a la propuesta anterior, que debilitaba el criterio final):
+  - **T080 en dos etapas, ambas obligatorias para marcarla:**
+    - **(A) inicialización:** SDK, Melos, análisis y `workspace:` con los miembros existentes;
+    - **(B) composición final:** `workspace:` con 3 apps y 4 paquetes, verificada con `pub get` y `check_deps`.
+  - **Dependencias:** T059, T063 y T070 dependen solo de la etapa A. T070 añade `api_client` a `workspace:`. T085
+    añade las apps y cierra la etapa B.
+  - Nota de orden, dependencias de US4/US5 y grafo actualizados.
+- **Criterio que NO se debilita:** T080 sigue sin marcar hasta que existan las 3 apps y los 4 paquetes.
+- **Autorizado:** T068, T069 y T070 según su texto literal.
+- **No autorizado:**
+  - T085, T071 y T050;
+  - cambiar el contrato OpenAPI;
+  - cambios en Money TS, logs o auditoría;
+  - la Constitución.
+

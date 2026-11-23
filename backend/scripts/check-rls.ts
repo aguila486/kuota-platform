@@ -9,7 +9,10 @@
  *   (ignora RLS) o `TRIGGER`;
  * - un rol de runtime (`kuota_app`, `kuota_app_login`) es superusuario, tiene BYPASSRLS, es propietario de objetos del
  *   esquema o puede crear objetos en él o en `public`.
+ * - [US6, 0002] el rol de mantenimiento `kuota_maintenance` (y su login) tiene más que SELECT de
+ *   (tenant_id, key, expires_at) y DELETE en `idempotency_keys`, atributos elevados o pertenencia a otros roles.
  * Lista blanca de tablas sin tenant: vacía en 001 (toda excepción futura se declara aquí con justificación).
+ * Políticas que no filtran por tenant: solo las de `MAINTENANCE_POLICIES`, con su definición EXACTA (US6, 0002).
  *
  * No sustituye la validación del esquema efectivo contra las migraciones (P4, pruebas de gobernanza de migraciones).
  *
@@ -22,6 +25,40 @@ export const TENANT_TABLE_ALLOWLIST: readonly string[] = [];
 export const RUNTIME_ROLES = ['kuota_app', 'kuota_app_login'] as const;
 export const EXPECTED_OWNER = 'kuota_migrator';
 const POLICY_ROLE = 'kuota_app';
+
+/** Rol de mantenimiento (migración 0002, US6) y su identidad de conexión. */
+export const MAINTENANCE_ROLE = 'kuota_maintenance';
+export const MAINTENANCE_LOGIN = 'kuota_maintenance_login';
+const MAINTENANCE_TABLE = 'idempotency_keys';
+const MAINTENANCE_COLUMNS = ['expires_at', 'key', 'tenant_id'];
+
+/**
+ * Únicas políticas aprobadas que no filtran por tenant: purga de claves vencidas (0002). Se aceptan solo si coinciden
+ * EXACTAMENTE (tabla, nombre, comando, rol y expresión); cualquier variación se evalúa con las reglas generales y falla.
+ */
+export const MAINTENANCE_POLICIES = [
+  { table: MAINTENANCE_TABLE, policy: 'maintenance_select_expired', cmd: 'r', qual: '(expires_at <= now())' },
+  { table: MAINTENANCE_TABLE, policy: 'maintenance_delete_expired', cmd: 'd', qual: '(expires_at <= now())' },
+] as const;
+
+const isApprovedMaintenancePolicy = (p: {
+  table: string;
+  policy: string;
+  cmd: string;
+  roles: string[];
+  qual: string | null;
+  with_check: string | null;
+}) =>
+  MAINTENANCE_POLICIES.some(
+    (m) =>
+      m.table === p.table &&
+      m.policy === p.policy &&
+      m.cmd === p.cmd &&
+      m.qual === p.qual &&
+      p.with_check === null &&
+      p.roles.length === 1 &&
+      p.roles[0] === MAINTENANCE_ROLE,
+  );
 
 export interface Queryable {
   query<R extends object>(sql: string, params?: unknown[]): Promise<{ rows: R[] }>;
@@ -97,7 +134,12 @@ export async function checkRls(db: Queryable, options: CheckRlsOptions = {}): Pr
     if (!t.force) violations.push(`${name}: tiene tenant_id y RLS no está forzado (relforcerowsecurity = false)`);
     const own = policies.filter((p) => p.table === t.table);
     if (own.length === 0) violations.push(`${name}: tiene tenant_id y no tiene ninguna política RLS`);
-    for (const p of own) {
+    else if (own.every(isApprovedMaintenancePolicy)) {
+      violations.push(
+        `${name}: solo tiene políticas de mantenimiento; falta la política de tenant para ${POLICY_ROLE}`,
+      );
+    }
+    for (const p of own.filter((policy) => !isApprovedMaintenancePolicy(policy))) {
       const usesTenant = (expr: string | null) =>
         expr !== null && /\btenant_id\b/.test(expr) && /current_setting\('app\.tenant_id'/.test(expr);
       const needsQual = p.cmd !== 'a'; // INSERT solo tiene WITH CHECK
@@ -148,6 +190,76 @@ export async function checkRls(db: Queryable, options: CheckRlsOptions = {}): Pr
     if (r.bypassrls) violations.push(`rol ${r.role}: tiene BYPASSRLS`);
     if (r.owned) violations.push(`rol ${r.role}: es propietario de ${r.owned} en ${schema}`);
     if (r.can_create) violations.push(`rol ${r.role}: puede crear objetos en ${r.can_create}`);
+  }
+  violations.push(...(await checkMaintenance(db, schema)));
+  return violations;
+}
+
+/**
+ * Privilegios efectivos del rol de mantenimiento (US6, 0002). Si el rol no existe (antes de 0002) no hay nada que
+ * verificar. Comprueba atributos, pertenencias y que su único acceso sea SELECT de 3 columnas y DELETE en
+ * `idempotency_keys` (vía herencia también para el login).
+ */
+async function checkMaintenance(db: Queryable, schema: string): Promise<string[]> {
+  const violations: string[] = [];
+  const roles = (
+    await db.query<{
+      role: string;
+      superuser: boolean;
+      bypassrls: boolean;
+      createrole: boolean;
+      createdb: boolean;
+      replication: boolean;
+      login: boolean;
+      member_of: string | null;
+    }>(
+      `SELECT r.rolname AS role, r.rolsuper AS superuser, r.rolbypassrls AS bypassrls, r.rolcreaterole AS createrole,
+              r.rolcreatedb AS createdb, r.rolreplication AS replication, r.rolcanlogin AS login,
+              (SELECT string_agg(g.rolname, ',' ORDER BY g.rolname) FROM pg_auth_members m JOIN pg_roles g ON g.oid = m.roleid
+                WHERE m.member = r.oid) AS member_of
+         FROM pg_roles r WHERE r.rolname = ANY($1)`,
+      [[MAINTENANCE_ROLE, MAINTENANCE_LOGIN]],
+    )
+  ).rows;
+  if (!roles.some((r) => r.role === MAINTENANCE_ROLE)) return violations;
+  for (const r of roles) {
+    for (const attr of ['superuser', 'bypassrls', 'createrole', 'createdb', 'replication'] as const) {
+      if (r[attr]) violations.push(`rol ${r.role}: tiene el atributo ${attr}`);
+    }
+    if (r.role === MAINTENANCE_ROLE && r.login)
+      violations.push(`rol ${r.role}: es un rol de privilegios y no debe tener LOGIN`);
+    if (r.role === MAINTENANCE_ROLE && r.member_of) violations.push(`rol ${r.role}: es miembro de ${r.member_of}`);
+    if (r.role === MAINTENANCE_LOGIN && r.member_of !== MAINTENANCE_ROLE) {
+      violations.push(
+        `rol ${r.role}: debe ser miembro solo de ${MAINTENANCE_ROLE} (es miembro de ${r.member_of ?? 'ninguno'})`,
+      );
+    }
+  }
+  const privileges = (
+    await db.query<{ role: string; table: string; privilege: string; columns: string | null }>(
+      `SELECT r.rolname AS role, c.relname AS table, p.privilege AS privilege,
+              CASE WHEN p.privilege = 'SELECT' AND NOT has_table_privilege(r.oid, c.oid, 'SELECT') THEN
+                (SELECT string_agg(a.attname, ',' ORDER BY a.attname) FROM pg_attribute a
+                  WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+                    AND has_column_privilege(r.oid, c.oid, a.attnum, 'SELECT')) END AS columns
+         FROM pg_roles r
+         CROSS JOIN pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+         CROSS JOIN unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) AS p(privilege)
+        WHERE r.rolname = ANY($1) AND n.nspname = $2 AND c.relkind IN ('r', 'p')
+          AND (has_table_privilege(r.oid, c.oid, p.privilege)
+               OR (p.privilege IN ('SELECT','INSERT','UPDATE','REFERENCES') AND has_any_column_privilege(r.oid, c.oid, p.privilege)))`,
+      [roles.map((r) => r.role), schema],
+    )
+  ).rows;
+  for (const p of privileges) {
+    const allowed =
+      p.table === MAINTENANCE_TABLE &&
+      (p.privilege === 'DELETE' || (p.privilege === 'SELECT' && p.columns === MAINTENANCE_COLUMNS.join(',')));
+    if (!allowed) {
+      violations.push(
+        `rol ${p.role}: privilegio ${p.privilege}${p.columns ? ` (${p.columns})` : ''} en ${schema}.${p.table} no permitido para mantenimiento`,
+      );
+    }
   }
   return violations;
 }

@@ -107,8 +107,13 @@ describe('configuraciones incorrectas deliberadas (T043, base efímera)', () => 
     ],
     [
       'sin políticas',
+      'DROP POLICY tenant_isolation ON kuota.dev_probe_items',
+      ['kuota.dev_probe_items: tiene tenant_id y no tiene ninguna política RLS'],
+    ],
+    [
+      'solo políticas de mantenimiento (0002) sin la política de tenant',
       'DROP POLICY tenant_isolation ON kuota.idempotency_keys',
-      ['kuota.idempotency_keys: tiene tenant_id y no tiene ninguna política RLS'],
+      ['kuota.idempotency_keys: solo tiene políticas de mantenimiento; falta la política de tenant para kuota_app'],
     ],
     [
       'política que no filtra por tenant (USING true)',
@@ -155,7 +160,12 @@ describe('configuraciones incorrectas deliberadas (T043, base efímera)', () => 
     [
       'privilegios a PUBLIC',
       'GRANT SELECT ON kuota.audit_events TO PUBLIC',
-      ['kuota.audit_events: PUBLIC tiene privilegios (SELECT)'],
+      // Los roles de mantenimiento heredan lo concedido a PUBLIC: el verificador también lo detecta en ellos.
+      [
+        'kuota.audit_events: PUBLIC tiene privilegios (SELECT)',
+        'rol kuota_maintenance: privilegio SELECT en kuota.audit_events no permitido para mantenimiento',
+        'rol kuota_maintenance_login: privilegio SELECT en kuota.audit_events no permitido para mantenimiento',
+      ],
     ],
     [
       'TRUNCATE para el runtime (ignora RLS)',
@@ -163,6 +173,68 @@ describe('configuraciones incorrectas deliberadas (T043, base efímera)', () => 
       ['kuota.dev_probe_items: kuota_app tiene TRUNCATE (TRUNCATE ignora RLS; TRIGGER no corresponde al runtime)'],
     ],
     ['runtime con BYPASSRLS', 'ALTER ROLE kuota_app BYPASSRLS', ['rol kuota_app: tiene BYPASSRLS']],
+    [
+      'mantenimiento: política de purga alterada (también filas vigentes)',
+      `DROP POLICY maintenance_delete_expired ON kuota.idempotency_keys;
+       CREATE POLICY maintenance_delete_expired ON kuota.idempotency_keys FOR DELETE TO kuota_maintenance USING (true)`,
+      [
+        'kuota.idempotency_keys: la política maintenance_delete_expired no filtra por tenant_id = app.tenant_id en USING',
+        'kuota.idempotency_keys: la política maintenance_delete_expired no aplica a kuota_app (aplica a kuota_maintenance)',
+      ],
+    ],
+    [
+      'mantenimiento: política aplicada también al runtime',
+      `DROP POLICY maintenance_select_expired ON kuota.idempotency_keys;
+       CREATE POLICY maintenance_select_expired ON kuota.idempotency_keys FOR SELECT TO kuota_maintenance, kuota_app
+         USING (expires_at <= now())`,
+      [
+        'kuota.idempotency_keys: la política maintenance_select_expired no filtra por tenant_id = app.tenant_id en USING',
+      ],
+    ],
+    [
+      'mantenimiento: UPDATE y lectura de response_body',
+      'GRANT UPDATE ON kuota.idempotency_keys TO kuota_maintenance; GRANT SELECT (response_body) ON kuota.idempotency_keys TO kuota_maintenance',
+      [
+        'rol kuota_maintenance: privilegio SELECT (expires_at,key,response_body,tenant_id) en kuota.idempotency_keys no permitido para mantenimiento',
+        'rol kuota_maintenance: privilegio UPDATE en kuota.idempotency_keys no permitido para mantenimiento',
+        'rol kuota_maintenance_login: privilegio SELECT (expires_at,key,response_body,tenant_id) en kuota.idempotency_keys no permitido para mantenimiento',
+        'rol kuota_maintenance_login: privilegio UPDATE en kuota.idempotency_keys no permitido para mantenimiento',
+      ],
+    ],
+    [
+      'mantenimiento: acceso a otra tabla',
+      'GRANT DELETE ON kuota.audit_events TO kuota_maintenance',
+      [
+        'rol kuota_maintenance: privilegio DELETE en kuota.audit_events no permitido para mantenimiento',
+        'rol kuota_maintenance_login: privilegio DELETE en kuota.audit_events no permitido para mantenimiento',
+      ],
+    ],
+    [
+      'mantenimiento: miembro del runtime y con BYPASSRLS',
+      'GRANT kuota_app TO kuota_maintenance; ALTER ROLE kuota_maintenance_login BYPASSRLS',
+      [
+        'rol kuota_maintenance: es miembro de kuota_app',
+        'rol kuota_maintenance_login: tiene el atributo bypassrls',
+        'rol kuota_maintenance: privilegio DELETE en kuota.dev_probe_items no permitido para mantenimiento',
+        'rol kuota_maintenance: privilegio INSERT en kuota.audit_events no permitido para mantenimiento',
+        'rol kuota_maintenance: privilegio INSERT en kuota.dev_probe_items no permitido para mantenimiento',
+        'rol kuota_maintenance: privilegio INSERT en kuota.idempotency_keys no permitido para mantenimiento',
+        'rol kuota_maintenance: privilegio SELECT en kuota.audit_events no permitido para mantenimiento',
+        'rol kuota_maintenance: privilegio SELECT en kuota.dev_probe_items no permitido para mantenimiento',
+        'rol kuota_maintenance: privilegio SELECT en kuota.idempotency_keys no permitido para mantenimiento',
+        'rol kuota_maintenance: privilegio UPDATE en kuota.dev_probe_items no permitido para mantenimiento',
+        'rol kuota_maintenance: privilegio UPDATE en kuota.idempotency_keys no permitido para mantenimiento',
+        'rol kuota_maintenance_login: privilegio DELETE en kuota.dev_probe_items no permitido para mantenimiento',
+        'rol kuota_maintenance_login: privilegio INSERT en kuota.audit_events no permitido para mantenimiento',
+        'rol kuota_maintenance_login: privilegio INSERT en kuota.dev_probe_items no permitido para mantenimiento',
+        'rol kuota_maintenance_login: privilegio INSERT en kuota.idempotency_keys no permitido para mantenimiento',
+        'rol kuota_maintenance_login: privilegio SELECT en kuota.audit_events no permitido para mantenimiento',
+        'rol kuota_maintenance_login: privilegio SELECT en kuota.dev_probe_items no permitido para mantenimiento',
+        'rol kuota_maintenance_login: privilegio SELECT en kuota.idempotency_keys no permitido para mantenimiento',
+        'rol kuota_maintenance_login: privilegio UPDATE en kuota.dev_probe_items no permitido para mantenimiento',
+        'rol kuota_maintenance_login: privilegio UPDATE en kuota.idempotency_keys no permitido para mantenimiento',
+      ],
+    ],
     [
       'runtime superusuario',
       'ALTER ROLE kuota_app_login SUPERUSER',

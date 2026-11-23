@@ -157,8 +157,18 @@ describe('G2 — migración 0001_foundation', () => {
         qual: string;
         with_check: string;
       }>(
-        `SELECT tablename, roles::text AS roles, cmd, qual, with_check FROM pg_policies WHERE schemaname = 'kuota' ORDER BY tablename`,
+        `SELECT tablename, roles::text AS roles, cmd, qual, with_check FROM pg_policies
+          WHERE schemaname = 'kuota' AND policyname = 'tenant_isolation' ORDER BY tablename`,
       );
+      // Las únicas otras políticas son las de purga de 0002 (US6), exclusivas de kuota_maintenance y de filas vencidas.
+      const others = await migrator.query<{ policy: string }>(
+        `SELECT tablename || ':' || policyname || ':' || cmd || ':' || roles::text || ':' || qual AS policy FROM pg_policies
+          WHERE schemaname = 'kuota' AND policyname <> 'tenant_isolation' ORDER BY policyname`,
+      );
+      expect(others.rows.map((r) => r.policy)).toEqual([
+        'idempotency_keys:maintenance_delete_expired:DELETE:{kuota_maintenance}:(expires_at <= now())',
+        'idempotency_keys:maintenance_select_expired:SELECT:{kuota_maintenance}:(expires_at <= now())',
+      ]);
       expect(policies.rows.map((p) => p.tablename)).toEqual([...TABLES]);
       for (const policy of policies.rows) {
         expect(policy.roles).toBe('{kuota_app}');
@@ -505,18 +515,21 @@ describe('G2/P1 — migración 0001 con prisma migrate deploy (transacción expl
   });
 
   it('kuota_migrator la aplica desde cero, queda registrada y una segunda ejecución no tiene cambios pendientes', async () => {
-    expect(await applyMigrations(db.migratorUrl)).toEqual(['0001_foundation']);
+    expect(await applyMigrations(db.migratorUrl)).toEqual(['0001_foundation', '0002_idempotency_maintenance']);
     const client = await connect(db.migratorUrl);
     try {
       const history = await client.query<{ migration_name: string; steps: number; owner: string }>(
         `SELECT migration_name, applied_steps_count AS steps,
                 (SELECT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = '_prisma_migrations') AS owner
-           FROM public._prisma_migrations`,
+           FROM public._prisma_migrations ORDER BY migration_name`,
       );
-      expect(history.rows).toEqual([{ migration_name: '0001_foundation', steps: 1, owner: 'kuota_migrator' }]);
-      expect(await applyMigrations(db.migratorUrl)).toEqual(['0001_foundation']);
+      expect(history.rows).toEqual([
+        { migration_name: '0001_foundation', steps: 1, owner: 'kuota_migrator' },
+        { migration_name: '0002_idempotency_maintenance', steps: 1, owner: 'kuota_migrator' },
+      ]);
+      expect(await applyMigrations(db.migratorUrl)).toEqual(['0001_foundation', '0002_idempotency_maintenance']);
       const count = await client.query<{ n: string }>('SELECT count(*) AS n FROM public._prisma_migrations');
-      expect(count.rows[0]?.n).toBe('1');
+      expect(count.rows[0]?.n).toBe('2');
       const tables = await client.query("SELECT tablename FROM pg_tables WHERE schemaname = 'kuota'");
       expect(tables.rowCount).toBe(3);
     } finally {

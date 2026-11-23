@@ -60,7 +60,14 @@ describe('Testcontainers PostgreSQL (T011)', () => {
       );
       return result.rows;
     });
-    expect(roles.map((r) => r.rolname)).toEqual(['kuota_app', 'kuota_app_login', 'kuota_migrator']);
+    // kuota_maintenance(_login): aprovisionamiento de plataforma de US6 (02-maintenance-roles.sql).
+    expect(roles.map((r) => r.rolname)).toEqual([
+      'kuota_app',
+      'kuota_app_login',
+      'kuota_maintenance',
+      'kuota_maintenance_login',
+      'kuota_migrator',
+    ]);
     for (const role of roles) {
       expect(role, role.rolname).toMatchObject({
         rolsuper: false,

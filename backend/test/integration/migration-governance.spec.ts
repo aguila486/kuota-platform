@@ -152,7 +152,7 @@ describe('P3/P4 — esquema efectivo tras prisma migrate deploy', () => {
         owners: 'kuota_migrator',
         forced: '3',
         policies:
-          'audit_events:tenant_isolation:kuota_app dev_probe_items:tenant_isolation:kuota_app idempotency_keys:tenant_isolation:kuota_app',
+          'audit_events:tenant_isolation:kuota_app dev_probe_items:tenant_isolation:kuota_app idempotency_keys:maintenance_delete_expired:kuota_maintenance idempotency_keys:maintenance_select_expired:kuota_maintenance idempotency_keys:tenant_isolation:kuota_app',
         triggers: 'audit_events_append_only,audit_events_no_truncate',
         grants:
           'audit_events:INSERT,audit_events:SELECT,dev_probe_items:DELETE,dev_probe_items:INSERT,dev_probe_items:SELECT,dev_probe_items:UPDATE,idempotency_keys:DELETE,idempotency_keys:INSERT,idempotency_keys:SELECT,idempotency_keys:UPDATE',

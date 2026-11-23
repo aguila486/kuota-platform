@@ -18,6 +18,8 @@ import { Client } from 'pg';
 export interface TestDatabase {
   readonly appUrl: string;
   readonly migratorUrl: string;
+  /** kuota_maintenance_login (aprovisionado por 02-maintenance-roles.sql): solo para la purga de idempotencia. */
+  readonly maintenanceUrl: string;
   readonly appliedMigrations: readonly string[];
   /** Superusuario del contenedor efímero: solo para preparar escenarios de prueba (nunca lo usa la aplicación). */
   readonly superuserUrl: string;
@@ -39,6 +41,7 @@ function findRepoRoot(start: string): string {
 const REPO_ROOT = findRepoRoot(process.cwd());
 const COMPOSE_FILE = join(REPO_ROOT, 'infra/docker/compose.yaml');
 const ROLES_SQL = join(REPO_ROOT, 'infra/docker/postgres/init/01-roles.sql');
+const MAINTENANCE_ROLES_SQL = join(REPO_ROOT, 'infra/docker/postgres/init/02-maintenance-roles.sql');
 const BACKEND_DIR = join(REPO_ROOT, 'backend');
 const MIGRATIONS_DIR = join(BACKEND_DIR, 'prisma/migrations');
 const PRISMA_BIN = join(BACKEND_DIR, 'node_modules/.bin/prisma');
@@ -112,24 +115,34 @@ export interface StartOptions {
 export async function startTestDatabase(options: StartOptions = {}): Promise<TestDatabase> {
   const migratorPassword = randomPassword();
   const appLoginPassword = randomPassword();
+  const maintenancePassword = randomPassword();
   const container: StartedPostgreSqlContainer = await new PostgreSqlContainer(postgresImage())
     .withDatabase(DATABASE)
     .withUsername('postgres')
     .withPassword(randomPassword())
-    .withEnvironment({ KUOTA_MIGRATOR_PASSWORD: migratorPassword, KUOTA_APP_LOGIN_PASSWORD: appLoginPassword })
-    .withCopyFilesToContainer([{ source: ROLES_SQL, target: '/docker-entrypoint-initdb.d/01-roles.sql' }])
+    .withEnvironment({
+      KUOTA_MIGRATOR_PASSWORD: migratorPassword,
+      KUOTA_APP_LOGIN_PASSWORD: appLoginPassword,
+      KUOTA_MAINTENANCE_LOGIN_PASSWORD: maintenancePassword,
+    })
+    .withCopyFilesToContainer([
+      { source: ROLES_SQL, target: '/docker-entrypoint-initdb.d/01-roles.sql' },
+      { source: MAINTENANCE_ROLES_SQL, target: '/docker-entrypoint-initdb.d/02-maintenance-roles.sql' },
+    ])
     .start();
 
   const host = container.getHost();
   const port = container.getPort();
   const migratorUrl = connectionUrl('kuota_migrator', migratorPassword, host, port);
   const appUrl = connectionUrl('kuota_app_login', appLoginPassword, host, port);
+  const maintenanceUrl = connectionUrl('kuota_maintenance_login', maintenancePassword, host, port);
 
   try {
     const appliedMigrations = options.applyMigrations === false ? [] : await applyMigrations(migratorUrl);
     return {
       appUrl,
       migratorUrl,
+      maintenanceUrl,
       appliedMigrations,
       superuserUrl: container.getConnectionUri(),
       stop: async () => void (await container.stop()),

@@ -676,3 +676,25 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
 - **Arnés de pruebas:** en `audit.spec.ts`, las llamadas HTTP posteriores a los bloques que crean y cierran un segundo
   módulo de Nest con `ClsModule.forRoot` responden 500. Por eso las pruebas HTTP de minimización van antes de esos
   bloques. Es un efecto de tener dos aplicaciones en el mismo proceso, no del runtime (que tiene una sola).
+
+### Hotfix de privacidad de logs HTTP (2026-11-23, Aprobación 6)
+
+- **Causa raíz:** los serializadores por defecto de pino-http registraban la URL con query, `query`, `params`, todos
+  los encabezados, `remoteAddress` y `remotePort`. Lo hacían en el log de acceso y, mediante el logger hijo
+  `{ req }`, en cada log de la aplicación dentro de una solicitud. El enmascarado de `formatters.log` no se aplica a
+  esos bindings.
+- **Cambio:**
+  - serializadores por lista permitida: `req: { method }`, `res: { statusCode }`;
+  - `route` como plantilla (`unmatched` si no hay coincidencia), `responseTime`, `correlation_id` y la categoría del
+    error;
+  - omisión de objetos HTTP crudos bajo otras claves;
+  - `redact` como defensa adicional;
+  - sin dependencias nuevas.
+- **Pruebas:** capturan el JSON real (`http-logging-privacy.spec.ts`), corren en un archivo con aplicación y base
+  propias, y pasan en orden aleatorio.
+- **Arnés de `audit.spec.ts`:** las llamadas HTTP posteriores a cerrar un segundo módulo de Nest devuelven 500. No
+  afecta a estas pruebas, que viven en otro archivo (Vitest aísla cada archivo). La causa no se ha determinado y queda
+  para un bloque aparte.
+- **Pendiente:** el log de acceso registra `request errored` con nivel `info` (comportamiento previo, sin cambiar).
+- **Alcance:** los logs de PostgreSQL e infraestructura (C, D) no se han revisado.
+- **Detalle:** `docs/security/http-log-minimization.md`.

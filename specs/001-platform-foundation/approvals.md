@@ -134,3 +134,17 @@ no es una firma: identifica el contenido aprobado mediante los identificadores d
   - correcciones retroactivas de datos;
   - 002, US7, T068 y otras historias.
 - **Tareas:** no cambia ninguna tarea. T077 cita `audit_events.origin` sin fijar su formato.
+
+## Aprobación 6 — 2026-11-23: hotfix de privacidad de logs HTTP (pino-http)
+
+- **Quién:** responsable del proyecto, mediante mensaje explícito en la sesión de trabajo ("KUOTA — Hotfix de
+  privacidad: minimización de logs HTTP con pino-http").
+- **Decisión:** minimizar los datos personales y sensibles de los logs HTTP de la aplicación mediante una lista
+  explícita de campos permitidos. Se prefiere la serialización mínima sobre una denylist.
+- **No autorizado:**
+  - eliminar el logging;
+  - modificar la auditoría transaccional u `origin`;
+  - tocar contratos, migraciones, roles, RLS, dependencias de Prisma o la retención;
+  - US4, US7 y 002.
+- **Sin cambios en `spec.md`, `plan.md` ni `tasks.md`:** el cambio refuerza FR-009 y FR-010 sin modificar su texto.
+- **Detalle:** `docs/security/http-log-minimization.md`.

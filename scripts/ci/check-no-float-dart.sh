@@ -10,8 +10,8 @@
 # `analysis_options` estricto más esta regla y la revisión (alternativa evaluada: `custom_lint`, reevaluar en 004).
 #
 # Uso: scripts/ci/check-no-float-dart.sh [directorio]   (por defecto, flutter/packages/financial_domain/lib)
-# Salida: 0 sin infracciones; 1 con infracciones; 3 PENDIENTE si el paquete aún no existe (T082, US7). Un 3 nunca es
-# una aprobación.
+# Salida: 0 sin infracciones; 1 con infracciones; 3 PENDIENTE si el directorio no existe o no tiene archivos .dart.
+# Un 3 nunca es una aprobación.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DIR="${1:-$ROOT/flutter/packages/financial_domain/lib}"
@@ -58,6 +58,10 @@ done < <(find "$DIR" -type f -name '*.dart' -print0)
 if [ "$found" -gt 0 ]; then
   echo "check-no-float-dart: $found infracción(es) en $checked archivo(s)"
   exit 1
+fi
+if [ "$checked" -eq 0 ]; then
+  echo "  PENDIENTE: ${DIR#"$ROOT"/} no contiene archivos .dart; no hay código que verificar (no es una aprobación)"
+  exit 3
 fi
 echo "check-no-float-dart: sin double/num en $checked archivo(s) Dart"
 exit 0

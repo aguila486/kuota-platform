@@ -15,7 +15,9 @@ run_job() {
       if [ -x "$KUOTA_ROOT/scripts/ci/flutter.sh" ] && [ -f "$KUOTA_ROOT/flutter/pubspec.yaml" ]; then
         "$KUOTA_ROOT/scripts/ci/flutter.sh"
       else
-        printf '\nPENDIENTE flutter: no existen flutter/ ni scripts/ci/flutter.sh (T050 depende de US7: T080–T086).\n' >&2
+        printf '\nPENDIENTE flutter: falta scripts/ci/flutter.sh (T050) o flutter/pubspec.yaml (T080). Controles locales\n' >&2
+        printf 'disponibles: cd flutter && fvm dart run melos run analyze|format|test; fvm dart run tool/check_deps.dart;\n' >&2
+        printf 'scripts/ci/check-no-float.sh dart.\n' >&2
         return 3
       fi
       ;;

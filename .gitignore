@@ -75,3 +75,6 @@ backend/generated/
 
 # Bundles del contrato OpenAPI (derivados de contracts/openapi; se regeneran con pnpm contracts:bundle).
 contracts/openapi/dist/
+
+# Estado local de scripts/dev (pid del backend de up.sh).
+.dev/

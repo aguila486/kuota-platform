@@ -5,7 +5,7 @@ import { ClsService } from 'nestjs-cls';
 import { Logger as PinoNestLogger } from 'nestjs-pino';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ConfigModule } from '../../../src/common/config/config.module.js';
-import { LoggingModule } from '../../../src/common/logging/logging.module.js';
+import { LoggingModule, requestContextMiddleware } from '../../../src/common/logging/logging.module.js';
 import { CORRELATION_HEADER, resolveCorrelationId } from '../../../src/common/logging/correlation.js';
 import { validEnv } from '../../support/env.js';
 
@@ -44,6 +44,8 @@ describe('logging HTTP con correlación y contexto CLS', () => {
     }).compile();
     app = moduleRef.createNestApplication({ bufferLogs: true });
     app.useLogger(app.get(PinoNestLogger));
+    // Igual que createApp (src/bootstrap.ts): el contexto de solicitud se monta para todas las rutas.
+    app.use(requestContextMiddleware());
     await app.listen(0, '127.0.0.1');
     baseUrl = await app.getUrl();
   });

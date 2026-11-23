@@ -31,6 +31,7 @@ class ProbeController {
 
   @Get('health/probe')
   health(): { status: 'ok' } {
+    this.logger.log('log desde una ruta sin prefijo');
     return { status: 'ok' };
   }
 }
@@ -87,6 +88,13 @@ describe('bootstrap real de Kuota Core (T025)', () => {
     expect((await fetch(`${url}/health/probe`)).status).toBe(200);
     expect((await fetch(`${url}/v1/health/probe`)).status).toBe(404);
     expect((await fetch(`${url}/boom`)).status).toBe(404);
+  });
+
+  it('los logs de rutas sin prefijo (/health/*) también llevan correlation_id del CLS', async () => {
+    const url = await start({ KUOTA_ENV: 'local' });
+    const res = await fetch(`${url}/health/probe`);
+    const line = logs.split('\n').find((l) => l.includes('log desde una ruta sin prefijo'));
+    expect((JSON.parse(line!) as { correlation_id?: string }).correlation_id).toBe(res.headers.get('x-correlation-id'));
   });
 
   it('el arranque registra los logs de Nest una sola vez (sin duplicados)', async () => {

@@ -275,6 +275,25 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
     `validation-error` y 404 → `not-found`; 401 y 426 se producen únicamente con `KuotaProblemError`; cualquier otra
     `HttpException` (403, 405…) es un error de programación → 500 `internal-error` con log de error. Los códigos para
     403/405 siguen **pendientes para 002**.
+- **Implementación (G6: T026–T033, 2026-11-22)**:
+  - **Corrige un defecto de G5**: el middleware de CLS lo montaba Nest bajo el prefijo global `/v1`, así que en las rutas
+    excluidas (`health/*`) los logs de Nest salían sin `correlation_id`. Ahora `createApp` lo monta con `app.use`
+    (`requestContextMiddleware()`) para todas las rutas, con prueba de regresión.
+  - Health (T028): `@nestjs/terminus` **12.2.0** (exacta; sin dependencias propias ni scripts de instalación; peers
+    `@nestjs/common|core ^12` cumplidos). `/health/live` no consulta nada. `/health/ready` usa el indicador `database`
+    sobre `DatabaseProbe` (`src/common/database/`): una conexión nueva por comprobación con `kuota_app_login`, solo
+    `SELECT 1`, límite de 2 s (conexión, consulta y `statement_timeout`), sin contexto de tenant, sin leer tablas y sin
+    encabezados de la petición. El resultado de terminus se reduce a `ReadinessStatus`; el motivo del fallo va solo al
+    log (`warn`, con `correlation_id`). El 503 es un estado del contrato (`ReadinessStatus`), no un problem+json, así
+    que no pasa por el filtro de errores: no hacía falta ningún código nuevo. La sonda no prueba RLS ni el esquema.
+  - **Excepción acotada a P2/C4-2**: `pg` puede importarse solo en `src/common/database/pg-connectivity-probe.ts`
+    (eslint; Prisma y las reglas de SQL de contexto siguen activas ahí) y solo el módulo health puede usar
+    `src/common/database/` (dependency-cruiser, regla `sonda-bd-solo-health`). Ambas reglas tienen pruebas. `pg` 8.23.1
+    pasa de devDependency a dependency de runtime (misma versión). Cuando exista el pool de T039 se revisará si la sonda
+    lo reutiliza.
+  - Compatibilidad (T029): `X-App-Version` inválido → 400 `validation-error` con `errors[{field:'X-App-Version'}]` y un
+    mensaje fijo (nunca refleja el valor); sin el encabezado, `client_supported: null`. La comparación es numérica
+    X.Y.Z e ignora el build.
 
 ## R-16 · Cola de jobs
 
@@ -309,6 +328,30 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
   en **18.8.0** porque 18.9.0 se publicó el mismo día y pnpm pedía exceptuarla. Los scripts de instalación de
   `@swc/core`, `ssh2`, `cpu-features` y `protobufjs` quedan **denegados** en `allowBuilds` (`pnpm-workspace.yaml`): son
   opcionales y todo funciona sin ellos (typecheck, build, pruebas y Testcontainers verificados).
+- **Implementación (G6: T030–T032, 2026-11-22)**:
+  - `scripts/dev/up.sh`: doctor → puertos (mensaje accionable si la API o PostgreSQL chocan con otro proceso) →
+    `compose up --wait` → `prisma migrate deploy` (si falla, no arranca el backend e indica el procedimiento de
+    `data-architecture.md` §8) → `pnpm --filter backend dev` → espera de `/health/ready`. Nunca crea ni sobrescribe
+    `.env`. La API arranca **sin** `DATABASE_URL_MIGRATOR` ni las contraseñas del contenedor (FR-014). Ctrl-C o SIGTERM
+    detienen todo el árbol del backend. `KUOTA_ENV_FILE` y `KUOTA_COMPOSE_PROJECT` permiten un entorno aislado.
+  - `scripts/dev/down.sh`: detiene el backend (pid en `.dev/`, ignorado por Git) y PostgreSQL con `compose stop`; el
+    volumen se conserva. Repetible.
+  - `scripts/dev/test-all.sh [componentes]` y `scripts/dev/test-affected.sh <base>`; los filtros por ruta están en
+    `scripts/dev/path-filters.sh`, que transcribe `monorepo-strategy.md` §4 y `testing-strategy.md` (contrato,
+    Constitución y CI disparan la suite completa). **El CI de G12 debe usar ese archivo** para no divergir.
+  - Verificado en un proyecto compose aislado (`kuota-g6check`): arranque limpio, base detenida (503) y recuperación,
+    segunda ejecución, puertos ocupados, migración fallida (sin tablas parciales), `down` repetido y Ctrl-C.
+
+## Pendientes técnicos registrados (G5–G6)
+
+| Pendiente | Cuándo debe resolverse |
+|---|---|
+| Unificar `x-kuota-idempotent` y `x-kuota-financial` (R-13) | Antes de la primera operación financiera que dependa de la convención |
+| Códigos de contrato para 403/405 (R-15) | Antes de implementar la autorización de 002 |
+| Unificar `index.ts` y `public-api.ts` como API pública de un módulo | Antes de crear módulos con interfaces públicas entre módulos (G7) |
+| `contracts:breaking` omite la comparación (sale con 0) mientras `main` no contiene el contrato | Cuando exista el baseline en `main`, la comparación pasa a ser obligatoria y la ausencia de base debe fallar; se integra en CI en G12 |
+| CI debe consumir `scripts/dev/path-filters.sh` | G12 |
+| La sonda de readiness usa una conexión propia, no el pool de la aplicación | Revisar al implementar T039 |
 
 ## R-19 · Estado y estructura Flutter
 

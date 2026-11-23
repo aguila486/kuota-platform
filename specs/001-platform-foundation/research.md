@@ -1354,3 +1354,48 @@ implementados y probados; SC: 4/9 cumplidos, 2 solo en local.
   - propuesta: una variable versionada (p. ej. `KUOTA_CONTRACT_BASELINE_REQUIRED=true` en el workflow, activada en el
     mismo cambio que fusione el contrato) con una prueba en `breaking.test.sh` de "referencia ausente → FAIL". Requiere
     autorización y depende de T049.
+
+### T092: convergencia local de 001 (2026-11-23)
+
+- **Procedimiento:**
+  - Análisis de solo lectura del estado actual (HEAD `1831bde`) con las reglas de `/speckit-analyze` y
+    `/speckit-converge`.
+  - Verificación de cada hallazgo en el código.
+  - Aplicación de `/speckit-converge` según su contrato: sin hooks registrados (`.specify/extensions.yml` no tiene
+    `before_converge` ni `after_converge`), sin ramas, y su única escritura es **añadir** `## Phase 11: Convergence` al
+    final de `tasks.md`. Se comprobó que el contenido anterior quedó idéntico byte a byte.
+  - Autorizado por el responsable para esta convergencia local; no se tocaron spec, plan, Constitución, contratos ni
+    ADR.
+- **Hallazgos de convergencia → tareas T099–T108:**
+
+  | Tarea | Hallazgo | Tipo | Severidad |
+  |---|---|---|---|
+  | T099 | Purga cross-tenant sin auditoría duradera (Constitución III) | contradicts | **CRITICAL** |
+  | T100 | Regla de dominio sin red de Node, persistencia ni `common/money` (FR-008) | partial | HIGH |
+  | T101 | Eventos de arranque y apagado, transición de readiness y conflictos en `debug` (Observability Signals) | partial | MEDIUM |
+  | T102 | SC-009 sin escaneo de logs de toda la suite | partial | MEDIUM |
+  | T103 | FR-028: eliminación de una propiedad opcional de respuesta sin prueba | partial | MEDIUM |
+  | T104 | Regla anti-float por nombres más estrecha que FR-021 (requiere decisión) | partial | MEDIUM |
+  | T105 | 0002, roles de mantenimiento y preflight sin tarea (aprobados en A3/A4) | unrequested | LOW |
+  | T106 | Gate de regeneración del cliente sin defecto de referencia (FR-029) | partial | LOW |
+  | T107 | `doctor.sh` sin prueba automática (US1/AC4) | partial | LOW |
+  | T108 | Suites de excepciones de acceso, H3 y CORS fuera de `required-suites.txt` | partial | LOW |
+- **Inconsistencias del análisis, sin tarea:**
+  - **Corregidas** (documentación ajena a spec, plan y texto de tareas): descripciones de `flutter/pubspec.yaml` (5
+    paquetes, Money y generador existentes); `quickstart.md` (S1–S8; `contracts:breaking main` sin base sale con 0; 8
+    defectos de referencia); comentario de `prove-gates.sh`.
+  - **Requieren aprobación** (cambian spec, plan o el texto de tareas):
+    - `spec.md` "Status: Draft";
+    - ADR-0004 descrito como propuesto en spec, plan y T090;
+    - "Total: 96 tareas" (hay 108);
+    - "4 paquetes" en el objetivo de la fase 9 y en la escala de `plan.md`;
+    - estructura de `plan.md` sin los archivos nuevos;
+    - CORS sin FR ni entrada en Endpoint Access;
+    - interpretaciones de Money "a confirmar" y convención `inputs.a.currency` de los fixtures;
+    - forma `allocate`/`allocateRatios` de Dart (T063);
+    - aplazamiento de las métricas de negocio sin registrar en Complexity Tracking (Constitución XIII).
+- **Siguen abiertas por gobernanza** (no se convierten en tareas): T049, T052, T091, SC-008 y el checkpoint de US7,
+  H2, US3/AC8 (CODEOWNERS con marcador) y SC-004 en remoto.
+- **Resultado:** `tasks_appended` (10 tareas). **T092 sigue ABIERTA**: su criterio exige resolver todo hallazgo
+  CRITICAL y T099 lo es; resolverlo exige decidir dónde vive la auditoría de plataforma (estructura nueva y migración
+  aditiva, no autorizadas en este bloque).

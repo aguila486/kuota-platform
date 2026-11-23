@@ -9,7 +9,8 @@
 #   PATH de los scripts empieza por el SDK de FVM: `dart`/`flutter` dentro de un script son los fijados, no los
 #   globales. Los scripts no invocan `melos` (no hay binario global): usan `exec:` con `packageFilters` y `steps`.
 #
-# Miembros (T080 en dos etapas, Aprobación 7): composición final con 3 apps (T085) y 4 paquetes (`api_client`, T070).
+# Miembros (T080 en dos etapas, Aprobación 7): 3 apps (T085) y 4 paquetes (`api_client`, T070), más `app_shell`
+# (T098, Aprobación 11).
 name: kuota_workspace
 publish_to: none
 
@@ -64,12 +65,12 @@ melos:
       description: Pruebas de las herramientas del workspace (tool/check_deps.dart, osv_coverage.dart y coverage_gate.dart).
       run: dart test tool/test
     test:financial:
-      description: Pruebas de financial_domain (Money y fixtures compartidos llegan con T063 y T059).
+      description: Pruebas de financial_domain: Money (T063) y fixtures compartidos (T059), en la VM y en Chrome.
       exec: dart test
       packageFilters:
         scope: financial_domain
     generate:
-      description: Regenera el cliente Dart desde contracts/openapi (T069). PENDIENTE mientras no exista el generador.
+      description: Regenera el cliente Dart desde contracts/openapi (T069); lo verifica el job contracts (T071).
       run: >-
         if [ -x ../scripts/contracts/generate-dart-client.sh ]; then ../scripts/contracts/generate-dart-client.sh;
         else echo "PENDIENTE: scripts/contracts/generate-dart-client.sh no existe (T069)"; exit 3; fi

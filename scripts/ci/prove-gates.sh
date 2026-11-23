@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Prueba de que los gates bloquean de verdad (T087; SC-003; US3-5..7). En un `git worktree` temporal (separado, sin
-# rama; se elimina al terminar) y para cada uno de los 6 cambios defectuosos de referencia:
+# rama; se elimina al terminar) y para cada uno de los 8 cambios defectuosos de referencia (los 6 de T087 y 2 de
+# cobertura Dart, C1 de T092):
 #   1. control positivo: el gate REAL pasa sobre el código limpio de HEAD (si no, no prueba nada → FAIL);
 #   2. se aplica el cambio defectuoso;
 #   3. el gate REAL debe fallar (salida ≠ 0) Y por el motivo esperado (firma en su salida). Fallar por otra causa
@@ -28,7 +29,7 @@
 #     (db-gate.sh: tmpfs, --rm); nunca a una base persistente.
 #
 # Requiere Docker, Node/pnpm (store local) y Flutter (lo usa contracts.sh). Sin alguno → salida 2, nunca PASS.
-# Uso: scripts/ci/prove-gates.sh [secreto|float|rls|contrato|dominio|cobertura ...]   (por defecto, los 6)
+# Uso: scripts/ci/prove-gates.sh [secreto|float|rls|contrato|dominio|cobertura ...]   (por defecto, todos)
 # Salida: 0 si todos los gates seleccionados quedan probados (pasan limpios y fallan con su defecto); 1 si alguno no; 2 entorno.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"

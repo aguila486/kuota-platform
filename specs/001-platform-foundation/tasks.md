@@ -351,3 +351,20 @@ Cada incremento se integra mediante commits Conventional en `feature/001-platfor
 - Total: 96 tareas (92 originales + T093–T096 por `/speckit-analyze`). Toda tarea cita rutas exactas, y los campos restringidos citan data-model.md (`Entity.field`).
 - No se crean carpetas fuera de las listadas en plan.md (FR-005).
 - Ninguna tarea crea entidades de negocio, autenticación real (002) ni sincronización offline (011).
+
+## Phase 11: Convergence
+
+> Añadida por `/speckit-converge` (2026-11-23, autorizada en local por el responsable; solo añade tareas). Cada hallazgo
+> se verificó en el código antes de añadirlo. Las tareas que dependen de una decisión lo indican; no se implementan sin
+> ella.
+
+- [ ] T099 CRITICAL: registrar una auditoría duradera de cada ejecución de la purga de idempotencia (operador, hora del servidor, modo inspección o borrado, lotes y filas, correlation id), fuera de la API de tenants, porque `backend/scripts/purge-idempotency.ts` solo escribe un recuento en stdout y `audit_events.tenant_id` es NOT NULL; requiere decidir antes dónde vive la auditoría de plataforma (estructura nueva y migración aditiva) o registrar una decisión explícita de que el log del operador basta, per Constitution III (contradicts)
+- [ ] T100 Ampliar la regla `domain-sin-framework` de `backend/.dependency-cruiser.cjs` para prohibir en `domain/` los módulos de red de Node (`node:http`, `node:https`, `node:net`), clientes HTTP, `src/common/tenant-context` y `src/generated`, aplicar las mismas restricciones a `src/common/money/`, y añadir casos negativos a `backend/test/unit/dependency-rules.spec.ts`, per FR-008 (partial)
+- [ ] T101 Emitir eventos de log estructurados de arranque y apagado (entorno, versión de API, módulos habilitados), un evento de transición de readiness (arriba/abajo) y registrar en nivel `info`, sin PII, los conflictos de idempotencia y de versión, con pruebas, en `backend/src/main.ts`, `backend/src/modules/health/` y `backend/src/common/errors/problem.filter.ts`, per spec: Observability Signals (partial)
+- [ ] T102 Añadir una captura de logs de toda la suite del backend que falle si aparece cualquier valor sensible ficticio conocido, en `backend/vitest.config.ts` (archivo de setup) o en `scripts/ci/backend.sh`, per SC-009 (partial)
+- [ ] T103 Añadir a `scripts/ci/tests/breaking.test.sh` la variante "se elimina una propiedad opcional de una respuesta", comprobar su nivel en oasdiff y hacer que el gate falle con ella (`--fail-on WARN` o lista explícita de comprobaciones en `scripts/contracts/breaking.sh`), per FR-028 y el caso borde "elimina un campo usado por apps desplegadas" (partial)
+- [ ] T104 Ampliar la regla anti-float de TypeScript a toda anotación `number` y literal flotante en `src/common/money/**` y `src/**/domain/**`, y a los DTO financieros de `interface/`, o registrar una aprobación que estreche FR-021 al alcance de R-10; decisión previa del responsable, per FR-021 y Constitution IV (partial)
+- [ ] T105 Añadir la trazabilidad de `backend/prisma/migrations/0002_idempotency_maintenance/`, `infra/docker/postgres/init/02-maintenance-roles.sql`, `backend/scripts/migration-preflight.ts` y el preflight de `scripts/dev/up.sh` (aprobados en las Aprobaciones 3 y 4) a una tarea o a la estructura de `plan.md`, per Constitution I (unrequested)
+- [ ] T106 Añadir a `scripts/ci/prove-gates.sh` un defecto de referencia "archivo del cliente Dart generado modificado a mano" que demuestre que el gate de regeneración de `scripts/ci/contracts.sh` falla, per FR-029 (partial)
+- [ ] T107 Añadir una prueba automática de `scripts/dev/doctor.sh` con binarios simulados en el PATH que demuestre que falla y nombra la versión requerida, en `scripts/dev/tests/`, per US1/AC4 y FR-003 (partial)
+- [ ] T108 Añadir `test/integration/metrics.spec.ts`, `test/integration/meta-compatibility.spec.ts`, `test/integration/not-found.spec.ts` y `test/integration/cors.spec.ts` a `scripts/ci/required-suites.txt`, per Constitution II (pruebas de acceso permitido y denegado de cada excepción) y FR-040 (partial)

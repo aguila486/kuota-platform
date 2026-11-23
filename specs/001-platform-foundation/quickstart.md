@@ -44,7 +44,7 @@ scripts/dev/test-affected.sh main    # solo componentes cambiados vs main
 ```bash
 pnpm --filter backend test:tenancy   # suite de acceso cruzado sobre dev_probe_items (lectura/listado/update/delete/concurrencia ≥50)
 pnpm --filter backend db:check-rls   # falla si alguna tabla con tenant_id no tiene RLS habilitado+forzado
-pnpm --filter backend spike:rls      # spike D-ARC-01: imprime criterios 1–5 de research R-04 con PASS/FAIL
+pnpm --filter backend spike:rls      # spike D-ARC-01: imprime los criterios S1–S8 de ADR-0004 con PASS/FAIL
 ```
 
 Validación manual (opcional):
@@ -83,7 +83,7 @@ scripts/ci/check-no-float.sh                           # regla anti punto flotan
 
 ```bash
 pnpm contracts:lint            # Redocly: valid
-pnpm contracts:breaking main   # oasdiff: sin cambios incompatibles
+pnpm contracts:breaking main   # oasdiff; mientras main no tenga el contrato, informa que no hay base y sale con 0 (T049)
 scripts/contracts/generate-dart-client.sh && git diff --exit-code flutter/packages/api_client   # sin diff (FR-029)
 pnpm --filter backend test:contract   # respuestas reales vs esquema (Ajv)
 ```
@@ -107,8 +107,9 @@ scripts/ci/run-local.sh general    # gitleaks, editorconfig, nombre de rama, act
 scripts/ci/run-local.sh backend
 scripts/ci/run-local.sh contracts
 scripts/ci/run-local.sh flutter
-scripts/ci/prove-gates.sh          # aplica 6 cambios defectuosos de referencia en un worktree temporal
-                                   # y verifica que cada gate falla (secreto, float, RLS, contrato, dependencia, cobertura)
+scripts/ci/prove-gates.sh          # aplica 8 cambios defectuosos de referencia en un worktree temporal
+                                   # y verifica que cada gate falla (secreto, float, RLS, contrato, dependencia, cobertura TS y
+                                   # cobertura Dart: umbral y archivo sin pruebas)
 ```
 
 ### Duración de CI para un cambio solo de documentación (SC-004, T088)

@@ -253,12 +253,11 @@ describe('acceso a las métricas (FR-040, tabla Endpoint Access)', () => {
     expect(await post.text()).toBe('');
   });
 
-  it('el puerto de la API no sirve /metrics (404 sin métricas, también con token)', async () => {
-    // Nota: fuera de /v1 y de /health, Express responde su 404 por defecto (HTML), no problem+json. Es un comportamiento
-    // previo del bootstrap, ajeno a las métricas, registrado como discrepancia en research.md; aquí no se cambia.
+  it('el puerto de la API no sirve /metrics (404 problem+json sin métricas, también con token)', async () => {
     for (const headers of [{}, { authorization: `Bearer ${STRONG_TOKEN}` }]) {
       const res = await fetch(`${url}/metrics`, { headers });
       expect(res.status).toBe(404);
+      expect(res.headers.get('content-type')).toMatch(/^application\/problem\+json/); // H3
       const body = await res.text();
       expect(body).not.toContain('http_server_request_duration_seconds');
       expect(body).not.toContain('# TYPE');

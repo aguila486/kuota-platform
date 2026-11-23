@@ -67,8 +67,15 @@ export class ProblemDetailsFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
-    const req = http.getRequest<IncomingMessage>();
-    const res = http.getResponse<ServerResponse>();
+    this.respond(exception, http.getRequest<IncomingMessage>(), http.getResponse<ServerResponse>());
+  }
+
+  /**
+   * Responde `application/problem+json` para una excepción. La usa `catch` y el último recurso de 404 de `createApp`
+   * (H3: rutas fuera de `/v1` y de `/health` que el manejador 404 de Nest no cubre por el prefijo global), para que toda
+   * respuesta de error tenga el mismo formato, correlación, log y métrica.
+   */
+  respond(exception: unknown, req: IncomingMessage, res: ServerResponse): void {
     const problem = toProblem(exception);
     const correlationId = correlationIdFor(req);
 

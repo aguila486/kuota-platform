@@ -17,6 +17,7 @@ test/integration/idempotency-maintenance.spec.ts
 # Idempotencia y auditoría (US6)
 test/integration/idempotency.spec.ts
 test/integration/audit.spec.ts
+test/integration/audit-service.spec.ts
 test/unit/idempotency/request-hash.spec.ts
 # Dinero (US4, ADR-0007)
 test/unit/money/fixtures.spec.ts

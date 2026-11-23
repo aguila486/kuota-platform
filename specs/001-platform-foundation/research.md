@@ -742,3 +742,23 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
   - **Producción:** sin riesgo, porque hay una sola aplicación por proceso.
   - **Corrección propuesta (bloque aparte):** mover esos bloques a su propio archivo o no cerrar módulos CLS mientras
     otra app sigue activa.
+
+### Corrección del arnés de `audit.spec.ts` (2026-11-23)
+
+- **Causa (verificada en nestjs-cls 7.0.2, `cls-plugin-hooks-host.js`):**
+  - `ClsPluginsHooksHost._instance` es estático y cada constructor lo sustituye por la instancia más reciente;
+  - `onApplicationShutdown()` lo libera si sigue apuntando a sí mismo;
+  - el `TestingModule` de los bloques de servicio (posterior a la app HTTP) pasaba a ser la instancia vigente y, al
+    cerrarse, dejaba `_instance` sin definir, así que el `ClsMiddleware` de la app viva fallaba con 500 en toda ruta.
+- **Corrección:** solo de pruebas. Los bloques "AuditService a nivel de servicio (T077)" y "DELETE a nivel de servicio
+  (T078, R3)" pasan, idénticos byte a byte, a `test/integration/audit-service.spec.ts`, con su propia base efímera.
+  Vitest aísla cada archivo. La configuración CLS de producción no cambia.
+- **Guarda:** al final de `audit.spec.ts`, la app HTTP debe seguir respondiendo (`/health/live` 200 y un `create` 201).
+  Falla con la estructura anterior y pasa con la nueva.
+- **Evidencia:**
+  - 39 títulos de prueba idénticos antes y después, más la guarda;
+  - `audit.spec.ts` (32) y `audit-service.spec.ts` (8): 3 ejecuciones en orden aleatorio cada uno, 5 repeticiones de
+    `audit.spec.ts` y ambos juntos en orden aleatorio, todo en verde;
+  - `audit-service.spec.ts` se añade a las suites obligatorias.
+- **Nota previa superada:** las pruebas de minimización de `origin` siguen en `audit.spec.ts`. Su ubicación ya no
+  depende del orden.

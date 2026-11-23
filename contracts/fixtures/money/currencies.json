@@ -1,0 +1,25 @@
+{
+  "description": "Copia de referencia del catálogo de monedas de Money (ADR-0007). Debe coincidir con el código en backend y Dart.",
+  "currencies": [
+    {
+      "code": "BHD",
+      "minor_units": 3
+    },
+    {
+      "code": "CLF",
+      "minor_units": 4
+    },
+    {
+      "code": "JPY",
+      "minor_units": 0
+    },
+    {
+      "code": "MXN",
+      "minor_units": 2
+    },
+    {
+      "code": "USD",
+      "minor_units": 2
+    }
+  ]
+}

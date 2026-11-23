@@ -441,10 +441,10 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 | Auditoría sin actor: sin `X-Kuota-Dev-Actor`, `app.actor_id` queda vacío y `audit_events.actor_id` es NOT NULL | **Resuelto 2026-11-22** (política aprobada en US6): operación auditada sin actor → 400 `validation-error` antes de escribir (`AuditActorGuard`), si el contrato lo admite |
 | US6 — DELETE de dev-probe no se audita: la política exige 400 sin actor y `deleteDevProbeItem` no declara 400 | **Resuelto 2026-11-23:** 400 aprobado y añadido al contrato; DELETE auditado (`dev_probe.deleted`). Texto original: **Bloqueado (decisión contractual).** Propuesta: añadir `'400': $ref BadRequest` a `delete` en `contracts/openapi/paths/v1-dev-probe-items-by-id.yaml` (aditivo; revisar con `contracts:breaking`). Con la aprobación: `@Audited()` + `dev_probe.deleted` (`label`, `version`) en T078, y su prueba en T073 |
 | US6 — purga masiva de `idempotency_keys` (T079): con FORCE RLS y la política `TO kuota_app`, ni `kuota_app_login` (solo su tenant) ni `kuota_migrator` (0 filas) pueden borrar entre tenants; la Constitución III exige un rol y un módulo separados para operaciones de plataforma | **Resuelto 2026-11-23:** rol `kuota_maintenance` + migración 0002 + `idempotency:purge` (notas de cierre abajo). Texto original: **Bloqueado (decisión de arquitectura y migración).** Propuesta: migración 0002 aditiva con un rol `kuota_maintenance` (NOLOGIN, sin BYPASSRLS) y una política `FOR DELETE TO kuota_maintenance USING (expires_at <= now())` en `idempotency_keys`, más un script que solo ejecuta ese DELETE. Mientras tanto, las claves vencidas se tratan como inexistentes y se eliminan al reutilizarlas |
-| US6 — `audit_events.origin` = `ip-hash:<sha256(IP)>` sin sal: el espacio IPv4 es enumerable, así que el hash es reversible por fuerza bruta | **Pendiente de privacidad** antes de datos reales. Análisis y propuesta: `docs/security/audit-origin-privacy-assessment.md` (sin cambio de algoritmo) |
-| T072 dice que la expiración se fije "con kuota_migrator", pero el migrador no ve filas por FORCE RLS (decisión de 0001) | **T072 desmarcada (2026-11-23)** hasta que se apruebe la enmienda propuesta en `approvals.md`. Las pruebas usan hoy `kuota_app_login` en el contexto del tenant y la identidad de mantenimiento |
-| Recuperación de una 0002 fallida: Prisma la registra como fallida y bloquea nuevos `deploy`; la gobernanza prohíbe `migrate resolve` sin aprobación | Condición de despliegue: aprovisionar los roles antes y verificarlo. Si aun así falla, la recuperación requiere un procedimiento aprobado |
-| ADR-0004 (C4-1) es la fuente única de roles y aún no lista `kuota_maintenance` ni `kuota_maintenance_login` | Alinear con decisión humana; ADR-0004 no se modificó |
+| US6 — `audit_events.origin` = `ip-hash:<sha256(IP)>` sin sal: el espacio IPv4 es enumerable, así que el hash es reversible por fuerza bruta | **Pendiente de privacidad** antes de datos reales. Análisis y propuesta: `docs/security/audit-origin-privacy-assessment.md` (sin cambio de algoritmo). Recomendación (§4): minimizar (sin IP); HMAC versionado solo si 002 lo justifica |
+| T072 dice que la expiración se fije "con kuota_migrator", pero el migrador no ve filas por FORCE RLS (decisión de 0001) | **Resuelto 2026-11-23** (Aprobación 4): T072 enmendada y cerrada. El fixture usa `withTenant` con `kuota_app_login`; la comprobación y la purga, la identidad de mantenimiento |
+| Recuperación de una 0002 fallida: Prisma la registra como fallida y bloquea nuevos `deploy`; la gobernanza prohíbe `migrate resolve` sin aprobación | **Mitigado 2026-11-23:** `make up` ejecuta `scripts/migration-preflight.ts` (solo lectura) antes de migrar y se detiene si falta el rol o tiene atributos inválidos, o si hay una migración fallida registrada. Riesgo residual: un fallo de 0002 por otra causa (p. ej. que el rol cambie entre el preflight y el deploy, o un error de conexión a mitad) sigue dejándola registrada como fallida. Su recuperación requiere un procedimiento aprobado |
+| ADR-0004 (C4-1) es la fuente única de roles y aún no lista `kuota_maintenance` ni `kuota_maintenance_login` | **Resuelto 2026-11-23:** ADR-0004, enmienda 1 (Aprobación 4) |
 
 ## R-19 · Estado y estructura Flutter
 
@@ -592,3 +592,18 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
   - borra por lotes en transacciones independientes, con `lock_timeout` y `statement_timeout`;
   - tiene modo de inspección (`--dry-run`) y sale solo con conteos.
   - Las pruebas usan la credencial real del login de mantenimiento.
+
+### US5a (T066, T067, T095; 2026-11-23)
+
+- **`expectToMatchContract`:** se usa `fetch` sobre la aplicación real, igual que el resto de pruebas HTTP, y no
+  `supertest`. R-14 lo mencionaba, pero no es dependencia del proyecto y no se añadió.
+- **Bundle:** se genera en el momento con Redocly desde `contracts/openapi`, sin definición paralela.
+- **Formatos:** `uuid`, `date-time` y `uri-reference` se registran en el matcher; no se añadió `ajv-formats`. Un
+  formato nuevo en el contrato hace fallar la carga.
+- **Ajv con `strict: false`:** solo porque el documento OpenAPI contiene palabras clave que no son JSON Schema.
+- **Encabezados por `$ref`:** se resuelven (hallazgo al escribir las pruebas negativas: sin esto `Idempotent-Replayed`
+  y `X-Correlation-Id` no se validaban).
+- **Resultado:** todas las respuestas reales probadas cumplen el contrato; no se cambió el contrato ni ninguna
+  respuesta.
+- **500:** ninguna operación lo declara, así que el matcher rechaza un 500 como "código no declarado". T067 cubre los
+  códigos declarados.

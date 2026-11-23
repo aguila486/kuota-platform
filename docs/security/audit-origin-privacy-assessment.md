@@ -87,7 +87,30 @@ Antes de cambiar el algoritmo, decidir si el dato es necesario:
 En 001 solo hay datos sintéticos (dev-probe, local/testing). No hay registros reales que migrar. Antes de 002 conviene
 confirmar que ningún entorno persistente contiene eventos con IPs reales.
 
-## 4. Decisiones pendientes (responsable del proyecto)
+## 4. Recomendación (2026-11-23, Aprobación 4; sin implementar)
+
+- **¿Hay necesidad funcional o contractual de un identificador derivado de la IP?** No.
+  - El contrato OpenAPI no expone `origin` en ninguna operación.
+  - FR-025 exige registrar el *origen*, no la IP.
+  - Ningún flujo de 001 (idempotencia, métricas, autorización) usa `origin`.
+  - El único requisito escrito es la nota de data-model.md (`origin`: "ip-hash / device_id / job"), una decisión de
+    diseño enmendable, no una regla de negocio.
+- **Recomendación: minimizar.**
+  - Para solicitudes HTTP, registrar un origen sin datos de red (por ejemplo `http`, y `device_id` o `job` cuando
+    existan en 002 y 011), y eliminar el derivado de la IP.
+  - Requiere una enmienda de data-model.md y un cambio de `AuditActorGuard`, ambos pendientes de aprobación.
+  - Usar HMAC versionado (§3.2) solo si 002 justifica la IP para seguridad (detección de abuso, investigación de
+    incidentes), con el secreto gestionado según D-ARC-04.
+- **Efecto:**
+  - **Auditoría:** se pierde la correlación por red entre eventos. La correlación por solicitud (`correlation_id`) y
+    por actor se mantiene.
+  - **Soporte:** las investigaciones por IP dependerían de los logs del borde y del proxy, con su propia retención
+    acotada, en lugar de una tabla append-only sin plazo.
+  - **Retención:** al no guardar un dato personal en `audit_events`, que no puede borrarse, el problema de la retención
+    indefinida de IPs desaparece. Si se adopta HMAC, destruir la clave antigua seudonimiza de forma irreversible los
+    registros de esa versión.
+
+## 5. Decisiones pendientes (responsable del proyecto)
 
 1. Minimizar (sin IP) o seudonimizar con HMAC.
 2. Introducir el secreto nuevo y quién lo gestiona (D-ARC-04).

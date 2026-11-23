@@ -14,6 +14,7 @@
     "test": "pnpm -r --if-present test",
     "contracts:lint": "redocly lint --config contracts/openapi/redocly.yaml core",
     "contracts:bundle": "redocly bundle --config contracts/openapi/redocly.yaml core -o contracts/openapi/dist/kuota-core.v1.bundle.yaml",
+    "contracts:bundle:client": "redocly bundle --config contracts/openapi/redocly.yaml client -o contracts/openapi/dist/kuota-core.v1.client.bundle.yaml",
     "contracts:breaking": "scripts/contracts/breaking.sh",
     "contracts:test": "scripts/contracts/tests/lint-rules.test.sh && scripts/contracts/tests/breaking.test.sh"
   },

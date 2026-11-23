@@ -118,7 +118,12 @@ void main(List<String> args) {
     stderr.writeln('uso: dart run tool/coverage_gate.dart <paquete> <lcov> <mínimo-líneas> <mínimo-ramas>');
     exit(2);
   }
-  final packageDir = p.normalize(p.absolute(args[0]));
+  if (!Directory(args[0]).existsSync()) {
+    stderr.writeln('  ✗ no existe el paquete ${args[0]}');
+    exit(2);
+  }
+  // Ruta real (sin enlaces simbólicos): el lcov de la VM usa rutas reales (p. ej. /private/var en macOS, no /var).
+  final packageDir = Directory(args[0]).resolveSymbolicLinksSync();
   final lcovFile = File(args[1]);
   final minLines = double.tryParse(args[2]);
   final minBranches = double.tryParse(args[3]);

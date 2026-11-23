@@ -22,6 +22,7 @@
     "spike:rls": "KUOTA_SPIKE=1 vitest run --reporter=verbose",
     "prisma:generate": "prisma generate --no-hints",
     "db:check-rls": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-rls.ts",
+    "db:migrate:preflight": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/migration-preflight.ts",
     "idempotency:purge": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/purge-idempotency.ts"
   },
   "dependencies": {

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Arranque local de Kuota Core (T030; US1; research R-18):
-#   doctor → PostgreSQL (compose) sano → migraciones con kuota_migrator → backend (pnpm --filter backend dev) →
+#   doctor → PostgreSQL (compose) sano → preflight de migraciones (solo lectura) → migraciones con kuota_migrator →
+#   backend (pnpm --filter backend dev) →
 #   espera de /health/ready.
 # El backend queda en primer plano: Ctrl-C lo detiene (PostgreSQL sigue arriba; `scripts/dev/down.sh` lo detiene).
 # Repetible: si PostgreSQL ya está arriba y las migraciones aplicadas, no cambia nada. Nunca crea ni sobrescribe .env y
@@ -47,6 +48,14 @@ note "API: $API_PORT · PostgreSQL: 127.0.0.1:$PG_PORT"
 step "PostgreSQL (docker compose, proyecto $KUOTA_COMPOSE_PROJECT)"
 kuota_compose up -d --wait --wait-timeout 120 postgres ||
   die "PostgreSQL no quedó sano." "Revisa: docker compose -p $KUOTA_COMPOSE_PROJECT -f infra/docker/compose.yaml logs postgres"
+
+step "Prerrequisitos de migración (preflight de solo lectura)"
+# Antes de migrar: una migración fallida bloquea las siguientes y no se resuelve sin un procedimiento aprobado. El
+# preflight no aprovisiona nada ni imprime credenciales; si falla, no se intenta ninguna migración.
+(cd "$KUOTA_ROOT/backend" && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/migration-preflight.ts) ||
+  die "Faltan prerrequisitos de plataforma para migrar (ver arriba): no se aplicó ninguna migración." \
+    "Ejecuta la acción administrativa indicada (con revisión) y vuelve a lanzar make up." \
+    "Nunca uses migrate resolve, migrate dev, db push ni migrate reset para sortearlo."
 
 step "Migraciones (prisma migrate deploy con kuota_migrator)"
 (cd "$KUOTA_ROOT/backend" && pnpm exec prisma migrate deploy) ||

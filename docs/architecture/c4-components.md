@@ -56,7 +56,7 @@ flowchart TB
     PLT --> TEN
 ```
 
-Regla de dependencias: un módulo solo usa la **interfaz pública** (`<modulo>/public-api.ts`) de otro.
+Regla de dependencias: un módulo solo usa la **interfaz pública** (`<modulo>/index.ts`; decisión G7a de 001) de otro.
 Ningún módulo lee o escribe tablas de otro módulo (Constitución IX). `ledger` no depende de ningún módulo de negocio.
 
 ## 2. Catálogo de módulos

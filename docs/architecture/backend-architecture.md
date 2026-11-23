@@ -43,7 +43,7 @@ backend/
 │           ├── application/       # casos de uso (commands/queries), puertos (interfaces)
 │           ├── infrastructure/    # repositorios Prisma, adaptadores
 │           ├── interface/http/    # controllers, mapeo DTO ↔ comando
-│           ├── public-api.ts      # lo único importable por otros módulos
+│           ├── index.ts           # API pública: lo único importable por otros módulos
 │           └── loans.module.ts
 └── test/
     ├── integration/  contract/  tenancy/   # suite de acceso cruzado
@@ -51,8 +51,13 @@ backend/
 
 Reglas verificadas con `dependency-cruiser` en CI:
 - `modules/*/domain/**` no importa `@nestjs/*`, `@prisma/*`, `node:http`, ni otros módulos.
-- `modules/A/**` solo importa `modules/B/public-api.ts`.
+- `modules/A/**` solo importa `modules/B/index.ts` (API pública del módulo).
+- Un módulo no importa su propio `index.ts` (evita ciclos a través del barrel).
 - `common/**` no importa `modules/**`.
+
+**Decisión (G7a de 001, 2026-11-22):** la API pública de un módulo es su `index.ts` (la convención que ya aplicaba
+dependency-cruiser desde T010). Sustituye al nombre `public-api.ts` usado en versiones anteriores de este documento;
+donde ADR-0002 dice `public-api.ts` debe leerse `index.ts` (corrección de nombre pendiente de aprobación en ese ADR).
 
 ## 3. Contexto de tenant
 

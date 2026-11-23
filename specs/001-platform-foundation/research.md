@@ -273,11 +273,50 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 
 - **Decision**: **openapi-generator `dart-dio`** ejecutado desde su imagen Docker oficial fijada por versión/digest
   (evita instalar Java localmente), salida en `flutter/packages/api_client/lib/src/generated/` (marcada
-  `linguist-generated`). Script `scripts/contracts/generate-dart-client.sh`; CI regenera y falla si hay diff (FR-029).
+  `linguist-generated`, ya declarado en `.gitattributes`). Script `scripts/contracts/generate-dart-client.sh`; CI regenera y falla si hay diff (FR-029).
   **Spike corto incluido**: verificar que el contrato OpenAPI 3.1 (tipos `["string","null"]`, `oneOf` de problem) genera
   código compilable; si no, fallback a **swagger_parser 2.x** (Dart puro) o bajar el contrato a 3.0.3.
 - **Rationale**: generador más maduro y usado; `dio` soporta interceptores (correlation id, `X-App-Version`).
 - **Alternatives considered**: swagger_parser (fallback), cliente escrito a mano (prohibido por Constitución XII).
+- **Resultado del spike (T069, 2026-11-23): APROBADO, sin fallback.**
+  - **Imagen:** `openapitools/openapi-generator-cli:v7.27.0@sha256:949efd0d5cf3c093ef169887b2ebe0879ee2e8074b6476264232ce4fd8ef46d0`
+    (índice multiarquitectura), ejecutada sin red y con el usuario local.
+  - **Entrada:** el bundle 3.1 completo. El generador avisa de que su soporte de 3.1 está "en beta", pero genera sin
+    errores.
+  - **Compilación:** con Flutter 3.50.1 / Dart 3.14.0 tras `build_runner` (built_value), con solo 5 avisos de imports
+    sin usar en código generado.
+  - **Tipado:**
+    - `Money.amount_minor` → `String`: exacto, nunca `double`/`num`, tampoco en web;
+    - `date-time` → `DateTime`;
+    - `["boolean","null"]` → `bool?`;
+    - problem+json → `Problem` con `code` y `correlation_id`;
+    - `X-App-Version` y `X-Correlation-Id` → parámetros tipados.
+  - **Único `num`:** en `api_util.dart`, para codificar parámetros de query; no es un monto.
+- **Generación (T070):**
+  - **Entrada:** el bundle de CLIENTE (API `client` de `redocly.yaml`, `pnpm contracts:bundle:client`), con
+    `filter-out` de `x-kuota-non-production` y `remove-unused-components`. Rutas: `/health/live`, `/health/ready` y
+    `/v1/meta/compatibility`; sin esquemas de dev-probe ni `devTenantContext`. Quedan solo menciones en texto (la
+    descripción del contrato y una etiqueta sin operaciones).
+  - **Posprocesado (parte del script, reproducible):** el código va a `lib/src/generated/`, los imports se reescriben a
+    `package:api_client/src/generated/…` y la biblioteca generada pasa a llamarse `generated.dart`, porque
+    `lib/api_client.dart` es la API pública escrita a mano.
+  - **Comprobaciones del script:** el bundle no tiene operaciones técnicas y el resultado no contiene dev-probe.
+  - **Determinismo:** tres generaciones idénticas byte a byte.
+  - **Dependencias exactas del spike:** dio 5.11.1, built_value 8.13.0, built_collection 5.1.2 (no la 6.0.0, fuera
+    del rango del generador), one_of y one_of_serializer 1.5.0, build_runner 2.16.2 y built_value_generator 8.13.0.
+  - **Análisis:** `lib/src/generated/**` se excluye del análisis estricto (avisos propios del generador); se valida
+    compilándolo y con pruebas.
+  - **Money:** no está en el cliente distribuible porque ninguna operación pública lo usa todavía. Cuando una lo use, el
+    generador lo emitirá como `String` (comprobado en el spike).
+  - **Idempotencia:** ningún interceptor genera `Idempotency-Key`. La clave la aporta quien crea la operación y se
+    conserva en los reintentos (probado). La correlación sí es por solicitud.
+  - **URL por defecto del generador:** `servers` del contrato, `http://localhost:3000`. Nunca se usa: `KuotaApiClient`
+    exige la URL de `AppConfig`.
+- **Pendiente:**
+  - T071: comprobación "regenerado == versionado" en CI. `contracts.sh` ya la ejecuta en local cuando existen el
+    generador y el cliente (T049), pero en GitHub el job `contracts` no tiene Flutter ni FVM: queda para T071 y T050.
+  - Aviso `Can't load Kernel binary` del lanzador global de FVM 3.2.1 (snapshot compilado con el Dart global 3.5.3).
+    Es inofensivo y ajeno al proyecto.
 
 ## R-13 · Lint y compatibilidad del contrato
 

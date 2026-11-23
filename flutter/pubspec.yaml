@@ -65,7 +65,7 @@ melos:
       description: Pruebas de las herramientas del workspace (tool/check_deps.dart, osv_coverage.dart y coverage_gate.dart).
       run: dart test tool/test
     test:financial:
-      description: Pruebas de financial_domain: Money (T063) y fixtures compartidos (T059), en la VM y en Chrome.
+      description: Pruebas de financial_domain (Money de T063 y fixtures compartidos de T059) en la VM y en Chrome.
       exec: dart test
       packageFilters:
         scope: financial_domain

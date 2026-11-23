@@ -13,6 +13,8 @@ services:
       POSTGRES_DB: kuota
       KUOTA_MIGRATOR_PASSWORD: ${KUOTA_MIGRATOR_PASSWORD:?define KUOTA_MIGRATOR_PASSWORD en .env}
       KUOTA_APP_LOGIN_PASSWORD: ${KUOTA_APP_LOGIN_PASSWORD:?define KUOTA_APP_LOGIN_PASSWORD en .env}
+      # Opcional: sin ella, 02-maintenance-roles.sql no crea kuota_maintenance_login (US6, T079).
+      KUOTA_MAINTENANCE_LOGIN_PASSWORD: ${KUOTA_MAINTENANCE_LOGIN_PASSWORD:-}
     ports:
       # Solo loopback: la base de datos local no se expone a la red.
       - "127.0.0.1:${KUOTA_PG_HOST_PORT:-55432}:5432"

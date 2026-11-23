@@ -156,6 +156,52 @@ describe('catálogo tras 0002: roles, privilegios y políticas (T079)', () => {
   });
 });
 
+describe('revisión de regresión del rol de mantenimiento (Aprobación 4)', () => {
+  it('membresía sin opción de administración; SET ROLE solo hacia kuota_maintenance y sin ampliar privilegios; no puede reconceder; FORCE RLS activo', async () => {
+    const { rows } = await admin.query<{ admin: boolean; inherit: boolean; set: boolean }>(
+      `SELECT m.admin_option AS admin, m.inherit_option AS inherit, m.set_option AS set
+         FROM pg_auth_members m
+        WHERE m.member = 'kuota_maintenance_login'::regrole AND m.roleid = 'kuota_maintenance'::regrole`,
+    );
+    expect(rows).toEqual([{ admin: false, inherit: true, set: true }]);
+    const forced = await admin.query<{ rls: boolean; force: boolean }>(
+      "SELECT relrowsecurity AS rls, relforcerowsecurity AS force FROM pg_class WHERE oid = 'kuota.idempotency_keys'::regclass",
+    );
+    expect(forced.rows[0]).toEqual({ rls: true, force: true });
+    await seedKey(TENANTS[0]!, `revision-vigente-${randomUUID()}`, false);
+    await maintenance(async (c) => {
+      // SET ROLE al rol de privilegios: mismos permisos (siguen sin verse filas vigentes ni columnas sensibles).
+      await c.query('SET ROLE kuota_maintenance');
+      expect((await c.query('SELECT 1 FROM kuota.idempotency_keys WHERE expires_at > now()')).rowCount).toBe(0);
+      expect(sqlState(await rejection(c.query('SELECT response_body FROM kuota.idempotency_keys')))).toBe('42501');
+      await c.query('RESET ROLE');
+      for (const sql of [
+        'GRANT kuota_maintenance TO kuota_app_login',
+        'ALTER ROLE kuota_maintenance_login BYPASSRLS',
+        'ALTER TABLE kuota.idempotency_keys NO FORCE ROW LEVEL SECURITY',
+        'DROP POLICY maintenance_delete_expired ON kuota.idempotency_keys',
+        'SET ROLE kuota_app_login',
+      ]) {
+        const state = sqlState(await rejection(c.query(sql)));
+        expect(['42501', '42883'], sql).toContain(state ?? 'sin-error');
+      }
+      // GRANT de un privilegio de tabla sin GRANT OPTION: PostgreSQL solo avisa ("no privileges were granted"); no
+      // concede nada. Se verifica el efecto, no el código.
+      await c.query('GRANT TRUNCATE, DELETE ON kuota.idempotency_keys TO kuota_app_login');
+    });
+    const effective = await admin.query<{ trunc: boolean; maint: boolean }>(
+      `SELECT has_table_privilege('kuota_app_login', 'kuota.idempotency_keys', 'TRUNCATE') AS trunc,
+              pg_has_role('kuota_app_login', 'kuota_maintenance', 'MEMBER') AS maint`,
+    );
+    expect(effective.rows[0]).toEqual({ trunc: false, maint: false });
+    const grantors = await admin.query<{ n: string }>(
+      `SELECT count(*) AS n FROM information_schema.role_table_grants
+        WHERE table_schema = 'kuota' AND grantor LIKE 'kuota_maintenance%'`,
+    );
+    expect(grantors.rows[0]!.n).toBe('0');
+  });
+});
+
 describe('la identidad de mantenimiento con su credencial real: mínimo privilegio en la base', () => {
   it('no lee hashes ni respuestas; solo ve filas vencidas, de todos los tenants, sin fijar tenant', async () => {
     await seedScenario();

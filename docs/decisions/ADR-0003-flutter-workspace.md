@@ -168,6 +168,30 @@ Registro del estado real; **no reaprueba** este ADR ni cambia su estado (*Acepta
 - **iOS:** validación local DIFERIDA por decisión arquitectónica (Aprobación 9 de 001, falta de espacio en disco); no
   probado. Android y Web compilan en el job `flutter`.
 
+## Enmiendas
+
+### Enmienda 1 (2026-11-23) — quinto paquete `app_shell`
+
+- **Origen:** hallazgo C2 de T092 (Constitución IX: código idéntico de arranque en las tres apps). Aprobación 11 de
+  `specs/001-platform-foundation/approvals.md`.
+- **Cambio:** se añade `flutter/packages/app_shell`, capa de **composición** (no un dominio): identidad de la app,
+  providers Riverpod de configuración, cliente y compatibilidad, traducción a estados de arranque, shell y página de
+  inicio. Depende solo de `shared_core`, `api_client` y `design_system`. Cada app depende de `app_shell` y conserva su
+  `main.dart` e identidad. El diagrama de la Decisión se lee con estas aristas adicionales:
+
+```mermaid
+flowchart TD
+  admin[admin_web] --> shell[app_shell]
+  col[collector_mobile] --> shell
+  cli[client_mobile] --> shell
+  shell --> api[api_client]
+  shell --> ds[design_system]
+  shell --> sc[shared_core]
+```
+
+- **Sin cambios:** los cuatro paquetes fundamentales y su propósito; la condición D-ARC-03; `financial_domain` y
+  `shared_core` siguen en Dart puro; el HTTP sigue solo en `api_client` (ahora verificado por `check_deps.dart`).
+
 ## Revisión
 
 Reevaluar Riverpod vs Bloc si la auditoría de interacciones de UI se vuelve requisito regulatorio; reevaluar Flutter Web

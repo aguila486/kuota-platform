@@ -23,6 +23,7 @@ flutter/
     ├── shared_core/
     ├── design_system/
     ├── api_client/           # generado desde contracts/openapi
+    ├── app_shell/            # composición compartida de las apps (Aprobación 11 de 001)
     ├── financial_domain/
     └── offline_sync/         # propuesto (outbox + motor de sync)
 ```
@@ -39,6 +40,7 @@ flutter/
 | `design_system` | Tema, tokens, tipografía, componentes (botones, tarjetas, tablas, montos formateados), recibo de alto contraste, estados de frescura/sync | Lógica de negocio, llamadas HTTP | `shared_core` |
 | `api_client` | Código **generado** (DTOs + cliente HTTP, sin operaciones no productivas), interceptores (auth, `X-App-Version`, `X-Correlation-Id`), mapeo de problem+json | Modelos de dominio, lógica; **generación de `Idempotency-Key`** (la clave se crea con la operación y se reutiliza en reintentos, ADR-0003) | `shared_core` |
 | `financial_domain` | Modelos de dominio (`Money` con `BigInt` según ADR-0007, `Rate`, `Loan`, `Installment`, `SavingsAccount`), **simuladores puros** (calendario de amortización, aplicación de pago, rendimiento proyectado) con los mismos casos golden que el backend | Persistencia, HTTP, UI, Flutter SDK (Dart puro) | `shared_core` |
+| `app_shell` | Composición Flutter compartida por las apps: identidad de la app, providers Riverpod de configuración, cliente y compatibilidad, traducción a estados de arranque, shell y página de inicio con reintento (Aprobación 11 de 001) | Lógica financiera o de negocio, cliente HTTP propio (`dio`/`http`), DTOs propios | `shared_core`, `api_client`, `design_system` |
 | `offline_sync` | Esquema Drift de outbox/snapshot, `CommandOutbox`, `SyncEngine`, máquina de estados, cifrado de BD (SQLCipher) | Pantallas | `shared_core`, `api_client`, `financial_domain` |
 
 Reglas:
@@ -46,6 +48,8 @@ Reglas:
   importan DTOs generados.
 - Los simuladores producen **proyecciones**; la UI las etiqueta como tales. El saldo autoritativo es el del servidor.
 - Duplicar código entre apps está prohibido (Constitución IX): si dos apps lo necesitan, va a un paquete.
+- Cada app depende de `app_shell` y solo declara su identidad y su `main.dart`. Solo `api_client` usa `dio`/`http`.
+  `flutter/tool/check_deps.dart` verifica este grafo (un paquete nuevo sin reglas hace fallar la verificación).
 
 ## 4. Estructura de una app
 

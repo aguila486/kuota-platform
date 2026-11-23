@@ -14,7 +14,8 @@ Construir la fundación técnica verificable del monorepo `kuota-platform`, sin 
 - el mecanismo de contexto de tenant con PostgreSQL RLS forzado (validado por un spike de Prisma 7 + `adapter-pg`);
 - bloques reutilizables de idempotencia, auditoría append-only y dinero exacto, con fixtures numéricos compartidos con Dart;
 - un contrato OpenAPI 3.1 como fuente de verdad, con lint, detección de cambios incompatibles y cliente Dart generado;
-- un workspace Flutter fijado con FVM (pub workspaces + Melos 8), con tres shells de apps y cuatro paquetes;
+- un workspace Flutter fijado con FVM (pub workspaces + Melos 8), con tres shells de apps y cuatro paquetes (más
+  `app_shell`, capa de composición añadida por la Aprobación 11 para resolver C2 de T092);
 - Docker Compose local;
 - CI en GitHub Actions con gates bloqueantes por componente afectado, todo reproducible localmente y sin publicar en remoto.
 
@@ -178,7 +179,7 @@ kuota-platform/
 │   ├── .fvmrc (3.50.1) · pubspec.yaml (workspace + melos) · analysis_options.yaml · config/{local,testing,staging,production}.json
 │   ├── tool/check_deps.dart
 │   ├── apps/{admin_web, collector_mobile, client_mobile}/   # shells: home con nombre/entorno/versión/compatibilidad
-│   └── packages/{shared_core, design_system, api_client (lib/src/generated), financial_domain}
+│   └── packages/{shared_core, design_system, api_client (lib/src/generated), financial_domain, app_shell (Aprobación 11)}
 ├── infra/docker/
 │   ├── compose.yaml                     # postgres:18 (digest), perfil app opcional
 │   └── postgres/init/01-roles.sql

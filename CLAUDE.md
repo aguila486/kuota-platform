@@ -23,7 +23,7 @@ Existen y tienen código y pruebas:
 |---|---|
 | `backend/` | Kuota Core: health, compatibilidad, métricas protegidas, contexto de tenant con RLS forzado, `Money`, idempotencia, auditoría append-only y el endpoint técnico `dev-probe` (solo local/testing) |
 | `contracts/` | `openapi/` (contrato v1 y bundles) y `fixtures/money/` (fixtures compartidos backend/Dart) |
-| `flutter/` | Workspace con `apps/{admin_web,collector_mobile,client_mobile}` (solo pantalla de inicio) y `packages/{api_client,design_system,financial_domain,shared_core}` |
+| `flutter/` | Workspace con `apps/{admin_web,collector_mobile,client_mobile}` (solo pantalla de inicio) y `packages/{api_client,app_shell,design_system,financial_domain,shared_core}` (`app_shell`: arranque compartido) |
 | `infra/docker/` | Docker Compose de PostgreSQL local y scripts de aprovisionamiento de roles |
 | `scripts/` | `ci/` (los mismos scripts que GitHub Actions), `dev/` (arranque y pruebas locales), `contracts/` (bundle, breaking, cliente Dart) |
 | `specs/`, `docs/` | Especificaciones Spec-Kit y documentación |

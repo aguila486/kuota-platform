@@ -31,7 +31,7 @@ datasource db {
 model audit_events {
   id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
   tenant_id       String    @default(dbgenerated("(NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid")) @db.Uuid
-  actor_id        String   
+  actor_id        String
   actor_type      String
   actor_role      String?
   action          String
@@ -41,7 +41,7 @@ model audit_events {
   occurred_at     DateTime  @default(now()) @db.Timestamptz(6)
   device_time     DateTime? @db.Timestamptz(6)
   origin          String
-  correlation_id  String   
+  correlation_id  String
   idempotency_key String?
 
   @@index([tenant_id, occurred_at], map: "audit_events_tenant_occurred_at_idx")

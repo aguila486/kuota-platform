@@ -557,7 +557,7 @@ describe('G2/P1 — migración 0001 con prisma migrate deploy (transacción expl
       rmSync(temp, { recursive: true, force: true });
       await failing.stop();
     }
-  });
+  }, 180_000); // Arranca su propio contenedor dentro de la prueba: con varios contenedores en paralelo supera 15 s.
 
   it('el archivo declara su propia transacción (BEGIN al inicio, COMMIT al final) y no contiene contraseñas', () => {
     const sql = readFileSync(join(MIGRATIONS_DIR, '0001_foundation', 'migration.sql'), 'utf8');

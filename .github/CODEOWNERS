@@ -1,0 +1,45 @@
+# CODEOWNERS de kuota-platform (T053; R-20; FR-036).
+#
+# PENDIENTE DE VALIDACIÓN: `<maintainer-handle>` es un marcador, no un usuario. No se inventa ningún identificador.
+# Se sustituye por el usuario o equipo real de GitHub al publicar el remoto. Hasta entonces la asignación automática
+# de revisores no funciona (GitHub marcará la línea como inválida). Registrado en
+# specs/001-platform-foundation/validation-report.md.
+#
+# Segundo dueño: añadirlo a la derecha en cada línea (p. ej. `<maintainer-handle> @segundo`). Con dos mantenedores
+# se activa la regla de 2 aprobaciones en áreas sensibles (Constitución, excepción de mantenedor único).
+# La última regla que coincide gana: las áreas específicas van después de la regla general.
+
+# Por defecto
+*                                         <maintainer-handle>
+
+# Backend (Kuota Core)
+/backend/                                 <maintainer-handle>
+
+# Áreas sensibles: aislamiento multi-tenant (RLS, withTenant, R3)
+/backend/src/common/tenant-context/       <maintainer-handle>
+/backend/scripts/check-rls.ts             <maintainer-handle>
+
+# Áreas sensibles: dinero (ADR-0007)
+/backend/src/common/money/                <maintainer-handle>
+
+# Áreas sensibles: migraciones, esquema y mantenimiento (ADR-0004)
+/backend/prisma/                          <maintainer-handle>
+/backend/scripts/migration-preflight.ts   <maintainer-handle>
+/backend/scripts/purge-idempotency.ts     <maintainer-handle>
+
+# Contrato de API (fuente de verdad) y fixtures compartidos
+/contracts/                               <maintainer-handle>
+/scripts/contracts/                       <maintainer-handle>
+
+# Paquetes Flutter compartidos (se crean en US7)
+/flutter/packages/                        <maintainer-handle>
+
+# Infraestructura: roles de PostgreSQL, compose
+/infra/                                   <maintainer-handle>
+
+# CI y gobernanza del repositorio
+/.github/                                 <maintainer-handle>
+/scripts/ci/                              <maintainer-handle>
+
+# Constitución (cambios con enmienda formal)
+/.specify/memory/                         <maintainer-handle>

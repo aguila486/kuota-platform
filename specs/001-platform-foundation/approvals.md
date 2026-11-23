@@ -62,3 +62,28 @@ no es una firma: identifica el contenido aprobado mediante los identificadores d
   - P6 y P7: dirección aprobada o fuera de alcance; nada implementado.
 - **Alcance de implementación autorizado tras esta aprobación:** hasta T015 inclusive. **G4 y posteriores no están
   autorizados**; requieren una autorización expresa nueva tras revisar P1–P4.
+
+## Aprobación 3 — 2026-11-23: cierre de US6 (DELETE auditado y mantenimiento de idempotencia)
+
+- **Quién:** responsable del proyecto, mediante mensaje explícito en la sesión de trabajo ("KUOTA — Cierre de US6:
+  DELETE auditado y purga segura de idempotencia").
+- **Autorizado:**
+  - **(A)** añadir 400 `validation-error` al contrato de `deleteDevProbeItem`, solo para la política de actor
+    obligatorio;
+  - **(B)** diseñar e implementar el rol de mantenimiento y la migración aditiva 0002 para purgar claves vencidas. No
+    incluye aplicarla a bases persistentes, credenciales reales, workers ni purgas sobre datos reales;
+  - **(C)** analizar `ip-hash` y proponer HMAC, **sin** cambiar el algoritmo.
+- **No autorizado:** US5, G12, US7 y 002.
+
+### Propuesta de enmienda (PENDIENTE de aprobación): texto de T072
+
+- **Texto vigente:** "Expiración: una fila con `idempotency_keys.expires_at` en el pasado (fijada con `kuota_migrator`)
+  no bloquea…".
+- **Problema:** con FORCE RLS y la política `TO kuota_app` (decisión de implementación de 0001, data-model.md),
+  `kuota_migrator` no ve ni modifica filas. El criterio literal no se puede cumplir sin desactivar FORCE RLS, que está
+  prohibido.
+- **Texto propuesto:** "…(fijada en la preparación de la prueba por `kuota_app_login` dentro del contexto del propio
+  tenant, sin credenciales elevadas; la identidad de mantenimiento de 0002 la ve como vencida)…". El resto de T072 no
+  cambia.
+- **Estado:** T072 queda **sin marcar** hasta que se apruebe la enmienda. Las pruebas ya usan el texto propuesto
+  (`idempotency.spec.ts`, `idempotency-maintenance.spec.ts`).

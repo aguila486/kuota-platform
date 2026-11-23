@@ -208,7 +208,7 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 
 ### Tests for User Story 6 ⚠️
 
-- [X] T072 [P] [US6] Escribir la prueba de integración de idempotencia (US6-1..3):
+- [ ] T072 [P] [US6] Escribir la prueba de integración de idempotencia (US6-1..3):
   - 10 envíos con la misma clave, 5 de ellos en paralelo, producen 1 fila y respuestas equivalentes con `Idempotent-Replayed`.
   - Misma clave con otro body → 422 `idempotency-key-reused`.
   - Primera solicitud aún en curso (simulada tomando desde otra conexión el mismo `pg_advisory_lock` con la función de hash exportada por el módulo) → 409 `idempotency-request-in-progress` con `Retry-After: 1`; al reintentar tras completarse → respuesta original con `Idempotent-Replayed: true` y sin nuevo efecto.
@@ -218,7 +218,7 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
   - La misma clave en 2 tenants produce 2 efectos.
   - Una clave con formato inválido → 400 (data-model.md `idempotency_keys.key`).
   - Archivo: `backend/test/integration/idempotency.spec.ts`.
-- [ ] T073 [P] [US6] Escribir la prueba de auditoría (US6-4, US6-5): cada escritura de dev-probe crea un `audit_event` con los campos de data-model.md (`audit_events.actor_id`, `audit_events.actor_type`, `audit_events.action`, `audit_events.entity_type`, `audit_events.entity_id`, `audit_events.occurred_at`, `audit_events.correlation_id`, `audit_events.idempotency_key`) y sin PII en `audit_events.changes`; `audit_events.actor_role` es `NULL` aunque la solicitud envíe un rol en un encabezado (p. ej. `X-Kuota-Dev-Role`) o en el body; un `UPDATE`/`DELETE` con `kuota_app_login` falla, y también lo bloquea el trigger. Archivo: `backend/test/integration/audit.spec.ts`
+- [X] T073 [P] [US6] Escribir la prueba de auditoría (US6-4, US6-5): cada escritura de dev-probe crea un `audit_event` con los campos de data-model.md (`audit_events.actor_id`, `audit_events.actor_type`, `audit_events.action`, `audit_events.entity_type`, `audit_events.entity_id`, `audit_events.occurred_at`, `audit_events.correlation_id`, `audit_events.idempotency_key`) y sin PII en `audit_events.changes`; `audit_events.actor_role` es `NULL` aunque la solicitud envíe un rol en un encabezado (p. ej. `X-Kuota-Dev-Role`) o en el body; un `UPDATE`/`DELETE` con `kuota_app_login` falla, y también lo bloquea el trigger. Archivo: `backend/test/integration/audit.spec.ts`
 - [ ] T095 [P] [US6] Escribir las pruebas de contrato de idempotencia de `createDevProbeItem` con `expectToMatchContract` (T066): 201 reproducido con `Idempotent-Replayed: true`, 409 `idempotency-request-in-progress` con `Retry-After` (requerido) y 422 `idempotency-key-reused` cumplen el contrato (US5-2 aplicado a US6), en `backend/test/contract/idempotency.contract.spec.ts`
 - [X] T074 [P] [US6] Escribir la prueba de hash canónico: el mismo JSON con distinto orden de claves produce el mismo `idempotency_keys.request_hash` (data-model.md), en `backend/test/unit/idempotency/request-hash.spec.ts`
 
@@ -227,8 +227,8 @@ la implementación y fallen primero. En cada historia, las tareas de prueba prec
 - [X] T075 [US6] Implementar el repositorio de idempotencia vía `withTenant`, en una sola transacción: `pg_try_advisory_xact_lock` sobre el hash de (`idempotency_keys.tenant_id`, `idempotency_keys.key`) → 409 si no se obtiene; tratamiento de filas expiradas como inexistentes (eliminación en la misma transacción); la máquina de estados `idempotency_keys.status` (`IN_PROGRESS` → `COMPLETED`, o eliminación en rollback); `idempotency_keys.expires_at` a 30 días; `idempotency_keys.method` e `idempotency_keys.path` de la solicitud, y que solo almacena en `idempotency_keys.response_status`/`idempotency_keys.response_body` respuestas 2xx/4xx deterministas (data-model.md), en `backend/src/common/idempotency/`
 - [X] T076 [US6] Implementar el decorador e interceptor `@Idempotent()`: reutiliza `IdempotencyKeyPipe` de T042 (data-model.md `idempotency_keys.key`), calcula `idempotency_keys.request_hash` y devuelve la respuesta reproducida, 409 o 422 según data-model.md, en `backend/src/common/idempotency/idempotent.interceptor.ts`
 - [X] T077 [US6] Implementar `AuditService.record()`, que escribe en la misma transacción de `withTenant` los campos de data-model.md: `audit_events.id` (UUIDv7), `audit_events.actor_id` y `audit_events.actor_type` (`DEV` en 001) desde `TenantContext`, `audit_events.actor_role` desde `TenantContext.actorRole` (siempre `NULL` en 001; desde 002, rol de la membresía autenticada, nunca un valor del cliente), `audit_events.action` según la tabla Auditable Events de spec.md, `audit_events.entity_type`, `audit_events.entity_id`, `audit_events.changes` con lista permitida de campos, `audit_events.occurred_at` (hora del servidor), `audit_events.device_time` (nulo en 001), `audit_events.origin`, `audit_events.correlation_id` y `audit_events.idempotency_key`, en `backend/src/common/audit/`
-- [ ] T078 [US6] Aplicar `@Idempotent()` a `createDevProbeItem` y `AuditService` a create, update y delete de dev-probe, en `backend/src/modules/dev-probe/`
-- [ ] T079 [US6] Añadir el script manual de purga de claves expiradas (sin job programado, R-16) y el script `test:idempotency` (con 100 repeticiones), en `backend/scripts/purge-idempotency.ts` y `backend/package.json`
+- [X] T078 [US6] Aplicar `@Idempotent()` a `createDevProbeItem` y `AuditService` a create, update y delete de dev-probe, en `backend/src/modules/dev-probe/`
+- [X] T079 [US6] Añadir el script manual de purga de claves expiradas (sin job programado, R-16) y el script `test:idempotency` (con 100 repeticiones), en `backend/scripts/purge-idempotency.ts` y `backend/package.json`
 
 **Checkpoint**: quickstart.md §4 pasa y se cumple SC-006.
 

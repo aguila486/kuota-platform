@@ -36,11 +36,14 @@ aislamiento físico (contrato o regulación, ver D-BIZ-02) podría migrarse a un
 | `kuota_migrator` | CI/CD de migraciones | Propietario de esquema; DDL. Credencial solo en pipeline de despliegue |
 | `kuota_app` | Privilegios de la API (`NOLOGIN`) | DML en tablas de negocio sujeto a RLS; sin `UPDATE`/`DELETE` en tablas de ledger y auditoría |
 | `kuota_app_login` | Credencial de la API Kuota Core | `LOGIN`, miembro de `kuota_app` |
+| `kuota_maintenance` | Purga manual de claves de idempotencia vencidas (US6, migración 0002) | `NOLOGIN`; `SELECT (tenant_id, key, expires_at)` y `DELETE` solo en `idempotency_keys`, con políticas RLS limitadas a `expires_at <= now()`; sin acceso a otras tablas |
+| `kuota_maintenance_login` | Credencial de la purga (`pnpm --filter backend idempotency:purge`) | `LOGIN`, miembro solo de `kuota_maintenance`; `CONNECTION LIMIT 2` |
 | `kuota_worker` | Proceso worker (ADR-0002, C2-3) | Como `kuota_app` + tablas de cola/outbox; sujeto a RLS |
 | `kuota_platform` | Módulo `platform-admin` (operaciones cross-tenant) | Funciones `SECURITY DEFINER` auditadas; conexión separada |
 | `kuota_readonly` | Réplicas/reportes (futuro) | `SELECT` sujeto a RLS |
 
-Fuente única de roles: ADR-0004.
+Fuente única de roles: ADR-0004. Los roles de mantenimiento (US6, 2026-11-23) aún no figuran en la tabla C4-1 de
+ADR-0004: queda pendiente alinearla (decisión humana, porque ADR-0004 es un ADR aceptado).
 
 ## 4. Políticas SQL de ejemplo
 

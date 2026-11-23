@@ -12,9 +12,20 @@ Alcance: solo estructuras **técnicas** reutilizables. No hay entidades de negoc
 | `kuota_migrator` | sí | no | **sí** | Migraciones (CI/CD, local). Nunca en runtime |
 | `kuota_app` | no | **no** | no | Rol de privilegios de la API |
 | `kuota_app_login` | sí | no | no | Credencial de la API; `IN ROLE kuota_app` |
+| `kuota_maintenance` | no | no | no | Privilegios de mantenimiento: purga de claves de idempotencia vencidas (US6, 0002) |
+| `kuota_maintenance_login` | sí | no | no | Credencial de la purga manual; `IN ROLE kuota_maintenance`; `CONNECTION LIMIT 2` |
 
 Privilegios de `kuota_app`: `SELECT, INSERT, UPDATE, DELETE` en `dev_probe_items` e `idempotency_keys`;
 **solo `SELECT, INSERT`** en `audit_events`; sin DDL; `USAGE` en el esquema `kuota`.
+
+Privilegios de `kuota_maintenance` (migración `0002_idempotency_maintenance`, 2026-11-23):
+- `SELECT (tenant_id, key, expires_at)` y `DELETE` en `idempotency_keys`, nada más;
+- políticas `maintenance_select_expired` y `maintenance_delete_expired`, que solo exponen filas con
+  `expires_at <= now()`;
+- sin acceso a `audit_events` ni a `dev_probe_items`.
+
+Los roles se crean en el aprovisionamiento de plataforma (`infra/docker/postgres/init/02-maintenance-roles.sql`), porque
+`kuota_migrator` es `NOCREATEROLE`. Ese paso debe ejecutarse antes de 0002.
 
 ## Contexto de sesión (por transacción)
 

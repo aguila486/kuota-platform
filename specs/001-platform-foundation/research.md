@@ -439,9 +439,12 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 | Interpretaciones de Money no fijadas en ADR-0007 (`parse` estricto, `allocate` negativo) | Confirmar antes de T063 (Dart) |
 | T062: falta usar Money en dev-probe | **Resuelto 2026-11-22 (G7b)**: `sample_amount` con `parseMoneyField`/`moneyToJson`; T062 completa |
 | Auditoría sin actor: sin `X-Kuota-Dev-Actor`, `app.actor_id` queda vacío y `audit_events.actor_id` es NOT NULL | **Resuelto 2026-11-22** (política aprobada en US6): operación auditada sin actor → 400 `validation-error` antes de escribir (`AuditActorGuard`), si el contrato lo admite |
-| US6 — DELETE de dev-probe no se audita: la política exige 400 sin actor y `deleteDevProbeItem` no declara 400 | **Bloqueado (decisión contractual).** Propuesta: añadir `'400': $ref BadRequest` a `delete` en `contracts/openapi/paths/v1-dev-probe-items-by-id.yaml` (aditivo; revisar con `contracts:breaking`). Con la aprobación: `@Audited()` + `dev_probe.deleted` (`label`, `version`) en T078, y su prueba en T073 |
-| US6 — purga masiva de `idempotency_keys` (T079): con FORCE RLS y la política `TO kuota_app`, ni `kuota_app_login` (solo su tenant) ni `kuota_migrator` (0 filas) pueden borrar entre tenants; la Constitución III exige un rol y un módulo separados para operaciones de plataforma | **Bloqueado (decisión de arquitectura y migración).** Propuesta: migración 0002 aditiva con un rol `kuota_maintenance` (NOLOGIN, sin BYPASSRLS) y una política `FOR DELETE TO kuota_maintenance USING (expires_at <= now())` en `idempotency_keys`, más un script que solo ejecuta ese DELETE. Mientras tanto, las claves vencidas se tratan como inexistentes y se eliminan al reutilizarlas |
-| US6 — `audit_events.origin` = `ip-hash:<sha256(IP)>` sin sal: el espacio IPv4 es enumerable, así que el hash es reversible por fuerza bruta | Proponer HMAC con un secreto de configuración (nuevo parámetro; requiere aprobación) antes de datos reales (002) |
+| US6 — DELETE de dev-probe no se audita: la política exige 400 sin actor y `deleteDevProbeItem` no declara 400 | **Resuelto 2026-11-23:** 400 aprobado y añadido al contrato; DELETE auditado (`dev_probe.deleted`). Texto original: **Bloqueado (decisión contractual).** Propuesta: añadir `'400': $ref BadRequest` a `delete` en `contracts/openapi/paths/v1-dev-probe-items-by-id.yaml` (aditivo; revisar con `contracts:breaking`). Con la aprobación: `@Audited()` + `dev_probe.deleted` (`label`, `version`) en T078, y su prueba en T073 |
+| US6 — purga masiva de `idempotency_keys` (T079): con FORCE RLS y la política `TO kuota_app`, ni `kuota_app_login` (solo su tenant) ni `kuota_migrator` (0 filas) pueden borrar entre tenants; la Constitución III exige un rol y un módulo separados para operaciones de plataforma | **Resuelto 2026-11-23:** rol `kuota_maintenance` + migración 0002 + `idempotency:purge` (notas de cierre abajo). Texto original: **Bloqueado (decisión de arquitectura y migración).** Propuesta: migración 0002 aditiva con un rol `kuota_maintenance` (NOLOGIN, sin BYPASSRLS) y una política `FOR DELETE TO kuota_maintenance USING (expires_at <= now())` en `idempotency_keys`, más un script que solo ejecuta ese DELETE. Mientras tanto, las claves vencidas se tratan como inexistentes y se eliminan al reutilizarlas |
+| US6 — `audit_events.origin` = `ip-hash:<sha256(IP)>` sin sal: el espacio IPv4 es enumerable, así que el hash es reversible por fuerza bruta | **Pendiente de privacidad** antes de datos reales. Análisis y propuesta: `docs/security/audit-origin-privacy-assessment.md` (sin cambio de algoritmo) |
+| T072 dice que la expiración se fije "con kuota_migrator", pero el migrador no ve filas por FORCE RLS (decisión de 0001) | **T072 desmarcada (2026-11-23)** hasta que se apruebe la enmienda propuesta en `approvals.md`. Las pruebas usan hoy `kuota_app_login` en el contexto del tenant y la identidad de mantenimiento |
+| Recuperación de una 0002 fallida: Prisma la registra como fallida y bloquea nuevos `deploy`; la gobernanza prohíbe `migrate resolve` sin aprobación | Condición de despliegue: aprovisionar los roles antes y verificarlo. Si aun así falla, la recuperación requiere un procedimiento aprobado |
+| ADR-0004 (C4-1) es la fuente única de roles y aún no lista `kuota_maintenance` ni `kuota_maintenance_login` | Alinear con decisión humana; ADR-0004 no se modificó |
 
 ## R-19 · Estado y estructura Flutter
 
@@ -552,3 +555,40 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
 - **`changes` usa una lista permitida por entidad** (`AUDIT_ENTITIES`). En dev_probe: `label`, `sample_amount` y
   `version`. Nunca el cuerpo completo ni los encabezados.
 - **`test:idempotency`:** 100 repeticiones del escenario de 10 envíos (5 en paralelo); `pnpm test` ejecuta 10.
+
+### Cierre de US6 (2026-11-23): DELETE auditado y mantenimiento de idempotencia
+
+- **Contrato:** se añadió `'400': BadRequest` a `deleteDevProbeItem`, con la descripción de la política de actor.
+  - oasdiff contra el commit previo del contrato (`47a2ca9`): sin cambios incompatibles.
+  - Contra `main` la comparación sigue omitida: no hay baseline, así que no es una prueba de compatibilidad.
+  - Efecto para los consumidores: un DELETE sin actor (antes 204/404) ahora responde 400.
+- **DELETE auditado:** el repositorio comprueba la existencia y borra con `delete` (DELETE … RETURNING) en la misma
+  transacción; el evento registra el `label` y la `version` borrados. Un P2025 por borrado concurrente se trata como
+  404. Sin `@Idempotent()`, porque el contrato no define `Idempotency-Key` para DELETE.
+- **Diseño de mantenimiento elegido: políticas explícitas y privilegios por columna.** Verificado en PostgreSQL 18:
+  - `SELECT` por columnas no da acceso a `ctid`, `*` ni columnas sensibles;
+  - `FOR UPDATE` exigiría `UPDATE`, que no se concede;
+  - con FORCE RLS, sin política propia el rol no vería nada.
+- **`SECURITY DEFINER`, descartado:**
+  - el propietario natural (`kuota_migrator`) está sujeto a FORCE RLS y vería 0 filas;
+  - hacer propietario a `kuota_maintenance` exigiría que el migrador fuera miembro de ese rol y diera `CREATE` en el
+    esquema;
+  - y concentraría privilegios en una función, que es una superficie de escalamiento.
+  - Una función `SECURITY INVOKER` no añadiría seguridad.
+- **Aprovisionamiento (fuera de Prisma):** `infra/docker/postgres/init/02-maintenance-roles.sql`.
+  - Es re-ejecutable.
+  - El login solo se crea si existe `KUOTA_MAINTENANCE_LOGIN_PASSWORD` (≥ 12 caracteres); es opcional en compose y en
+    `.env.example`.
+  - Los volúmenes ya inicializados no ejecutan `initdb`: antes de aplicar 0002 allí hay que ejecutarlo a mano con
+    revisión.
+- **0002:** transaccional (P1). Verifica que el rol existe, no tiene atributos elevados y no es miembro de
+  `kuota_app`/`kuota_migrator`; si falla, aborta sin cambios. Prisma muestra «current transaction is aborted» en vez
+  del mensaje: el mensaje se ve ejecutando el SQL o en el registro de PostgreSQL.
+- **`db:check-rls`:** acepta solo las dos políticas de mantenimiento con su definición exacta, exige que siga
+  existiendo la política de tenant y verifica atributos, pertenencias y privilegios efectivos (incluidos los heredados
+  de PUBLIC) del rol de mantenimiento y su login.
+- **Purga (`idempotency:purge`):**
+  - verifica la identidad antes de nada;
+  - borra por lotes en transacciones independientes, con `lock_timeout` y `statement_timeout`;
+  - tiene modo de inspección (`--dry-run`) y sale solo con conteos.
+  - Las pruebas usan la credencial real del login de mantenimiento.

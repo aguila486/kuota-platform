@@ -104,6 +104,38 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
   `@prisma/engines` (postinstall, descarga `schema-engine` para `migrate`) quedan permitidos en `allowBuilds`; se
   retiran si T015 elige Kysely. Resultado: S1–S8 en PASS; `prisma migrate deploy` no es transaccional por migración
   (MIG-TX). Detalle, cifras y condiciones en `specs/001-platform-foundation/spike-t014-report.md`. La decisión es de T015.
+- **Implementación (G7a: T038, T039, T043, 2026-11-22)**:
+  - `TenantPrismaService.withTenant(fn)` (`src/common/tenant-context/tenant-prisma.service.ts`) sigue el patrón del
+    spike con nestjs-cls en lugar de un `AsyncLocalStorage` propio (ADR-0002 admite "equivalente propio"; no se añade
+    `@nestjs-cls/transactional`). El tenant sale de `TenantContext`, nunca de un argumento; sin contexto lanza antes de
+    tocar la base. Primera sentencia: `set_config('app.tenant_id'|'app.actor_id'|'app.correlation_id', …, true)`. La
+    transacción activa se guarda bajo un símbolo privado en un contexto CLS hijo (`ifNested: 'inherit'`), así que
+    desaparece al terminar y nadie fuera del servicio puede sustituirla. Anidamiento C2-1: mismo tenant → misma
+    transacción; otro → `TenantContextMismatchError` y rollback total.
+  - **Control nuevo (no estaba en el spike):** antes del COMMIT se comprueba que `app.tenant_id` sigue siendo el del
+    contexto; si un `set_config` crudo lo cambió (riesgo S5), se revierte todo. Límite: no deshace lecturas ya hechas.
+  - `TenantTransaction` = cliente transaccional de Prisma sin `$queryRawUnsafe`, `$executeRawUnsafe` ni
+    `$transaction` (Prisma deja `$transaction` en el cliente transaccional). El `PrismaClient` base es privado.
+    `transaction()` da a los repositorios el cliente activo o lanza `TenantTransactionRequiredError`.
+  - Pool `pg` propio con `DATABASE_URL_APP`; `maxWait` 5 s y `timeout` 15 s por defecto (constantes; no hay variables
+    de entorno nuevas). Un error de conexión inactiva se registra y no termina el proceso.
+  - **Prisma:** el cliente se genera en `src/generated/prisma` (antes `generated/prisma`): el build SWC solo compila
+    `src/`, y el runtime ahora importa el cliente. `prisma:generate` se ejecuta en `dev`, `build`, `typecheck`, `lint` y
+    `test`; el código generado sigue sin versionarse. `@prisma/client` y `@prisma/adapter-pg` pasan a dependencias de
+    runtime (mismas versiones exactas 7.10.1; sin scripts de instalación nuevos, P8 sin cambios). No cambia ningún
+    modelo ni la migración.
+  - Controles estáticos nuevos: eslint prohíbe fuera de `tenant-context` escribir las claves CLS `tenantId`, `actorId`,
+    `actorType` y `actorRole` e importar `establish-context`; dependency-cruiser restringe el cliente Prisma generado y
+    `@prisma/*` a `tenant-context` y `establish-context` a `tenant-context`. Todas las reglas tienen pruebas que las
+    disparan.
+  - `db:check-rls` (`backend/scripts/check-rls.ts`, ejecutado con el soporte nativo de TypeScript de Node 26): además del
+    criterio de T043 (RLS habilitado, forzado y con política, lista blanca vacía) verifica que cada política compare
+    `tenant_id` con `app.tenant_id` y aplique a `kuota_app`, propietario `kuota_migrator`, sin privilegios de PUBLIC,
+    sin `TRUNCATE`/`TRIGGER` para el runtime, y roles de runtime sin superusuario, BYPASSRLS, propiedad ni `CREATE`.
+    La deriva del esquema respecto a las migraciones sigue siendo responsabilidad de las pruebas de P4.
+  - **Estado de P2 (registro; ADR-0004 no se modifica en G7a):** controles estáticos ampliados y probados; `withTenant`
+    definitivo con verificación en runtime antes del COMMIT. Sigue **parcial**: falta el gate de CI (G12) y la fuente
+    confiable de identidad (002); el lint no detecta SQL concatenado ni funciones de base de datos.
 
 ## R-05 · Mecanismo técnico (no productivo) de contexto de tenant
 
@@ -116,6 +148,13 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
   verificable (prueba de configuración).
 - **Alternatives considered**: JWT firmados con llave de desarrollo (adelanta decisiones de 002); fijar tenant por
   variable de entorno (no permite pruebas de acceso cruzado en el mismo proceso).
+- **Implementación (G7a: T038, 2026-11-22)**: `DevTenantGuard` lee solo `X-Kuota-Dev-Tenant` (UUID; se normaliza a
+  minúsculas; el UUID nulo, un valor repetido o malformado → 401 `tenant-context-required` sin reflejarlo) y
+  `X-Kuota-Dev-Actor` (opcional; inválido → 400 `validation-error`). Con el mecanismo deshabilitado responde siempre 401.
+  `actorType = 'DEV'` lo fija el servidor y `actorRole` es siempre `null` (lectura de T038 alineada con data-model:
+  `actor_type = DEV` en 001; `actor_role` NULL). Sin actor, `actorId` es `null` y `app.actor_id` queda vacío: la regla
+  de actor por defecto para la auditoría la decide US6. El contexto es inmutable dentro de la solicitud
+  (`TenantContextConflictError`). Una ruta de datos sin guard falla cerrada (500 `internal-error`).
 
 ## R-06 · Idempotencia
 
@@ -351,7 +390,10 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 | Unificar `index.ts` y `public-api.ts` como API pública de un módulo | Antes de crear módulos con interfaces públicas entre módulos (G7) |
 | `contracts:breaking` omite la comparación (sale con 0) mientras `main` no contiene el contrato | Cuando exista el baseline en `main`, la comparación pasa a ser obligatoria y la ausencia de base debe fallar; se integra en CI en G12 |
 | CI debe consumir `scripts/dev/path-filters.sh` | G12 |
-| La sonda de readiness usa una conexión propia, no el pool de la aplicación | Revisar al implementar T039 |
+| La sonda de readiness usa una conexión propia, no el pool de la aplicación | Revisado en T039: se mantiene (comprueba conexiones nuevas; no comparte la cola del pool de transacciones) |
+| ADR-0002 nombra `public-api.ts`; la decisión de G7a es `index.ts` | Corregir el nombre en ADR-0002 (requiere aprobación) |
+| T042 acepta `sample_amount` (Money) y su validación en la frontera es T062 (US4); `tasks.md` declara US2 independiente de US4 | Antes de autorizar G7b: reordenar o aprobar la dependencia |
+| P2: gate de CI de las reglas de contexto y fuente de identidad real | G12 y 002 |
 
 ## R-19 · Estado y estructura Flutter
 

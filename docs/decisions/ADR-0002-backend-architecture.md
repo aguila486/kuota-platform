@@ -2,7 +2,8 @@
 
 - **Estado:** Aceptado con condiciones (2026-11-22, responsable del proyecto). C2-1 y C2-3 documentados en este ADR;
   **C2-2 (propiedad de tablas, D-ARC-07) debe resolverse antes de 002**. Enmienda 1 (2026-11-22): la API pública de
-  un módulo es su `index.ts` (ver §Enmiendas).
+  un módulo es su `index.ts`. Enmienda 2 (2026-11-22): aclaración de C2-1 sobre dónde viven el contexto y la
+  transacción (ver §Enmiendas).
 - **Fecha:** 2026-11-22
 - **Decisores:** Responsable técnico
 - **Relacionado:** Constitución VIII (Clean Architecture), IX (Modularidad); ADR-0004, ADR-0005; D-ARC-04, D-ARC-07
@@ -72,8 +73,9 @@ Reglas:
 
 ### Propagación transaccional entre módulos (C2-1)
 
-- Un caso de uso abre **una** transacción con `withTenant` (ADR-0004). El cliente transaccional se guarda en CLS
-  (nestjs-cls) y es el único acceso a datos de los repositorios.
+- Un caso de uso abre **una** transacción con `withTenant` (ADR-0004). El contexto de la solicitud (tenant, actor,
+  correlación) se guarda en CLS (nestjs-cls); la transacción activa y su cliente protegido, en un `AsyncLocalStorage`
+  privado de `common/tenant-context` (enmienda 2). Ese cliente es el único acceso a datos de los repositorios.
 - Los servicios de la API pública (`index.ts`, enmienda 1) **no abren transacciones propias**: participan en la del llamador. Si se invocan sin
   transacción activa, la abren mediante `withTenant`.
 - `withTenant` anidado:
@@ -154,6 +156,35 @@ técnico `dev-probe`.
 - **Alcance:** solo el nombre del archivo. No cambia C2-1, C2-3 ni el resto de condiciones. **C2-2 / D-ARC-07 sigue
   pendiente y debe resolverse antes de 002.**
 - **Documentos alineados:** `docs/architecture/backend-architecture.md`, `docs/architecture/c4-components.md`.
+
+### Enmienda 2 (2026-11-22) — aclaración de C2-1: contexto en CLS, propiedad transaccional en ALS privado
+
+- **Texto original de C2-1:** "El cliente transaccional se guarda en CLS (nestjs-cls) y es el único acceso a datos de
+  los repositorios", con la implementación prevista en `@nestjs-cls/transactional` "o un equivalente propio en
+  `common/tenant-context`".
+- **Aclaración:**
+  1. **CLS** guarda el contexto de negocio de la solicitud: tenant, actor, tipo y rol de actor, y correlación. Es la
+     única fuente autorizada de ese contexto, y solo lo escribe `common/tenant-context` (T038).
+  2. Un **`AsyncLocalStorage` privado** de `TenantPrismaService` en `common/tenant-context` guarda la transacción
+     activa, su vínculo de propiedad y el cliente transaccional protegido. No es accesible desde fuera del servicio.
+  3. Las operaciones de base de datos de negocio se obtienen **solo** mediante `withTenant`: el cliente que recibe el
+     callback o el que devuelve `transaction()` dentro de él.
+  4. El cliente transaccional **no puede usarse fuera de la operación propietaria**. Antes de cada ejecución se
+     comprueban la misma cadena asíncrona de `withTenant`, que la transacción esté abierta y dentro de su plazo, y que
+     coincidan el tenant y el actor. Una violación falla de forma cerrada y revierte la transacción.
+  5. `withTenant` anidado con el mismo tenant y en la misma operación **reutiliza** la transacción y el cliente
+     aprobados (tabla de anidamiento sin cambios).
+  6. El `PrismaClient` global no se expone a los repositorios funcionales: es un campo privado del servicio, y el lint
+     y dependency-cruiser prohíben importar el cliente generado fuera de `common/tenant-context`.
+- **Justificación:** el hardening de T039 contra el riesgo R3 de P2 (`docs/security/p2-tenant-context-risk-assessment.md`,
+  §8; commits `1f6057e`, `d19bb14`) movió la propiedad de la transacción del CLS a un ALS privado. Con una clave en el
+  CLS, cualquier código puede leer el almacén completo (`cls.get()`) y sustituir el vínculo. Es el mismo mecanismo en
+  que se basa nestjs-cls y encaja en el "equivalente propio" que C2-1 ya admitía. Aprobada por el responsable del
+  proyecto (instrucción de G7b, 2026-11-22).
+- **Alcance:** solo la redacción de dónde viven el contexto y la transacción. **La intención de C2-1 no cambia:** una
+  transacción por caso de uso, servicios públicos que participan en la del llamador y la misma tabla de anidamiento.
+  No cambia C2-2, C2-3 ni otras decisiones. **P2 (ADR-0004) sigue parcial.**
+- **Documentos alineados:** `docs/architecture/backend-architecture.md`.
 
 ## Revisión
 

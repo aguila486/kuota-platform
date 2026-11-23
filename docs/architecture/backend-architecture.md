@@ -81,6 +81,9 @@ sequenceDiagram
 - `TenantPrismaService` expone `withTenant(fn)` que abre transacción interactiva y fija `set_config(..., true)`
   (local a la transacción, seguro con pooling). Acceso a Prisma fuera de `withTenant` está prohibido por lint.
   Llamadas anidadas y propagación entre módulos: ADR-0002 (C2-1).
+- El contexto de la solicitud (tenant, actor, correlación) vive en CLS; la transacción activa y su cliente protegido, en
+  un `AsyncLocalStorage` privado de `TenantPrismaService`. El cliente solo funciona dentro de la operación `withTenant`
+  que lo abrió (ADR-0002, enmienda 2; mitigación R3 de P2).
 - Si no hay contexto, las políticas RLS evalúan `nullif(current_setting('app.tenant_id', true), '')` → `NULL` → 0 filas.
 - Cliente con varias empresas: el token se emite para **un** tenant seleccionado; cambiar de empresa emite otro token.
 

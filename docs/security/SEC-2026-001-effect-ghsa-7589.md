@@ -130,3 +130,17 @@ Efecto en `pnpm-lock.yaml`:
   6. cerrar esta decisión.
 - **Si una versión de Prisma requiere otra versión de `effect`:** no se fuerza; se reevalúa esta decisión.
 - **Sin efecto en otras decisiones:** no modifica ADR-0002, ADR-0004 ni la Constitución. P2 sigue PARCIAL.
+
+## 8. Seguimiento (2026-11-23, bloque de minimización de `origin`; sin cambios de dependencias)
+
+| Verificación | Resultado |
+|---|---|
+| Override activo | Sí: `pnpm why effect -r` muestra una sola versión, 3.22.1 |
+| Gate OSV | PASS en el job `backend`, con su autoverificación de 19 casos |
+| Código empaquetado en `prisma/build/cli.js` | **Sigue presente** (`effect` 3.20.0 incluido en el bundle). **El override no lo corrige** |
+| ¿Llega al artefacto de la aplicación? | No: `backend/dist` no contiene código de `effect`, y el grafo de módulos del runtime carga 0 módulos de `effect` o `@prisma/config` |
+| ¿Llega a una instalación de producción? | No: `pnpm install --prod --frozen-lockfile` (worktree temporal) instala `@prisma/client` y `@prisma/adapter-pg`, pero no `prisma`, `@prisma/config` ni `effect`. `prisma` es una devDependency, y el peer opcional de `@prisma/client` no se instala con `--prod` |
+| ¿Imagen final? | **No verificable:** todavía no existe ninguna imagen ni Dockerfile del backend (despliegue pendiente, D-ARC-04). La conclusión anterior depende de que esa imagen se construya con `--prod` y sin la CLI. Cualquier entorno que ejecute `prisma migrate deploy` (CI, job de migraciones) sí contiene el código empaquetado |
+| Supuestos de la no explotabilidad | Verificados: no hay llamadas a `TemplateLiteral`/`TemplateLiteralParser` fuera de la propia librería, y la CLI solo procesa archivos versionados. **No verificado:** el comportamiento de futuras versiones de la CLI y las imágenes que se definan en D-ARC-04 |
+| Actualización estable que lo resuelva | **No existe:** `prev` = 7.10.1, `latest` = 8.0.0-rc.35 (prerelease mayor). No se instaló ninguna prerelease |
+| Estado del riesgo | **ABIERTO (residual)**. Revisar al publicarse Prisma 7.11 estable y al definir la imagen de despliegue (debe excluir devDependencies y no llevar la CLI al runtime) |

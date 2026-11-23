@@ -1,11 +1,15 @@
 # Evaluación de privacidad: `audit_events.origin` = `ip-hash:<sha256(IP)>`
 
-- **Fecha:** 2026-11-23 (cierre de US6, feature 001).
-- **Estado:** **PENDIENTE DE PRIVACIDAD. Debe resolverse antes de procesar datos reales (002 o el primer despliegue con
-  usuarios).** Este documento solo analiza el problema y propone una solución. **No cambia el algoritmo** (no está
-  autorizado) ni introduce ningún secreto.
-- **Relacionado:** FR-025, data-model.md `audit_events` (`origin`: "ip-hash / device_id / job"),
-  `docs/security/privacy.md`, `backend/src/common/audit/audit-actor.guard.ts`.
+- **Fecha:** 2026-11-23 (cierre de US6, feature 001). **Actualización (2026-11-23, Aprobación 5):**
+- **Estado:** **RESUELTO POR MINIMIZACIÓN.**
+  - Desde la Aprobación 5, `origin` es el origen lógico `http`. `AuditActorGuard` ya no lee la IP y `AuditService`
+    rechaza cualquier valor fuera de `AUDIT_ORIGINS`.
+  - No se adoptó HMAC.
+  - Los eventos anteriores con `ip-hash:` se conservan intactos (append-only). En 001 solo hay datos sintéticos.
+  - Las secciones 1–4 describen la situación previa y se mantienen como registro del análisis.
+  - Ver §6.
+- **Relacionado:** FR-025, data-model.md `audit_events.origin` (enmienda del 2026-11-23), `docs/security/privacy.md`,
+  `backend/src/common/audit/audit-actor.guard.ts`.
 
 ## 1. Situación actual (código inspeccionado)
 
@@ -116,3 +120,35 @@ confirmar que ningún entorno persistente contiene eventos con IPs reales.
 2. Introducir el secreto nuevo y quién lo gestiona (D-ARC-04).
 3. Lista de proxies de confianza.
 4. Retención de `audit_events` (PENDIENTE-LEGAL).
+
+## 6. Resolución (2026-11-23, Aprobación 5) y hallazgo adicional
+
+- **Decisión 1:** minimizar.
+  - `origin` = `http` para toda operación HTTP auditada. El guard no consulta `req.ip`, `socket.remoteAddress` ni
+    encabezados de proxy.
+  - `AuditService` solo acepta valores de la lista `AUDIT_ORIGINS`.
+  - Pruebas sobre PostgreSQL 18 (`test/integration/audit.spec.ts`, bloque "origin lógico sin datos de red"):
+    - CREATE, UPDATE y DELETE con `X-Forwarded-For`, `X-Real-IP`, `Forwarded`, `X-Client-IP` y `True-Client-IP`
+      guardan `http` y ningún valor de red;
+    - el origen no se puede fijar por body, query ni encabezado;
+    - sin actor → 400 sin escritura;
+    - un evento histórico con `ip-hash:` queda intacto;
+    - un barrido de la tabla no encuentra IP ni hash de IP en los eventos de la aplicación.
+- **Decisiones 2 y 3 (secreto HMAC y lista de proxies):** ya no aplican a `audit_events`.
+  - Si 002 justifica la IP para seguridad, deberá decidirse aparte, fuera de esta tabla.
+- **Decisión 4 (retención de `audit_events`):** sigue PENDIENTE-LEGAL.
+- **Hallazgo adicional (PENDIENTE de decisión; no corregido porque está fuera del alcance autorizado): el log de acceso
+  registra datos de red.**
+  - **Qué se observa:** pino-http usa su serializador de solicitudes por defecto. Cada línea `request completed`
+    incluye `req.remoteAddress`, `req.remotePort` y **todos** los encabezados no redactados, incluidos
+    `X-Forwarded-For` y `X-Real-IP`.
+  - **Evidencia:** verificado el 2026-11-23 levantando el build en local con `GET /health/live` y
+    `X-Forwarded-For: 198.51.100.23`; la línea contenía `remoteAddress: ::ffff:127.0.0.1` y ambos encabezados.
+  - **Alcance:** no afecta a `audit_events`. Es una exposición en los logs, que tienen otra retención (D-ARC-04).
+  - **Propuesta:**
+    - un serializador `req` mínimo (método, ruta sin query y `correlation_id`);
+    - o redactar `req.remoteAddress`, `req.remotePort` y los encabezados de red;
+    - con pruebas en `test/unit/logging/` y `test/integration/app-bootstrap.spec.ts`.
+
+    Requiere autorización.
+

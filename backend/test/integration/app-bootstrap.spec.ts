@@ -126,12 +126,13 @@ describe('bootstrap real de Kuota Core (T025)', () => {
     });
   }
 
-  it('arranca con el registro real de módulos de desarrollo vacío (dev-probe aún no existe)', async () => {
+  it('arranca con el registro real de módulos de desarrollo: dev-probe montado en local (G7b; ausencia: T096)', async () => {
     logs = '';
     app = await createApp(loadConfig(validEnv({ KUOTA_ENV: 'local', KUOTA_DEV_TENANT_CONTEXT: 'enabled' })), {
       logStream,
     });
     await app.listen(0, '127.0.0.1');
-    expect((await fetch(`${await app.getUrl()}/v1/dev/probe-items`)).status).toBe(404);
+    // La ruta existe: sin contexto técnico responde 401 del guard (no 404).
+    expect((await fetch(`${await app.getUrl()}/v1/dev/probe-items`)).status).toBe(401);
   });
 });

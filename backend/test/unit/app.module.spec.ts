@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AppModule, devModulesEnabled } from '../../src/app.module.js';
 import { loadConfig } from '../../src/common/config/load-config.js';
 import { DEV_ONLY_MODULES } from '../../src/dev-modules.js';
+import { DevProbeModule } from '../../src/modules/dev-probe/index.js';
 import { STRONG_TOKEN, validEnv } from '../support/env.js';
 
 describe('AppModule (T025)', () => {
@@ -26,7 +27,7 @@ describe('AppModule (T025)', () => {
       expect(devModulesEnabled(loadConfig(validEnv(env))), JSON.stringify(env)).toBe(expected);
   });
 
-  it('en G5 el registro de módulos de desarrollo está vacío (dev-probe llega en G7)', () => {
-    expect(DEV_ONLY_MODULES).toEqual([]);
+  it('el registro de módulos de desarrollo contiene solo dev-probe (G7b)', () => {
+    expect(DEV_ONLY_MODULES).toEqual([DevProbeModule]);
   });
 });

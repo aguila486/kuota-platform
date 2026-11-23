@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { Client } from 'pg';
+import { getContainerRuntimeClient } from 'testcontainers';
 
 /**
  * PostgreSQL efímero para pruebas de integración (T011, research R-18).
@@ -112,6 +113,71 @@ export interface StartOptions {
   readonly applyMigrations?: boolean;
 }
 
+/** Límite para que Docker confirme que el contenedor terminó tras el SIGKILL (ver `stopAndRemove`). */
+export const CONTAINER_EXIT_TIMEOUT_MS = 120_000;
+
+/**
+ * Desmontaje sin carrera (research: "Testcontainers: 409 en el desmontaje"). `container.stop()` de testcontainers hace
+ * `docker stop -t 0` y, en cuanto Docker responde, `docker rm` sin `force`. Con la VM de Docker saturada, Docker puede
+ * responder al `stop` antes de que el proceso haya terminado de verdad (su espera tras el SIGKILL está acotada), y el
+ * `rm` falla con 409 "container is running". Aquí se separan los pasos: stop (SIGKILL) → esperar a que Docker
+ * confirme `not-running` (acotado; si no llega, error explícito con el estado) → rm con volúmenes. Sin `force`, sin
+ * reintentos y sin ocultar errores.
+ */
+/** Pasos de Docker que necesita el desmontaje (inyectables para probar el orden sin Docker). */
+export interface ContainerTeardownSteps {
+  readonly id: string;
+  /** `docker stop -t 0`, sin eliminar. */
+  stop(): Promise<void>;
+  /** `docker wait --condition not-running`: resuelve cuando Docker confirma que el proceso terminó. */
+  waitNotRunning(): Promise<unknown>;
+  /** Estado actual (`running`, `exited`…), solo para el diagnóstico. */
+  status(): Promise<string>;
+  /** `docker rm -v`, sin `force`. */
+  remove(): Promise<void>;
+}
+
+export async function teardownContainer(
+  steps: ContainerTeardownSteps,
+  exitTimeoutMs: number = CONTAINER_EXIT_TIMEOUT_MS,
+): Promise<void> {
+  await steps.stop();
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      steps.status().then(
+        (status) =>
+          reject(new Error(`El contenedor ${steps.id} sigue en estado ${status} ${exitTimeoutMs} ms después del stop`)),
+        (error: unknown) => reject(error instanceof Error ? error : new Error(String(error))),
+      );
+    }, exitTimeoutMs);
+  });
+  try {
+    await Promise.race([steps.waitNotRunning(), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+  await steps.remove();
+}
+
+export async function stopAndRemove(
+  container: StartedPostgreSqlContainer,
+  exitTimeoutMs: number = CONTAINER_EXIT_TIMEOUT_MS,
+): Promise<void> {
+  const runtime = await getContainerRuntimeClient();
+  const handle = runtime.container.getById(container.getId());
+  await teardownContainer(
+    {
+      id: container.getId(),
+      stop: async () => void (await container.stop({ remove: false })),
+      waitNotRunning: () => handle.wait({ condition: 'not-running' }),
+      status: async () => (await handle.inspect()).State.Status,
+      remove: () => runtime.container.remove(handle, { removeVolumes: true }),
+    },
+    exitTimeoutMs,
+  );
+}
+
 export async function startTestDatabase(options: StartOptions = {}): Promise<TestDatabase> {
   const migratorPassword = randomPassword();
   const appLoginPassword = randomPassword();
@@ -137,6 +203,7 @@ export async function startTestDatabase(options: StartOptions = {}): Promise<Tes
   const appUrl = connectionUrl('kuota_app_login', appLoginPassword, host, port);
   const maintenanceUrl = connectionUrl('kuota_maintenance_login', maintenancePassword, host, port);
 
+  let stopping: Promise<void> | undefined;
   try {
     const appliedMigrations = options.applyMigrations === false ? [] : await applyMigrations(migratorUrl);
     return {
@@ -145,10 +212,20 @@ export async function startTestDatabase(options: StartOptions = {}): Promise<Tes
       maintenanceUrl,
       appliedMigrations,
       superuserUrl: container.getConnectionUri(),
-      stop: async () => void (await container.stop()),
+      // Idempotente, como `container.stop()` de testcontainers: algunas suites detienen la base a mitad de prueba.
+      stop: () => (stopping ??= stopAndRemove(container)),
     };
   } catch (error) {
-    await container.stop();
+    // El error original (p. ej. de las migraciones) es el principal; un fallo del desmontaje no lo oculta.
+    try {
+      await stopAndRemove(container);
+    } catch (teardownError) {
+      throw new AggregateError(
+        [error, teardownError],
+        'Falló el arranque de la base de prueba y también su desmontaje',
+        { cause: teardownError },
+      );
+    }
     throw error;
   }
 }

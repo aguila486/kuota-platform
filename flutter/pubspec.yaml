@@ -60,7 +60,7 @@ melos:
         dirExists: test
         dependsOn: flutter
     test:tool:
-      description: Pruebas de las herramientas del workspace (tool/check_deps.dart).
+      description: Pruebas de las herramientas del workspace (tool/check_deps.dart, osv_coverage.dart y coverage_gate.dart).
       run: dart test tool/test
     test:financial:
       description: Pruebas de financial_domain (Money y fixtures compartidos llegan con T063 y T059).

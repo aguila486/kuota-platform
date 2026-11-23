@@ -6,7 +6,8 @@
 #   2. `flutter pub get --enforce-lockfile`: resolución única del workspace sin cambiar flutter/pubspec.lock; un solo
 #      pubspec.lock y todos los miembros con `resolution: workspace` (check-single-lockfile.sh y su autoprueba, T086).
 #   3. `melos run analyze`, `melos run format` y `melos run test` (todo el workspace: paquetes, apps y tool/).
-#   4. `tool/check_deps.dart` (US7-4, FR-033).
+#   4. `tool/check_deps.dart` (US7-4, FR-033) y cobertura de los paquetes compartidos (check-dart-coverage.sh: líneas y
+#      ramas, financial_domain ≥ 90 %, resto ≥ 80 %; Constitución X).
 #   5. Anti-float Dart (T065): la regla rechaza exactamente las líneas marcadas del archivo defectuoso de referencia
 #      (check-no-float-dart-reference.sh), su autoprueba (tests/check-no-float.test.sh dart) y `check-no-float-dart.sh`
 #      sobre el código real de financial_domain/lib (Money, T063); sin código, PENDIENTE (nunca PASS).
@@ -83,6 +84,8 @@ check "Análisis estático (melos run analyze, --fatal-infos)" melos analyze
 check "Formato (melos run format)" melos format
 check "Pruebas (melos run test: paquetes, apps y tool/)" melos test
 check "Dependencias entre apps y paquetes (tool/check_deps.dart)" dart run tool/check_deps.dart
+check "Cobertura de paquetes compartidos: financial_domain ≥ 90 %, resto ≥ 80 % (líneas y ramas; C1, Constitución X)" \
+  "$KUOTA_ROOT/scripts/ci/check-dart-coverage.sh" "$FLUTTER_DIR"
 check "Anti-float Dart: el archivo defectuoso de referencia se rechaza línea a línea (T065)" \
   "$KUOTA_ROOT/scripts/ci/check-no-float-dart-reference.sh"
 check "Autoverificación de la regla anti-float Dart (scripts/ci/tests/check-no-float.test.sh dart)" \

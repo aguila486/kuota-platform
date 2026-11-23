@@ -16,8 +16,20 @@ administran ahorro programado y operan cobranza en campo (con frecuencia en efec
 | Kuota Collector | collector_mobile | `flutter/apps/collector_mobile/` | App de cobradores, **offline-first** |
 | Kuota Client | client_mobile | `flutter/apps/client_mobile/` | App de clientes finales |
 
-Estado actual: **fase de fundación**. Todavía no hay código de aplicación. Muchas carpetas de la estructura objetivo
-aún no existen y **no deben crearse vacías** solo para completar el árbol; se crean cuando una tarea aprobada lo requiere.
+Estado actual (2026-11-23): **fundación técnica (feature 001) implementada en local, sin funcionalidad de negocio**.
+Existen y tienen código y pruebas:
+
+| Carpeta | Contenido |
+|---|---|
+| `backend/` | Kuota Core: health, compatibilidad, métricas protegidas, contexto de tenant con RLS forzado, `Money`, idempotencia, auditoría append-only y el endpoint técnico `dev-probe` (solo local/testing) |
+| `contracts/` | `openapi/` (contrato v1 y bundles) y `fixtures/money/` (fixtures compartidos backend/Dart) |
+| `flutter/` | Workspace con `apps/{admin_web,collector_mobile,client_mobile}` (solo pantalla de inicio) y `packages/{api_client,design_system,financial_domain,shared_core}` |
+| `infra/docker/` | Docker Compose de PostgreSQL local y scripts de aprovisionamiento de roles |
+| `scripts/` | `ci/` (los mismos scripts que GitHub Actions), `dev/` (arranque y pruebas locales), `contracts/` (bundle, breaking, cliente Dart) |
+| `specs/`, `docs/` | Especificaciones Spec-Kit y documentación |
+
+No existen todavía autenticación (002), entidades de negocio ni sincronización offline. Las carpetas de la estructura
+objetivo que faltan **no deben crearse vacías**; se crean cuando una tarea aprobada lo requiere.
 
 ## 2. Arquitectura seleccionada (resumen)
 
@@ -92,11 +104,32 @@ Extensión `git` (incluida en Spec-Kit) instalada: crea ramas `feature/NNN-slug`
 ## 6. Comandos útiles
 
 ```bash
+make doctor                          # herramientas requeridas (scripts/dev/doctor.sh)
+make up                              # PostgreSQL (Docker Compose) + migraciones + backend; espera /health/ready
+make down                            # detiene backend y PostgreSQL (conserva los datos; nunca `docker compose down -v`)
+make test                            # pruebas de todos los componentes
+make test-affected BASE=main         # pruebas de los componentes afectados
+
+scripts/ci/run-local.sh general|backend|contracts|flutter   # un job de CI, con los mismos scripts que GitHub Actions
+scripts/ci/run-local.sh affected [base]                     # solo los jobs afectados respecto a base (por defecto main)
+scripts/ci/prove-gates.sh            # demuestra que cada gate bloqueante falla con su defecto de referencia (T087)
+
+pnpm --filter backend test:tenancy   # suite de aislamiento multi-tenant (acceso cruzado)
+pnpm --filter backend test:contract  # respuestas reales contra el contrato OpenAPI
+pnpm --filter backend test:idempotency   # idempotencia, 100 repeticiones (SC-006)
+pnpm contracts:lint && pnpm contracts:test   # contrato: lint y detector de cambios incompatibles
+
+cd flutter && fvm dart run melos run test --no-select   # pruebas del workspace Flutter (comandos móviles: flutter/README.md)
+
 specify check                      # Verifica herramientas
 specify integration status         # Verifica integración Claude
 specify extension list             # Extensiones instaladas (git)
 .specify/scripts/bash/check-prerequisites.sh --json   # Estado de la feature activa
 ```
+
+Los jobs pesados (`backend` con Testcontainers y `flutter` con builds de Android) se ejecutan uno tras otro: Docker
+Desktop tiene memoria limitada. La validación local de iOS está diferida (Aprobación 9 de 001): no descargar runtimes
+de iOS ni ejecutar `flutter build ios`.
 
 ## 7. Mapa de documentación
 

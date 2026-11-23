@@ -698,3 +698,47 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
 - **Pendiente:** el log de acceso registra `request errored` con nivel `info` (comportamiento previo, sin cambiar).
 - **Alcance:** los logs de PostgreSQL e infraestructura (C, D) no se han revisado.
 - **Detalle:** `docs/security/http-log-minimization.md`.
+
+### US4 TypeScript: T058, T060 y T065 (2026-11-23)
+
+- **T058:**
+  - **Dependencia:** fast-check **4.11.0**, exacta, como devDependency de `backend`. Es la versión aprobada en la tabla
+    de versiones y en plan.md ("fast-check 4"). Añade solo `pure-rand` 8.4.2. La copia 3.23.2 que llega por
+    `effect` (Prisma) no se usa.
+  - **Archivo:** `backend/test/property/money.property.spec.ts`, con 14 propiedades. Las tres literales de T058
+    (`allocate` conserva la suma, `add`/`subtract` son inversas, `multiply` por 1 es identidad) y otras que ya son
+    reglas de ADR-0007 o de la API de T061: identidad y asociatividad dentro del dominio, ida y vuelta JSON y de
+    presentación, separación de monedas, dominio simétrico sin truncar ni saturar, JSON no canónico, catálogo cerrado,
+    `TOO_MANY_DECIMALS` y reparto simétrico de negativos. No fija ningún redondeo de negocio (D-FIN-02).
+  - **Reproducibilidad:** semilla fija 20261123 y 1000 ejecuciones por propiedad, más ejemplos con los bordes del
+    dominio y valores > 2^53. `KUOTA_FC_SEED`, `KUOTA_FC_PATH` y `KUOTA_FC_RUNS` permiten reproducir y ampliar.
+  - **Mutaciones** (worktree temporal): 4 de 5 detectadas con contraejemplo. Fueron: `allocate` sin repartir el residuo,
+    `subtract` inexacto para montos grandes, JSON vía `number` y dominio saturado. La quinta (`multiply` ignora el
+    exponente del factor) es equivalente para T058: `MoneyDecimal` normaliza el 1 a `"1"`. La rama la cubre
+    `money.spec.ts`.
+- **T060:** `backend/test/fixtures/float-violation.ts.txt`. La extensión `.ts.txt` lo excluye de tsc, ESLint, Vitest y
+  Prettier. Cada infracción (`amount: number`, `parseFloat`, `toFixed`) va marcada con `ANTI-FLOAT`.
+- **T065:**
+  - **`scripts/ci/check-no-float.sh [ts|dart|all]`:**
+    - `ts` exige que la configuración real de ESLint rechace cada línea marcada en `src/common/money/` y en
+      `src/**/domain/` (`backend/scripts/check-no-float.ts`, sin análisis de tipos para ese archivo virtual), y que el
+      lint real pase;
+    - `dart` delega en `scripts/ci/check-no-float-dart.sh`: análisis léxico que ignora comentarios y literales (raw
+      incluidos) y prohíbe `double`, `num` y `toDouble()`. Si el paquete no existe, sale con 3 (PENDIENTE).
+  - **Integración en el job `backend`:** `check-no-float.sh ts` y su autoverificación `tests/check-no-float.test.sh`
+    (21 casos).
+  - **Pendiente de T082 y T050:** la parte Dart se integrará en el job `flutter`. Por eso **T065 queda sin marcar**.
+- **Alcance de la regla TS:** las rutas de R-10 (`common/money`, `**/domain`).
+  - Las capas `interface/`, `application/` e `infrastructure/` no las cubre. Hoy no contienen punto flotante: los
+    `Number(…)` que hay son de configuración, paginación y versiones de app.
+  - El dinero cruza como `bigint`, con `BigInt` en Prisma y `string` en JSON.
+  - Ampliar las rutas es una decisión para 004, cuando existan módulos financieros.
+- **Arnés de `audit.spec.ts` (causa determinada):**
+  - **Qué pasa:** nestjs-cls 7 usa una instancia única de `ClsPluginsHooksHost` por proceso. Al cerrar el
+    `TestingModule` de los bloques "a nivel de servicio", que tiene su propio `ClsModule.forRoot`, el host queda sin
+    inicializar. Desde entonces el `ClsMiddleware` de la app HTTP de la prueba responde 500 en toda ruta, incluida
+    `/health/live`.
+  - **Es determinista y depende del orden.**
+  - **Producción:** sin riesgo, porque hay una sola aplicación por proceso.
+  - **Corrección propuesta (bloque aparte):** mover esos bloques a su propio archivo o no cerrar módulos CLS mientras
+    otra app sigue activa.

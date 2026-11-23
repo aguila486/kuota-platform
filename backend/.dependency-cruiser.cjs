@@ -18,6 +18,59 @@ module.exports = {
       from: { path: '(^|/)domain/' },
       to: { path: '(^|/)(infrastructure|interface)/' },
     },
+    // T100 (FR-008; Constitución VIII: el dominio no depende de "NestJS, Prisma, Flutter o HTTP"): el dominio de cada
+    // módulo y `common/money` (dominio puro, plan.md) solo dependen de lo que se lista aquí. Listas de permitidos, no de
+    // prohibidos: un paquete nuevo, un alias o un import que no resuelve falla por defecto.
+    {
+      name: 'dominio-puro-solo-paquetes-permitidos',
+      comment:
+        'domain/ y common/money solo usan el paquete decimal.js (incluye imports de tipo, reexportaciones e import() dinámico).',
+      severity: 'error',
+      from: { path: ['(^|/)domain/', '^src/common/money/'] },
+      to: {
+        dependencyTypes: ['npm', 'npm-dev', 'npm-optional', 'npm-peer', 'npm-bundled', 'npm-no-pkg', 'npm-unknown'],
+        pathNot: '(^|/)node_modules/decimal[.]js(/|$)',
+      },
+    },
+    {
+      name: 'dominio-puro-sin-dependencias-no-resueltas',
+      comment: 'Un import que no resuelve (alias, paquete no instalado) no puede saltarse las listas de permitidos.',
+      severity: 'error',
+      from: { path: ['(^|/)domain/', '^src/common/money/'] },
+      to: { couldNotResolve: true },
+    },
+    {
+      name: 'dominio-puro-sin-red-ni-sistema',
+      comment:
+        'Sin red, procesos ni sistema de archivos de Node en el dominio (crypto, util y similares sí están permitidos).',
+      severity: 'error',
+      from: { path: ['(^|/)domain/', '^src/common/money/'] },
+      to: {
+        dependencyTypes: ['core'],
+        path: '^(node:)?(http|https|http2|net|tls|dgram|dns|dns/promises|child_process|cluster|worker_threads|inspector|fs|fs/promises|readline|repl|vm)$',
+      },
+    },
+    {
+      name: 'dominio-solo-codigo-propio',
+      comment: 'El dominio de un módulo solo importa su propio dominio y common/money (ni infraestructura ni contexto).',
+      severity: 'error',
+      from: { path: '^src/modules/([^/]+)/domain/' },
+      to: { path: '^src/', pathNot: ['^src/modules/$1/domain/', '^src/common/money/'] },
+    },
+    {
+      name: 'money-solo-codigo-propio',
+      comment: 'common/money solo importa common/money y el tipo de error problem.ts (sin dependencias).',
+      severity: 'error',
+      from: { path: '^src/common/money/' },
+      to: { path: '^src/', pathNot: ['^src/common/money/', '^src/common/errors/problem[.]ts$'] },
+    },
+    {
+      name: 'problema-sin-dependencias',
+      comment: 'problem.ts no depende de nada: así la excepción de common/money no abre un camino a frameworks.',
+      severity: 'error',
+      from: { path: '^src/common/errors/problem[.]ts$' },
+      to: {},
+    },
     {
       name: 'modulos-solo-api-publica',
       comment: 'Un módulo solo importa el index.ts público de otro módulo (Constitución IX, R-11; decisión G7a).',

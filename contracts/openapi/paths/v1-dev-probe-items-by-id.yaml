@@ -64,10 +64,15 @@ delete:
   security:
   - devTenantContext: []
   summary: Elimina un registro del tenant del contexto.
+  description: >-
+    Operación auditada (US6): exige un actor explícito (`X-Kuota-Dev-Actor` en 001). Sin actor, o con un actor
+    inválido, responde 400 `validation-error` sin modificar datos (añadido el 2026-11-23, cierre de US6).
   x-kuota-non-production: true
   responses:
     '204':
       description: Eliminado.
+    '400':
+      $ref: ../responses/BadRequest.yaml
     '401':
       $ref: ../responses/MissingTenantContext.yaml
     '404':

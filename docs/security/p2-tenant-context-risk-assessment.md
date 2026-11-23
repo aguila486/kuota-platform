@@ -60,6 +60,15 @@ añadió a `withTenant` una verificación antes del COMMIT que revierte la trans
   mientras la transacción seguía abierta (p. ej. guardándola en un singleton), esa operación leía como el tenant de la
   transacción. Evidencia original: `tenant-prisma.spec.ts` en `2b3e9d9`; reproducción ampliada en `1f6057e`.
 
+**Actualización de inventario (US6, 2026-11-22):** `common/idempotency/idempotency.repository.ts` añade 3 sentencias raw,
+todas con plantilla parametrizada y sin `app.*`:
+- `SELECT pg_try_advisory_xact_lock(<int8>)`;
+- `DELETE … WHERE key = <param> AND expires_at <= now()`;
+- `INSERT … VALUES (<params>)`.
+
+Las entradas HTTP (clave, hash, método, ruta) llegan solo como parámetros enlazados. dev-probe y `common/audit` no
+usan SQL raw. No cambia la conclusión.
+
 **Conclusión:** no hay ninguna vulnerabilidad de acceso cruzado explotable desde entradas externas. Los riesgos
 restantes requieren código defectuoso o malicioso dentro del servicio, o la credencial de runtime.
 

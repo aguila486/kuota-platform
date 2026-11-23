@@ -438,7 +438,10 @@ GitHub releases). Las versiones exactas se fijan en lockfiles durante la impleme
 | Esquema de fixtures de Money sin `inputs.currency` para `parse` | Aprobar la ampliación del esquema antes de T059 (Dart) |
 | Interpretaciones de Money no fijadas en ADR-0007 (`parse` estricto, `allocate` negativo) | Confirmar antes de T063 (Dart) |
 | T062: falta usar Money en dev-probe | **Resuelto 2026-11-22 (G7b)**: `sample_amount` con `parseMoneyField`/`moneyToJson`; T062 completa |
-| Auditoría sin actor: sin `X-Kuota-Dev-Actor`, `app.actor_id` queda vacío y `audit_events.actor_id` es NOT NULL | Decidir en US6 (T077) antes de auditar escrituras de dev-probe (T078) |
+| Auditoría sin actor: sin `X-Kuota-Dev-Actor`, `app.actor_id` queda vacío y `audit_events.actor_id` es NOT NULL | **Resuelto 2026-11-22** (política aprobada en US6): operación auditada sin actor → 400 `validation-error` antes de escribir (`AuditActorGuard`), si el contrato lo admite |
+| US6 — DELETE de dev-probe no se audita: la política exige 400 sin actor y `deleteDevProbeItem` no declara 400 | **Bloqueado (decisión contractual).** Propuesta: añadir `'400': $ref BadRequest` a `delete` en `contracts/openapi/paths/v1-dev-probe-items-by-id.yaml` (aditivo; revisar con `contracts:breaking`). Con la aprobación: `@Audited()` + `dev_probe.deleted` (`label`, `version`) en T078, y su prueba en T073 |
+| US6 — purga masiva de `idempotency_keys` (T079): con FORCE RLS y la política `TO kuota_app`, ni `kuota_app_login` (solo su tenant) ni `kuota_migrator` (0 filas) pueden borrar entre tenants; la Constitución III exige un rol y un módulo separados para operaciones de plataforma | **Bloqueado (decisión de arquitectura y migración).** Propuesta: migración 0002 aditiva con un rol `kuota_maintenance` (NOLOGIN, sin BYPASSRLS) y una política `FOR DELETE TO kuota_maintenance USING (expires_at <= now())` en `idempotency_keys`, más un script que solo ejecuta ese DELETE. Mientras tanto, las claves vencidas se tratan como inexistentes y se eliminan al reutilizarlas |
+| US6 — `audit_events.origin` = `ip-hash:<sha256(IP)>` sin sal: el espacio IPv4 es enumerable, así que el hash es reversible por fuerza bruta | Proponer HMAC con un secreto de configuración (nuevo parámetro; requiere aprobación) antes de datos reales (002) |
 
 ## R-19 · Estado y estructura Flutter
 
@@ -520,3 +523,32 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
   pendientes).
 - **Prueba de mutación de la suite de aislamiento:** con RLS desactivado en el contenedor efímero, 6 de los 9 casos
   fallan (salida 1). No se versionó.
+
+### Notas de implementación de US6 (idempotencia y auditoría, 2026-11-22)
+
+- **Alcance confirmado por el responsable:** T072–T079 completo, según tasks.md (idempotencia y auditoría). T095 queda
+  fuera porque depende de T066 (US5).
+- **Una transacción:** `@Idempotent()` ejecuta el handler dentro del `withTenant` del repositorio de idempotencia. Nest 12
+  crea el ámbito asíncrono del handler al invocar `next.handle()`, así que el caso de uso y `AuditService` reutilizan esa
+  transacción. Lo demuestra el mismo `xmin` en la clave, la fila de negocio y el evento (`audit.spec.ts`).
+- **Solo se almacenan respuestas 2xx:** es un subconjunto de lo que data-model.md permite (2xx/4xx deterministas).
+  Guardar un 4xx exigiría confirmar la transacción de un comando fallido. Un 400 de validación no registra la clave y
+  el reintento corregido con la misma clave produce el efecto.
+- **Reproducción:** se devuelve el cuerpo almacenado con `Idempotent-Replayed: true`. El estado HTTP sale de
+  `@HttpCode` o del método (POST → 201). Hoy la única operación idempotente es create, siempre 201.
+- **Fila de la clave por `INSERT` parametrizado:** así `created_at` y `expires_at` salen del mismo `now()` de la
+  transacción (expires_at = created_at + 30 días exacto). Prisma rellena `@default(now())` con el reloj de la
+  aplicación. Por la misma razón, `audit_events.occurred_at` usa la hora del servidor de aplicación vía Prisma.
+- **SQL raw nuevo** (todo con plantilla parametrizada, sin `app.*`, en `common/idempotency`):
+  - `pg_try_advisory_xact_lock`;
+  - borrado de la clave vencida con `now()`;
+  - `INSERT` de la clave.
+- **T072:** la expiración se prepara con el superusuario del contenedor efímero. `kuota_migrator` no ve filas por
+  FORCE RLS (decisión de 0001).
+- **Política de actor:** `@Audited()` (`AuditActorGuard`) corre después del guard de contexto y antes de la
+  idempotencia y del handler. Sin actor → 400 `validation-error` (field `X-Kuota-Dev-Actor`). `AuditService` vuelve a
+  comprobarlo antes de PostgreSQL (defensa en profundidad), y PostgreSQL rechaza con `23502` como última barrera. Las
+  lecturas no exigen actor. En producción no existe esta fuente: la identidad llega con 002.
+- **`changes` usa una lista permitida por entidad** (`AUDIT_ENTITIES`). En dev_probe: `label`, `sample_amount` y
+  `version`. Nunca el cuerpo completo ni los encabezados.
+- **`test:idempotency`:** 100 repeticiones del escenario de 10 envíos (5 en paralelo); `pnpm test` ejecuta 10.

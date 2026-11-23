@@ -78,17 +78,43 @@ Se validará con commitlint en CI (tarea de 001). Commits de código referencian
 Definidas por componente en `docs/quality/testing-strategy.md`. Mínimo: lint, tipos, unitarias, integración del
 componente afectado, cobertura (90 % dominio financiero / 80 % resto), contrato y aislamiento multi-tenant.
 
-## 5. Protección de `main` (propuesta lista para aplicar)
+## 5. Protección de `main` (propuesta lista para aplicar; T055, FR-038)
 
-> **Pendiente:** el repositorio aún no tiene remoto en GitHub. Estas reglas se aplican cuando el responsable
-> apruebe crear el remoto; no se crea organización ni repositorio sin autorización.
+> **Pendiente de aplicar:** el repositorio aún no tiene remoto en GitHub. Estas reglas se aplican cuando el responsable
+> apruebe crear el remoto; no se crea organización ni repositorio sin autorización. **Nada de esto está aplicado hoy.**
 
-- Requerir PR antes de merge; prohibir push directo y force-push; prohibir borrado de `main`.
-- Requerir status checks: `backend`, `tenancy-isolation`, `contracts`, `flutter`, `specs`, `security` (según aplique).
-- Requerir 1 aprobación + aprobación de CODEOWNERS; descartar aprobaciones al cambiar el PR.
-- Requerir historial lineal y conversaciones resueltas.
-- Requerir commits firmados (recomendado).
-- Aplicar las reglas también a administradores.
+Configuración de *branch protection* (o *ruleset*) para `main`:
+
+| Regla | Valor |
+|---|---|
+| Requerir PR antes de merge | Sí; prohibido el push directo |
+| Force-push y borrado de `main` | Prohibidos |
+| Historial lineal | Requerido (squash o rebase merge; sin merge commits) |
+| Status checks requeridos | **`CI: resultado`** (job agregador de `.github/workflows/ci.yml`), con "Require branches to be up to date" |
+| Aprobaciones | 1 aprobación + CODEOWNERS (*Require review from Code Owners*); descartar aprobaciones al añadir commits |
+| Conversaciones | Deben estar resueltas |
+| Administradores | Las reglas también les aplican (sin *bypass*) |
+| Commits firmados | Recomendado |
+
+**Por qué solo `CI: resultado` como check requerido:**
+- GitHub da por satisfecho un job requerido que se salta. Por eso se requiere el agregador, que falla si un componente
+  afectado no ejecutó su job o si alguno falló o se canceló (`scripts/ci/ci-result.sh`).
+- Los jobs `general`, `backend`, `contracts` y `flutter` siguen siendo bloqueantes a través de él.
+- `flutter` se informa como PENDIENTE mientras `flutter/` no exista (US7), sin contarlo como aprobado.
+
+**Excepción de mantenedor único** (Constitución v1.2.0):
+- mientras CODEOWNERS tenga un solo mantenedor, las áreas sensibles requieren 1 aprobación humana + checklist
+  constitucional completo + `/speckit-analyze` sin CRITICAL + `CI: resultado` verde;
+- al añadir un segundo mantenedor en `.github/CODEOWNERS` se sube a 2 el número de aprobaciones requeridas en la
+  protección de `main`.
+
+**Acciones externas pendientes** (requieren permisos en GitHub; no se pueden aplicar desde el repositorio):
+1. Crear el remoto (decisión del responsable).
+2. Sustituir `<maintainer-handle>` en `.github/CODEOWNERS` por el usuario o equipo real.
+3. Aplicar la tabla anterior en *Settings → Branches/Rules*.
+4. Verificar la primera ejecución real de `CI` en GitHub Actions.
+5. Fusionar el contrato en `main`: crea el baseline legítimo de `oasdiff` y desbloquea la comparación de
+   compatibilidad, hoy OMITIDA.
 
 ## 6. Manejo de secretos
 

@@ -8,6 +8,15 @@ import { TenantPrismaService } from '../tenant-context/tenant-prisma.service.js'
 export const CLS_AUDIT_ORIGIN = 'auditOrigin';
 
 /**
+ * Orígenes lógicos admitidos en `audit_events.origin` (data-model.md, enmienda del 2026-11-23, Aprobación 5): la VÍA
+ * por la que llegó la operación, nunca datos de red (IP, hash o HMAC de IP, proxies, `X-Forwarded-For`) ni
+ * identificadores de personas o dispositivos. 001 solo tiene la vía HTTP; otras vías (apps, procesos) se añaden con una
+ * enmienda cuando existan (002, 011). No es identidad ni autorización: el actor sale de `TenantContext`.
+ */
+export const AUDIT_ORIGINS = ['http'] as const;
+export type AuditOrigin = (typeof AUDIT_ORIGINS)[number];
+
+/**
  * Lista permitida por tipo de entidad (data-model.md `audit_events.changes`): acciones de la tabla Auditable Events de
  * spec.md y los ÚNICOS campos que `changes` puede contener. Nunca PII en claro ni cuerpos completos de solicitudes.
  * Una entidad nueva se añade aquí con revisión.
@@ -38,7 +47,7 @@ export class AuditActorRequiredError extends Error {
   }
 }
 
-/** Uso indebido de `AuditService` (sin origen o correlación, acción o campos no permitidos). */
+/** Uso indebido de `AuditService` (sin origen o correlación, origen, acción o campos no permitidos). */
 export class AuditRecordError extends Error {
   constructor(message: string) {
     super(message);
@@ -56,8 +65,8 @@ export class AuditRecordError extends Error {
  * - Actor desde `TenantContext`: `actor_id` obligatorio (sin valor por defecto inventado), `actor_type`, y
  *   `actor_role`, que es siempre `NULL` en 001. Ningún encabezado ni campo del body puede fijarlos.
  * - `occurred_at`: hora del servidor de base de datos (DEFAULT `now()`). `device_time`: nulo en 001.
- * - `origin` fijado por `AuditActorGuard` (`ip-hash:<sha256>`), `correlation_id` de la solicitud e `idempotency_key`
- *   de `@Idempotent()` (nulo si la operación no es idempotente).
+ * - `origin` lógico fijado por `AuditActorGuard` (`http`; solo valores de `AUDIT_ORIGINS`), `correlation_id` de la
+ *   solicitud e `idempotency_key` de `@Idempotent()` (nulo si la operación no es idempotente).
  */
 @Injectable()
 export class AuditService {
@@ -73,6 +82,9 @@ export class AuditService {
     if (ctx.correlationId === null) throw new AuditRecordError('Operación auditada sin correlation_id');
     const origin = this.cls.get<string | undefined>(CLS_AUDIT_ORIGIN);
     if (!origin) throw new AuditRecordError('Operación auditada sin origen: falta @Audited() en la ruta');
+    // Defensa en profundidad: solo un origen lógico de la lista; nunca se persiste otro valor (p. ej., una IP).
+    if (!(AUDIT_ORIGINS as readonly string[]).includes(origin))
+      throw new AuditRecordError('Origen de auditoría no admitido');
 
     const entity = AUDIT_ENTITIES[event.entityType];
     if (!(entity.actions as readonly string[]).includes(event.action)) {

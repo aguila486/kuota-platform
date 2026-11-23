@@ -1,11 +1,11 @@
-import type { ExecutionContext } from '@nestjs/common';
+import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { HTTP_CODE_METADATA } from '@nestjs/common/constants.js';
 import { Reflector } from '@nestjs/core';
 import type { ClsService } from 'nestjs-cls';
 import { lastValueFrom, of } from 'rxjs';
 import { describe, expect, it } from 'vitest';
-import { AuditActorGuard, CLS_AUDIT_ORIGIN_PREFIX } from '../../../src/common/audit/audit-actor.guard.js';
-import { CLS_AUDIT_ORIGIN } from '../../../src/common/audit/audit.service.js';
+import { AUDIT_ORIGIN_HTTP, AuditActorGuard } from '../../../src/common/audit/audit-actor.guard.js';
+import { AUDIT_ORIGINS, CLS_AUDIT_ORIGIN } from '../../../src/common/audit/audit.service.js';
 import { KuotaProblemError } from '../../../src/common/errors/problem.js';
 import {
   IdempotencyRepository,
@@ -131,14 +131,65 @@ describe('IdempotencyRepository: ramas defensivas', () => {
   });
 });
 
-describe('AuditActorGuard', () => {
-  it('sin dirección remota usa un origen fijo hasheado; nunca guarda la IP en claro', () => {
+describe('AuditActorGuard: origen lógico sin datos de red (minimización, Aprobación 5)', () => {
+  const guardWith = (actorId: string | null) => {
     const stored: Record<string, unknown> = {};
     const cls = { set: (k: string, v: unknown) => (stored[k] = v) } as unknown as ClsService;
-    const context = { require: () => ({ actorId: 'dev:x' }) } as unknown as TenantContext;
-    const guard = new AuditActorGuard(context, cls);
-    const { context: exec } = httpContext({ socket: {} });
-    expect(guard.canActivate(exec)).toBe(true);
-    expect(String(stored[CLS_AUDIT_ORIGIN])).toMatch(new RegExp(`^${CLS_AUDIT_ORIGIN_PREFIX}[0-9a-f]{64}$`));
+    const context = { require: () => ({ actorId }) } as unknown as TenantContext;
+    return { guard: new AuditActorGuard(context, cls), stored };
+  };
+  // Solicitud con todas las fuentes de red posibles; si el guard la leyera, el acceso quedaría registrado.
+  const networkRequest = () => {
+    const touched: string[] = [];
+    const request = {
+      ip: '203.0.113.7',
+      ips: ['198.51.100.23', '203.0.113.7'],
+      socket: { remoteAddress: '2001:db8::bad:cafe', remotePort: 51234 },
+      headers: {
+        'x-forwarded-for': '198.51.100.23, 203.0.113.7',
+        'x-real-ip': '198.51.100.23',
+        forwarded: 'for="[2001:db8::1]";proto=https',
+      },
+    };
+    const execution = new Proxy({} as ExecutionContext, {
+      get: (_target, prop) => {
+        touched.push(String(prop));
+        return () => ({ getRequest: () => request });
+      },
+    });
+    return { execution, touched };
+  };
+
+  it('con actor fija origin = "http" y no consulta la solicitud (ni req.ip, ni socket, ni encabezados de proxy)', () => {
+    const { guard, stored } = guardWith('dev:x');
+    const { execution, touched } = networkRequest();
+    // Nest invoca el guard con el ExecutionContext; la interfaz lo admite aunque la implementación no lo use.
+    expect((guard as CanActivate).canActivate(execution)).toBe(true);
+    expect(stored[CLS_AUDIT_ORIGIN]).toBe(AUDIT_ORIGIN_HTTP);
+    expect(stored[CLS_AUDIT_ORIGIN]).toBe('http');
+    expect(touched).toEqual([]);
+  });
+
+  it('el origen es una constante: no contiene IPv4, IPv6, ip-hash ni un hash hexadecimal', () => {
+    const { guard, stored } = guardWith('dev:x');
+    guard.canActivate();
+    const origin = String(stored[CLS_AUDIT_ORIGIN]);
+    expect(origin).not.toMatch(/\d{1,3}(\.\d{1,3}){3}/);
+    expect(origin).not.toMatch(/[0-9a-f]{0,4}:[0-9a-f]{0,4}:/i);
+    expect(origin).not.toMatch(/ip-hash|ip-hmac|[0-9a-f]{32}/);
+    expect(AUDIT_ORIGINS).toEqual(['http']);
+  });
+
+  it('sin actor → 400 validation-error y no fija origen: el origen no sustituye a la identidad', () => {
+    const { guard, stored } = guardWith(null);
+    let error: unknown;
+    try {
+      guard.canActivate();
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(KuotaProblemError);
+    expect(error).toMatchObject({ code: 'validation-error' });
+    expect(stored).toEqual({});
   });
 });

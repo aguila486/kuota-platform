@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { ClsModule, ClsService } from 'nestjs-cls';
@@ -148,8 +148,7 @@ describe('eventos de dev-probe (T073, US6-4)', () => {
       idempotency_key: key,
     });
     expect(String(event!['id'])).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7/);
-    expect(String(event!['origin'])).toMatch(/^ip-hash:[0-9a-f]{64}$/);
-    expect(String(event!['origin'])).not.toContain('127.0.0.1');
+    expect(event!['origin']).toBe('http');
     expect(Math.abs(Date.now() - new Date(event!['occurred_at'] as string).getTime())).toBeLessThan(60_000);
     // Atomicidad (R-07): la fila de negocio y su evento tienen el mismo xmin → la misma transacción.
     const { rows } = await admin.query<{ xmin: string }>(
@@ -174,6 +173,7 @@ describe('eventos de dev-probe (T073, US6-4)', () => {
     expect(updated[0]).toMatchObject({
       actor_id: 'dev:beto',
       changes: { label: { before: 'v1', after: 'v2' }, version: { before: 1, after: 2 } },
+      origin: 'http',
       idempotency_key: null,
       correlation_id: res.correlation,
     });
@@ -271,6 +271,7 @@ describe('DELETE auditado (T073, T078; contrato con 400 desde 2026-11-23)', () =
       entity_type: 'dev_probe',
       entity_id: id,
       changes: { label: 'a-borrar-v2', version: 2 },
+      origin: 'http',
       correlation_id: res.correlation,
       idempotency_key: null,
     });
@@ -367,7 +368,7 @@ describe('DELETE auditado (T073, T078; contrato con 400 desde 2026-11-23)', () =
     for (const { tenant, id } of ids) {
       const deleted = (await eventsOf(id)).filter((e) => e['action'] === 'dev_probe.deleted');
       expect(deleted).toHaveLength(1);
-      expect(deleted[0]).toMatchObject({ tenant_id: tenant, actor_id: `dev:${tenant.slice(0, 4)}` });
+      expect(deleted[0]).toMatchObject({ tenant_id: tenant, actor_id: `dev:${tenant.slice(0, 4)}`, origin: 'http' });
     }
     const target = String((await create(A, { label: 'carrera' })).body['id']);
     const race = await Promise.all(Array.from({ length: 5 }, () => call('DELETE', `${PATH}/${target}`, { tenant: A })));
@@ -475,7 +476,7 @@ describe('integridad transaccional (R-07)', () => {
     for (const r of results) {
       const [event, ...rest] = await eventsOf(r.id);
       expect(rest).toEqual([]);
-      expect(event).toMatchObject({ tenant_id: r.tenant, actor_id: r.actor });
+      expect(event).toMatchObject({ tenant_id: r.tenant, actor_id: r.actor, origin: 'http' });
     }
   }, 60_000);
 });
@@ -566,6 +567,144 @@ describe('PostgreSQL: append-only y aislamiento de audit_events (US6-5)', () => 
   });
 });
 
+describe('origin lógico sin datos de red (minimización de audit_events.origin, Aprobación 5)', () => {
+  // Valores de red distinguibles que un cliente o un proxy podrían enviar, más los que ve el socket en esta prueba.
+  const NETWORK = {
+    'x-forwarded-for': '198.51.100.23, 203.0.113.7',
+    'x-real-ip': '198.51.100.24',
+    forwarded: 'for="[2001:db8::cafe]";proto=https',
+    'x-client-ip': '203.0.113.99',
+    'true-client-ip': '2001:db8::beef',
+    'x-kuota-origin': 'device:telefono-de-ana',
+  };
+  const sha256 = (value: string) => createHash('sha256').update(value, 'utf8').digest('hex');
+  const FORBIDDEN = [
+    '198.51.100.23',
+    '203.0.113.7',
+    '198.51.100.24',
+    '2001:db8::cafe',
+    '203.0.113.99',
+    '2001:db8::beef',
+    'telefono-de-ana',
+    '127.0.0.1',
+    'ip-hash',
+    'ip-hmac',
+    ...['127.0.0.1', '::ffff:127.0.0.1', '::1', 'desconocida', '198.51.100.23', '203.0.113.7'].map(sha256),
+  ];
+  const expectNoNetworkData = (row: Json) => {
+    const text = JSON.stringify(row);
+    for (const value of FORBIDDEN) expect(text, value).not.toContain(value);
+  };
+
+  it('CREATE, UPDATE y DELETE por HTTP con encabezados de red/proxy → origin = "http" y ningún dato de red en el evento', async () => {
+    const tenant = randomUUID();
+    const created = await create(tenant, { label: 'minimizado' }, 'dev:ana', randomUUID(), NETWORK);
+    expect(created.status, created.text).toBe(201);
+    const id = String(created.body['id']);
+    const updated = await call('PATCH', `${PATH}/${id}`, {
+      tenant,
+      actor: 'dev:beto',
+      body: { label: 'minimizado-2', version: 1 },
+      headers: NETWORK,
+    });
+    expect(updated.status, updated.text).toBe(200);
+    const deleted = await call('DELETE', `${PATH}/${id}`, { tenant, actor: 'dev:carla', headers: NETWORK });
+    expect(deleted.status, deleted.text).toBe(204);
+
+    const all = await eventsOf(id);
+    expect(all.map((e) => [e['action'], e['actor_id'], e['correlation_id']])).toEqual([
+      ['dev_probe.created', 'dev:ana', created.correlation],
+      ['dev_probe.updated', 'dev:beto', updated.correlation],
+      ['dev_probe.deleted', 'dev:carla', deleted.correlation],
+    ]);
+    for (const event of all) {
+      expect(event).toMatchObject({ tenant_id: tenant, actor_type: 'DEV', origin: 'http' });
+      expectNoNetworkData(event);
+    }
+  });
+
+  it('el origen no se puede fijar por body, query ni encabezado: siempre es el lógico del servidor', async () => {
+    const tenant = randomUUID();
+    const viaBody = await create(tenant, { label: 'o', origin: 'job' });
+    expect(viaBody.status).toBe(400);
+    expect(await countAll('audit_events', tenant)).toBe(0);
+    const viaQuery = await call('POST', `${PATH}?origin=job&origin=203.0.113.7`, {
+      tenant,
+      actor: 'dev:ana',
+      body: { label: 'via-query' },
+      headers: { 'idempotency-key': randomUUID(), 'x-kuota-origin': 'job', 'x-audit-origin': '203.0.113.7' },
+    });
+    expect(viaQuery.status).toBe(201);
+    const [event] = await eventsOf(String(viaQuery.body['id']));
+    expect(event!['origin']).toBe('http');
+    expectNoNetworkData(event!);
+  });
+
+  it('datos de red u origen sin actor no sirven como identidad: 400 sin escribir negocio, clave ni evento', async () => {
+    const tenant = randomUUID();
+    for (const method of ['POST', 'DELETE'] as const) {
+      const res =
+        method === 'POST'
+          ? await create(tenant, { label: 'sin-actor' }, null, randomUUID(), NETWORK)
+          : await call('DELETE', `${PATH}/${randomUUID()}`, { tenant, actor: null, headers: NETWORK });
+      expect(res.status, method).toBe(400);
+      expect(res.body['code']).toBe('validation-error');
+      expect(res.text).not.toContain('198.51.100.23');
+    }
+    expect(await countAll('dev_probe_items', tenant)).toBe(0);
+    expect(await countAll('idempotency_keys', tenant)).toBe(0);
+    expect(await countAll('audit_events', tenant)).toBe(0);
+  });
+
+  it('reproducción idempotente con otros encabezados de red: misma respuesta, sin evento nuevo', async () => {
+    const tenant = randomUUID();
+    const key = randomUUID();
+    const first = await create(tenant, { label: 'replay' }, 'dev:ana', key, NETWORK);
+    const replay = await create(tenant, { label: 'replay' }, 'dev:ana', key, {
+      'x-forwarded-for': '192.0.2.200',
+    });
+    expect(replay.status).toBe(201);
+    expect(replay.body).toEqual(first.body);
+    const all = await eventsOf(String(first.body['id']));
+    expect(all).toHaveLength(1);
+    expect(all[0]!['origin']).toBe('http');
+    expect(JSON.stringify(all[0])).not.toContain('192.0.2.200');
+  });
+
+  it('los eventos históricos no se reescriben: un evento previo con ip-hash permanece intacto (append-only)', async () => {
+    const tenant = randomUUID();
+    const legacy = `ip-hash:${sha256('192.0.2.1')}`;
+    await asTenantSql(db.appUrl, tenant, (c) =>
+      c.query(
+        "INSERT INTO kuota.audit_events (actor_type, action, entity_type, entity_id, origin) VALUES ('DEV', 'dev_probe.created', 'dev_probe', 'historico', $1)",
+        [legacy],
+      ),
+    );
+    const before = await events('tenant_id = $1', [tenant]);
+    await create(tenant, { label: 'nuevo-tras-historico' });
+    const after = await events('tenant_id = $1', [tenant]);
+    expect(after).toHaveLength(2);
+    expect(after.find((e) => e['entity_id'] === 'historico')).toEqual(before[0]);
+    expect(after.filter((e) => e['entity_id'] !== 'historico').map((e) => e['origin'])).toEqual(['http']);
+  });
+
+  it('barrido: ningún evento escrito por la aplicación por HTTP en esta suite contiene IP ni hash de IP', async () => {
+    const { rows } = await admin.query<{ origin: string; n: string }>(
+      "SELECT origin, count(*)::text AS n FROM kuota.audit_events WHERE entity_id <> 'historico' GROUP BY origin",
+    );
+    // `test` y `d` son filas sembradas por SQL directo en pruebas de PostgreSQL; el resto, de la aplicación.
+    expect(rows.map((r) => r.origin).sort()).toEqual(expect.arrayContaining(['http']));
+    for (const { origin } of rows) expect(['http', 'test', 'd'], origin).toContain(origin);
+    const leaked = await admin.query(
+      `SELECT count(*)::int AS n FROM kuota.audit_events
+        WHERE entity_id <> 'historico'
+          AND (origin ~ '\\d{1,3}(\\.\\d{1,3}){3}' OR origin ~* '[0-9a-f]{0,4}:[0-9a-f]{0,4}:' OR origin ~* '[0-9a-f]{32}'
+               OR origin LIKE 'ip-h%')`,
+    );
+    expect(leaked.rows[0]).toEqual({ n: 0 });
+  });
+});
+
 describe('AuditService a nivel de servicio (T077)', () => {
   let moduleRef: TestingModule;
   let pool: Pool;
@@ -604,7 +743,7 @@ describe('AuditService a nivel de servicio (T077)', () => {
     tenant: string,
     actor: string | null,
     fn: () => Promise<T>,
-    origin: string | null = 'ip-hash:test',
+    origin: string | null = 'http',
   ): Promise<T> {
     return cls.run(() => {
       establishTenantContext(cls, { tenantId: tenant, actorId: actor, actorType: 'DEV' });
@@ -624,10 +763,25 @@ describe('AuditService a nivel de servicio (T077)', () => {
 
   it('sin actor, sin origen, acción o campos no permitidos → error antes de llegar a PostgreSQL', async () => {
     const tenant = randomUUID();
-    const inTx = (actor: string | null, e: unknown, origin: string | null = 'ip-hash:test') =>
+    const inTx = (actor: string | null, e: unknown, origin: string | null = 'http') =>
       rejection(operation(tenant, actor, () => tenantPrisma.withTenant(() => audit.record(e as typeof event)), origin));
     expect((await inTx(null, event)) as Error).toMatchObject({ name: 'AuditActorRequiredError' });
     expect(await inTx('dev:svc', event, null)).toBeInstanceOf(AuditRecordError);
+    // Solo orígenes lógicos de AUDIT_ORIGINS: un valor de red o derivado de él nunca llega a PostgreSQL.
+    for (const origin of [
+      '203.0.113.7',
+      '2001:db8::1',
+      '::ffff:127.0.0.1',
+      `ip-hash:${'a'.repeat(64)}`,
+      `ip-hmac:v1:${'b'.repeat(64)}`,
+      'HTTP',
+      'http ',
+      'job',
+    ]) {
+      const error = await inTx('dev:svc', event, origin);
+      expect(error, origin).toBeInstanceOf(AuditRecordError);
+      expect((error as Error).message, origin).not.toContain(origin.trim() || origin);
+    }
     expect(await inTx('dev:svc', { ...event, action: 'dev_probe.inventado' })).toBeInstanceOf(AuditRecordError);
     expect(await inTx('dev:svc', { ...event, changes: { label: 'x', password: 'secreto' } })).toBeInstanceOf(
       AuditRecordError,
@@ -672,7 +826,7 @@ describe('AuditService a nivel de servicio (T077)', () => {
     await operation(tenant, 'dev:svc', () => tenantPrisma.withTenant(() => audit.record(event)));
     expect((await events('tenant_id = $1', [tenant]))[0]).toMatchObject({
       actor_id: 'dev:svc',
-      origin: 'ip-hash:test',
+      origin: 'http',
     });
   });
 });
@@ -715,7 +869,7 @@ describe('DELETE a nivel de servicio: actor cambiado y cliente retenido (T078, R
     cls.run(() => {
       establishTenantContext(cls, { tenantId: tenant, actorId: 'dev:svc', actorType: 'DEV' });
       cls.set(CLS_CORRELATION_ID, randomUUID());
-      cls.set(CLS_AUDIT_ORIGIN, 'ip-hash:test');
+      cls.set(CLS_AUDIT_ORIGIN, 'http');
       return fn();
     });
   const rowExists = async (id: string) =>

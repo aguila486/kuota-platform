@@ -180,3 +180,55 @@ Controles para no compartir datos indebidamente:
 
 Features responsables: el mecanismo y MT-02..06 en **001-platform-foundation**; identidad, membresías y MT-01/07/08 en
 **002-identity-tenancy**; cada feature posterior agrega MT-01 para sus endpoints.
+
+## 10. Suite reutilizable de acceso cruzado: `describeTenantIsolation` (FR-016; T034, T037, T044)
+
+Cada feature que expone un recurso por tenant DEBE aplicar la suite a ese recurso. Así cubre MT-01 y MT-07 por
+endpoint, además de la concurrencia de US2-6.
+
+**Qué genera** (`backend/test/tenancy/describe-tenant-isolation.ts`), con dos tenants nuevos por ejecución y un
+marcador único en cada registro:
+
+| Caso | Expectativa |
+|---|---|
+| Lectura por id de otro tenant, en ambos sentidos | 404 `not-found` sin revelar la existencia ni el contenido |
+| Listado completo (todas las páginas) | Solo registros propios; coincide con el conteo directo en la base |
+| Update y delete cruzados | 404 y sin efecto: el propietario ve el registro igual y el conteo no cambia |
+| `tenant_id` ajeno en el body | Rechazado (400) o asignado al propio; nunca crea ni modifica datos del otro tenant |
+| Tenant en la query u otros encabezados | Ignorado |
+| Sin contexto o con contexto inválido | 401 `tenant-context-required` y nada escrito |
+| ≥ 50 solicitudes concurrentes intercaladas de 2 tenants | Ninguna observa datos del otro; los conteos cuadran |
+
+**Cómo aplicarla a un recurso nuevo:** crear `backend/test/tenancy/<recurso>.tenancy.spec.ts`. El ejemplo de
+referencia es `dev-probe.tenancy.spec.ts`.
+
+```ts
+describeTenantIsolation({
+  name: 'loans (/v1/loans)',
+  collectionPath: '/v1/loans',                     // POST crea, GET lista; el elemento es `${collectionPath}/{id}`
+  markerField: 'reference',                        // campo de la respuesta que lleva el marcador
+  createBody: (marker) => ({ reference: marker /* … resto del cuerpo válido */ }),
+  updateBody: (item, marker) => ({ reference: marker, version: item.version }),
+  createHeaders: () => ({ 'idempotency-key': randomUUID() }),
+  contextHeaders: (tenant) => ({ /* 002: credenciales de un usuario miembro del tenant */ }),
+  async setup() {
+    // Aplicación real (createApp) + PostgreSQL efímero (startTestDatabase); countRows cuenta en la base sin RLS
+    // (superusuario del contenedor de prueba) para probar que un rechazo no escribió nada.
+    return { baseUrl, countRows: (tenantId) => …, close: async () => { … } };
+  },
+});
+```
+
+**Reglas:**
+- Sin mocks de la base ni de RLS. La suite debe fallar si el aislamiento no existe: con RLS desactivado en el contenedor
+  efímero, 6 de sus 9 casos fallan (verificado al introducirla, 2026-11-22).
+- Base efímera por suite (Testcontainers). Nunca el volumen de `make up` ni una base compartida.
+- No depende de registros preexistentes: crea los suyos.
+- En 001 el contexto es el encabezado técnico `X-Kuota-Dev-Tenant` (solo local/testing). Desde 002, `contextHeaders`
+  usará la identidad autenticada.
+
+**Ejecución:**
+- `pnpm --filter backend test:tenancy` ejecuta solo `backend/test/tenancy/` y sale con un código distinto de cero si
+  falla algún caso.
+- La misma suite forma parte de `pnpm --filter backend test` y, por tanto, de `make test`.
+- El gate de CI dedicado se conecta en G12 (US3).

@@ -152,3 +152,10 @@ confirmar que ningún entorno persistente contiene eventos con IPs reales.
 
     Requiere autorización.
 
+
+## 7. Hallazgo del log de acceso: resuelto (2026-11-23, Aprobación 6)
+
+- **Corrección:** serializadores mínimos por lista permitida en pino-http. Detalle de la causa raíz, la política, las
+  pruebas y el alcance en `docs/security/http-log-minimization.md`.
+- **Fuera de esta garantía:** los logs de PostgreSQL y de infraestructura, pendientes de la revisión de despliegue
+  (D-ARC-04).

@@ -1093,7 +1093,7 @@ Decisiones de detalle que el contrato y data-model.md no fijan. Se registran par
 - **Regresión local:**
   - `general`: 5/5 PASS.
   - `contracts`: 5 PASS + oasdiff **OMITIDO**.
-  - `flutter`: 14/14 PASS; 128 pruebas (`financial_domain` 42 = 23 VM + 19 Chrome; el resto, como antes), Web release
+  - `flutter`: 14/14 PASS; 124 pruebas (`financial_domain` 42 = 23 VM + 19 Chrome; el resto, como antes), Web release
     y 2 APK.
   - `backend`: 18/18 PASS; 675/675 pruebas en 49 archivos; cobertura 98,53 / 97,28 / 98,12 / 99,6.
   - Volúmenes intactos.

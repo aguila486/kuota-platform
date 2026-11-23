@@ -1,11 +1,14 @@
+@TestOn('vm')
+library;
+
 import 'dart:io';
 
 import 'package:decimal/decimal.dart';
 import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
 
-/// T082: el paquete existe con las restricciones que exige su tarea, para que T063 pueda implementar `Money` sin
-/// cambiar la estructura. No prueba `Money` (T063) ni los fixtures compartidos (T059): todavía no existen.
+/// T082: el paquete existe con las restricciones que exige su tarea. Solo en la VM (lee archivos con `dart:io`); `Money`
+/// (T063) y los fixtures compartidos (T059) se prueban en `money_test.dart` y `money_fixtures_test.dart`.
 void main() {
   final pubspec = loadYaml(File('pubspec.yaml').readAsStringSync()) as YamlMap;
 
@@ -23,7 +26,7 @@ void main() {
     expect(decimal, matches(RegExp(r'^3\.\d+\.\d+$')));
   });
 
-  test('existe la estructura lib/src/money/ reservada para T063', () {
+  test('existe la estructura lib/src/money/ de T063', () {
     expect(Directory('lib/src/money').existsSync(), isTrue);
   });
 

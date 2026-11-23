@@ -1,0 +1,35 @@
+# Kuota Client (client_mobile; T085; FR-031, FR-032; US7-2).
+# App de clientes finales (Android e iOS): shell de 001 sin funcionalidad de negocio.
+# Solo muestra nombre, entorno, versión y la compatibilidad con Kuota Core vía api_client. Comparte código únicamente a
+# través de paquetes (tool/check_deps.dart). `version` debe coincidir con lib/src/app_info.dart (lo verifica una prueba).
+name: client_mobile
+description: "Kuota Client: shell de 001 (T085) sin funcionalidad de negocio."
+publish_to: none
+version: 0.1.0+1
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  api_client:
+    path: ../../packages/api_client
+  design_system:
+    path: ../../packages/design_system
+  flutter:
+    sdk: flutter
+  # Estado de UI con Riverpod 3 (ADR-0003; D-ARC-02 aprobada; research R-19: 3.5.0).
+  flutter_riverpod: 3.5.0
+  material_ui: 1.11.1
+  shared_core:
+    path: ../../packages/shared_core
+
+dev_dependencies:
+  # El servidor falso de las pruebas implementa el HttpClientAdapter de dio (misma versión que api_client).
+  dio: 5.11.1
+  flutter_test:
+    sdk: flutter
+  yaml: 3.1.4
+
+flutter:
+  uses-material-design: true

@@ -12,9 +12,9 @@
 #      `lib/api_client.dart` es la API pública escrita a mano (T070).
 #   4. `build_runner` (built_value) genera los `.g.dart` y `dart format` los formatea con el ancho del workspace.
 #   5. Comprobación final: el código generado no contiene operaciones ni modelos de dev-probe.
-# El resultado se versiona. T071 añadirá a CI la comprobación "regenerado == versionado".
+# El resultado se versiona. scripts/ci/contracts.sh comprueba que regenerado == versionado (T071).
 #
-# Requiere Docker, el toolchain de Node del proyecto (Redocly) y FVM con el Flutter de flutter/.fvmrc.
+# Requiere Docker, el toolchain de Node del proyecto (Redocly) y el Flutter de flutter/.fvmrc (lib.sh, use_project_flutter).
 # Salida: 0 generado; 1 fallo (bundle con operaciones técnicas, generación, compilación o código prohibido).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -31,7 +31,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 require_docker
-command -v fvm >/dev/null 2>&1 || die "Se requiere FVM (flutter/.fvmrc) para compilar el cliente generado."
+use_project_flutter # Flutter/Dart exactos de flutter/.fvmrc (FVM en local, SDK verificado en CI); falla si no hay
 
 step "1/5 Bundle de cliente sin operaciones técnicas"
 (cd "$ROOT" && pnpm --silent contracts:bundle:client >/dev/null)
@@ -78,12 +78,12 @@ find "$TARGET" -name '*.dart' -print0 | while IFS= read -r -d '' file; do
 done
 
 step "4/5 build_runner (built_value) y formato"
-(cd "$ROOT/flutter" && fvm dart pub get >/dev/null)
-(cd "$PACKAGE" && fvm dart run build_runner build --delete-conflicting-outputs >"$WORK/build_runner.log" 2>&1) || {
+(cd "$ROOT/flutter" && dart pub get --enforce-lockfile >/dev/null)
+(cd "$PACKAGE" && dart run build_runner build --delete-conflicting-outputs >"$WORK/build_runner.log" 2>&1) || {
   tail -20 "$WORK/build_runner.log"
   die "build_runner falló"
 }
-(cd "$ROOT/flutter" && fvm dart format "$TARGET" >/dev/null)
+(cd "$ROOT/flutter" && dart format "$TARGET" >/dev/null)
 
 step "5/5 El código generado no contiene operaciones ni modelos técnicos"
 if grep -rliE "dev_?probe|devtenantcontext|/v1/dev/|x-kuota-dev" "$TARGET" >"$WORK/leaks.txt"; then

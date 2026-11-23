@@ -81,7 +81,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.contracts == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -93,6 +93,8 @@ jobs:
       - name: pnpm del packageManager (Corepack fijado)
         run: npm install --global corepack@0.36.0 && corepack enable pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Flutter exacto de flutter/.fvmrc (archivo oficial verificado por sha256; T071 regenera el cliente Dart)
+        run: scripts/ci/setup-flutter.sh
       - run: scripts/ci/contracts.sh
         env:
           KUOTA_CI_BREAKING_BASE: origin/main

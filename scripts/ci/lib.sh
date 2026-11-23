@@ -84,3 +84,27 @@ use_project_node() {
   fi
   export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 }
+
+# Flutter/Dart EXACTOS de flutter/.fvmrc (D-ENV-01) al principio del PATH: `flutter`, `dart` y `dart run melos` usan
+# ese SDK y nunca el global. Origen del SDK:
+#   - KUOTA_FLUTTER_SDK (CI: lo prepara scripts/ci/setup-flutter.sh con el archivo oficial verificado por sha256);
+#   - si no, FVM (local): el SDK de la caché de FVM para esa versión (`fvm install` si falta).
+# Se verifica que `flutter --version` coincide con .fvmrc. Sin SDK válido, FALLA: los gates de Flutter nunca se omiten.
+use_project_flutter() {
+  local want sdk actual
+  want="$(sed -nE 's/.*"flutter"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$KUOTA_ROOT/flutter/.fvmrc")"
+  [ -n "$want" ] || die "flutter/.fvmrc no declara la versión de Flutter"
+  sdk="${KUOTA_FLUTTER_SDK:-}"
+  if [ -z "$sdk" ]; then
+    command -v fvm >/dev/null 2>&1 ||
+      die "Se requiere Flutter $want: instala FVM (local) o define KUOTA_FLUTTER_SDK (CI: scripts/ci/setup-flutter.sh)."
+    sdk="${FVM_CACHE_PATH:-$HOME/fvm}/versions/$want"
+    [ -x "$sdk/bin/flutter" ] || (cd "$KUOTA_ROOT/flutter" && fvm install "$want" >/dev/null) ||
+      die "fvm install $want falló"
+  fi
+  [ -x "$sdk/bin/flutter" ] || die "No hay SDK de Flutter en $sdk"
+  actual="$("$sdk/bin/flutter" --version --machine 2>/dev/null | sed -nE 's/.*"frameworkVersion"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
+  [ "$actual" = "$want" ] || die "Flutter en $sdk es '${actual:-desconocido}', se requiere $want (flutter/.fvmrc)"
+  export PATH="$sdk/bin:$PATH" FLUTTER_ROOT="$sdk"
+  export CI_FLUTTER_VERSION="$want"
+}

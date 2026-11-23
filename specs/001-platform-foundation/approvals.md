@@ -238,3 +238,61 @@ no es una firma: identifica el contenido aprobado mediante los identificadores d
   - limpieza destructiva de Docker;
   - iniciar el siguiente bloque sin aprobación.
 
+## Registro de autorizaciones verificadas (H1 de T092; registrado el 2026-11-23)
+
+Las autorizaciones siguientes se dieron por mensaje explícito del responsable del proyecto en la sesión de trabajo de
+Claude Code, pero no tenían entrada en este archivo. **Evidencia verificable:** la transcripción local de la sesión
+`19dc21f1-ee7c-4649-92ac-d01c7b5afc2f` (`~/.claude/projects/-Users-ricardogallardo-Documents-Ricardo-Projects-kuota-repo-kuota-platform/19dc21f1-ee7c-4649-92ac-d01c7b5afc2f.jsonl`,
+no versionada), con la hora UTC de cada mensaje. Las citas son literales; no se añade ninguna decisión que no figure en
+ellas. Las que ya tenían entrada se indican en la última columna.
+
+| Fecha (UTC) | Mensaje | Autorización (cita literal) | Exclusiones (cita literal, extracto) | Entrada previa |
+|---|---|---|---|---|
+| 2026-11-22 22:45 | "Inicio controlado de G4 tras aprobar Prisma 7" | "Autorizo ejecutar exclusivamente las tareas que pertenezcan a G4" (T016–T021) | "No autorizo G5, G6, G7 ni tareas posteriores." | — |
+| 2026-11-22 22:56 | "Implementación controlada de G5: OpenAPI, contratos y bootstrap NestJS" | "Autorizo implementar exclusivamente G5, correspondiente al grupo incremental T022–T025." "Apruebo implementar en T025 el mecanismo de registro condicional del módulo `dev-probe`." | "No autorizo implementar anticipadamente T040–T042 ni crear el módulo funcional dev-probe." | — |
+| 2026-11-23 00:55 | "Implementación controlada de G6 (T026–T033)" | "Autorizo implementar exclusivamente G6, correspondiente al grupo incremental T026–T033 de US1." | "No autorizo G7 ni ninguna tarea posterior a T033." | — |
+| 2026-11-23 01:21 | "G7a: TenantContext, withTenant y aislamiento PostgreSQL" | "Autorizo ejecutar exclusivamente G7a: T035, T036, T038, T039 y T043." | "No autorizo G7b, T040–T042, T044, T096 ni otras tareas posteriores" | — |
+| 2026-11-23 01:45 | "Revisión de seguridad P2 y ejecución limitada del backend de US4" | "Autorizo implementar exclusivamente: T056, T057, T061, T062 y T064" (subconjunto backend de US4); "Autorizo resolver la discrepancia documental de la API pública de módulos." | "No autorizo ejecutar G7b ni implementar anticipadamente dev-probe." | Enmienda 1 de ADR-0002 |
+| 2026-11-23 05:00 | "Hardening de T039: riesgo R3 y seguridad del cliente transaccional" | "APRUEBO LA OPCIÓN (a): reforzar T039 para verificar el contexto autorizado en cada ejecución del cliente transaccional." | "No autorizo G7b todavía." "No autorizo cambiar el mecanismo de aislamiento RLS ni las políticas de PostgreSQL." | — |
+| 2026-11-23 05:27 | "G7b: dev-probe, aislamiento HTTP y cierre controlado de US2" | "Autorizo ejecutar G7b exclusivamente: T034, T037, T040, T041, T042, T044 y T096, además de completar la parte pendiente de T062"; "Apruebo aclarar la condición C2-1 de ADR-0002" | "No autorizo otras tareas de US4, US6 ni G8." | Enmienda 2 de ADR-0002 |
+| 2026-11-23 05:54 | "Implementación controlada de US6 (T072–T079): auditoría multi-tenant" | "Autorizo implementar exclusivamente US6, tareas T072–T079" | "No autorizo avanzar a US5, US7, G12, 002 ni tareas posteriores." | Aprobaciones 3 y 4 (cierre) |
+| 2026-11-23 08:09 | "G12 / US3: CI/CD, contratos y seguridad como gates obligatorios" | "Autorizo ejecutar G12 / US3, tareas T045–T055, exclusivamente conforme a sus descripciones y dependencias reales." | "No implementes tareas fuera del alcance autorizado." | — |
+| 2026-11-23 13:12 | "Security Hotfix G12: remediar GHSA-7589-6fvf-x4pw sin degradar Prisma" | "APRUEBO la remediación de la vulnerabilidad." (opciones A, actualización de Prisma, y B, override de pnpm) | "NO AUTORIZO la aceptación temporal…", "…reducir la severidad del gate", "…allowlist", "…desactivar osv-scanner" | — |
+| 2026-11-23 13:38 | "Minimización de datos de auditoría" | — | — | Aprobación 5 |
+| 2026-11-23 14:17 | "Hotfix de privacidad: minimización de logs HTTP con pino-http" | — | — | Aprobación 6 |
+| 2026-11-23 14:50 | "US4 TypeScript: exactitud monetaria, pruebas de propiedades y gates financieros" | "APRUEBO desarrollar T058, T060 y T065, siempre que sus dependencias reales estén satisfechas." | "NO AUTORIZO implementar T059 ni T063." | — |
+| 2026-11-23 15:25 | "US7a: comenzar la fundación Flutter y desbloquear Money Dart" | "Implementar exclusivamente el alcance de US7a correspondiente a T080–T084" (y, antes, la corrección del arnés de auditoría) | "No cierres T068–T071 salvo autorización independiente." | — |
+| 2026-11-23 16:38 | "Desbloquear T080 e implementar T068–T070" | — | — | Aprobación 7 |
+| 2026-11-23 17:01 | "CI Flutter y creación de las tres aplicaciones" | "1. Implementar T071, conforme a tasks.md. 2. Implementar T050, conforme a tasks.md." y "Implementa exactamente los criterios de T085" | (no T086, Money Dart ni autenticación) | — (posterior a la Aprobación 7, que no los autorizaba todavía) |
+| 2026-11-23 19:17 | "Cierre de conectividad Web, validación iOS y estabilidad de pruebas" | — | — | Aprobación 8 |
+| 2026-11-23 20:08 | "Continuidad del desarrollo sin validación iOS" | — | — | Aprobación 9 |
+| 2026-11-23 20:43 | "Cierre técnico de 001: métricas, quality gates y revisión final" | "Autorizar exclusivamente: 1. T093 y T094. 2. T087–T092, solo después de revisar sus criterios reales y satisfacer sus dependencias." | "No autorizar todavía push, PR, merge ni despliegue." | — |
+
+**Pendiente de confirmación:** el desglose exacto de tareas de "G4" (T016–T021) se deduce del mensaje de G5 ("T001–T021
+completadas"), no de una enumeración en el propio mensaje de G4.
+
+## Aprobación 10 — 2026-11-23 (21:43 UTC): desarrollo solo local, corrección de T092 y ratificación de T094
+
+- **Quién:** responsable del proyecto, mediante mensaje explícito en la sesión de trabajo ("KUOTA — Continuidad de
+  desarrollo 100% local, sin PR ni GitHub remoto").
+- **Política:** el desarrollo continúa **solo en local**. Prohibidos: crear o abrir PR; `git push`, `pull`, `fetch`,
+  `merge` y `rebase`; nuevas ramas sin autorización; ejecutar workflows de GitHub Actions; cambiar configuración remota;
+  publicar imágenes; desplegar; crear releases. T049 y T052 siguen **PENDIENTES** (sin baseline ficticio de `main`). La
+  Aprobación 9 sigue vigente (iOS diferido).
+- **Autorizado:** C1 (cobertura de código Dart), C2 (eliminar la duplicidad entre apps), H1 (trazabilidad documental
+  comprobable), T094 (ratificación documental del middleware) y H3 (normalización segura de las respuestas 404 según los
+  contratos existentes).
+- **Ratificación de T094 (condicional, cita):** "Si el middleware actual cumple correctamente y no introduce riesgos,
+  ratifico su utilización como solución arquitectónica para T094, siempre que se documente la desviación mediante el
+  proceso de gobernanza y se conserven todos los criterios funcionales."
+  - **Verificación de la condición (2026-11-23):** el middleware HTTP mide solicitudes correctas, rechazos de guards
+    (401), rutas inexistentes (`unmatched`), errores controlados (400/404/409/500) y el tiempo total desde antes del
+    enrutado hasta `finish` (`backend/test/integration/metrics.spec.ts`). No expone métricas en el puerto público y no
+    añade etiquetas con PII ni de cardinalidad no acotada. Límite conocido: una solicitud abortada por el cliente antes
+    de `finish` no se mide.
+  - **Desviación registrada:** T094 dice "interceptor HTTP que etiqueta por plantilla de ruta"; la implementación usa
+    un middleware de nivel HTTP (`backend/src/common/metrics/http-metrics.ts`), porque un `NestInterceptor` no ve los
+    404 del router ni los rechazos de guards que exige T093. El resto de criterios de T094 no cambia. **T094 se cierra.**
+- **No autorizado:** cambiar la Constitución, inventar requisitos, modificar el contrato fuente, borrar datos,
+  imágenes, cachés o runtimes, ejecutar iOS, y desarrollar 002 (solo evaluar y proponer).
+

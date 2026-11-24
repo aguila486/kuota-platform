@@ -10,7 +10,12 @@ import { describe, expect, it } from 'vitest';
 const BACKEND_DIR = join(__dirname, '../../..');
 const eslint = new ESLint({
   cwd: BACKEND_DIR,
-  overrideConfig: [{ files: ['**/*.ts'], ...tseslint.configs.disableTypeChecked }],
+  overrideConfig: [
+    { files: ['**/*.ts'], ...tseslint.configs.disableTypeChecked },
+    // Archivos virtuales sin información de tipos: la regla tipada de T104 no puede ejecutarse aquí y la cubre
+    // test/unit/money/typed-money-rule.spec.ts con la configuración real.
+    { files: ['src/**/*.ts'], rules: { 'kuota/no-unsafe-money-number': 'off' } },
+  ],
 });
 
 async function messages(code: string, file: string): Promise<string[]> {

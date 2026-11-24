@@ -37,7 +37,12 @@ const marked = source
 async function main(): Promise<number> {
   const eslint = new ESLint({
     cwd: BACKEND_DIR,
-    overrideConfig: [{ files: ['**/*.ts'], ...tseslint.configs.disableTypeChecked }],
+    overrideConfig: [
+      { files: ['**/*.ts'], ...tseslint.configs.disableTypeChecked },
+      // Archivos virtuales sin información de tipos: la regla tipada de T104 no puede ejecutarse aquí y la cubre
+      // test/unit/money/typed-money-rule.spec.ts con la configuración real.
+      { files: ['src/**/*.ts'], rules: { 'kuota/no-unsafe-money-number': 'off' } },
+    ],
   });
 
   let failures = 0;

@@ -3,6 +3,7 @@ import eslint from '@eslint/js';
 import prettier from 'eslint-config-prettier';
 import { defineConfig } from 'eslint/config';
 import tseslint from 'typescript-eslint';
+import noUnsafeMoneyNumber from './eslint-rules/no-unsafe-money-number.mjs';
 
 // Acceso a datos solo a través de `withTenant` (ADR-0004 C4-2, research R-04): el cliente de base de datos crudo
 // (Prisma o, si se activa el fallback, el driver `pg`) solo puede importarse en src/common/tenant-context/.
@@ -95,7 +96,16 @@ const ANTI_FLOAT_RESTRICTED_SYNTAX = [
 ];
 
 export default defineConfig(
-  { ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'src/generated/**'] },
+  {
+    ignores: [
+      'dist/**',
+      'coverage/**',
+      'node_modules/**',
+      'src/generated/**',
+      // Casos deliberadamente inseguros de la regla tipada (T104); su prueba los analiza con `ignore: false`.
+      'test/fixtures/money-rule/**',
+    ],
+  },
   eslint.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
   {
@@ -110,6 +120,13 @@ export default defineConfig(
   {
     files: ['**/*.cjs'],
     languageOptions: { sourceType: 'commonjs', globals: { module: 'writable', require: 'readonly' } },
+  },
+  {
+    // T104 (Aprobación 12; FR-021): regla tipada anti punto flotante sobre valores monetarios en todo src/, también
+    // en interface/ y application/. En money y domain se añade la aritmética estricta (bloque siguiente).
+    files: ['src/**/*.ts'],
+    plugins: { kuota: { rules: { 'no-unsafe-money-number': noUnsafeMoneyNumber } } },
+    rules: { 'kuota/no-unsafe-money-number': ['error', { strictArithmetic: false }] },
   },
   {
     files: ['src/**/*.ts'],
@@ -134,6 +151,7 @@ export default defineConfig(
     ignores: ['src/common/tenant-context/**'],
     rules: {
       'no-restricted-syntax': ['error', ...SECURITY_RESTRICTED_SYNTAX, ...ANTI_FLOAT_RESTRICTED_SYNTAX],
+      'kuota/no-unsafe-money-number': ['error', { strictArithmetic: true }],
     },
   },
   {

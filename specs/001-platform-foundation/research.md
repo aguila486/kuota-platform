@@ -1467,3 +1467,147 @@ implementados y probados; SC: 4/9 cumplidos, 2 solo en local.
 - **Regresión:** `general` 5/5; `contracts` 5 + OMITIDO; `backend` 18/18 con 729/729 pruebas en 52 archivos
   (cobertura 98,55 / 96,9 / 98,34 / 99,64; `db-gate` con 0003 conforme); `prove-gates` 8/8. `flutter` no se repitió
   porque el workspace no cambió (última ejecución: 15/15).
+
+### Cierre de T101–T108 y revisión adicional de T099 (2026-11-23)
+
+Autorizado por el responsable ("KUOTA — Cierre de tareas T101–T108 y revisión de riesgos de auditoría"), solo en local.
+Cada hallazgo de `/speckit-converge` se volvió a comprobar en el código antes de corregirlo; los siete siguían vigentes.
+
+#### T101: eventos de observabilidad
+
+- **Causa:** no había eventos de arranque ni de apagado; la sonda registraba un `warn` en CADA comprobación fallida
+  (duplicados con orquestadores que consultan cada pocos segundos) con el error completo del driver; los conflictos 409/422
+  iban a `debug`.
+- **Corrección:**
+  - `service.started` (una vez, cuando la API y la escucha de métricas están abiertas): entorno, versión de la API,
+    módulos de aplicación habilitados y puertos;
+  - `service.stopped` al cerrar, con la señal y el tiempo en marcha;
+  - `readiness.changed` solo en cada transición (`unknown|up|down`): `warn` al caer, con un motivo acotado (código del
+    sistema o de PostgreSQL, `timeout` o `error`, nunca el mensaje), e `info` al recuperarse; cada fallo repetido solo en
+    `debug`;
+  - `request.conflict` en `info` para `idempotency-request-in-progress`, `idempotency-key-reused` y `version-conflict`:
+    código, estado y correlación (tenant y actor del contexto), sin clave, cuerpo ni `detail`.
+- **Contratos de health:** sin cambios (el motivo no llega a la respuesta; esquema cerrado).
+- **Limitación de pruebas:** nestjs-pino 5 conserva un único logger raíz por proceso; en procesos de prueba con varias
+  apps, la base `env` es la de la primera. La prueba del proceso real (`main-process.spec.ts`) verifica `env`, puertos y
+  SIGTERM.
+- **Mutaciones detectadas 4/4:** conflicto de nuevo en `debug`, sin deduplicación de readiness, `service.started`
+  duplicado y sin `service.stopped`.
+
+#### T102: privacidad de los logs de toda la suite (SC-009)
+
+- **Causa:** cada prueba comprobaba solo su propio stream; los logs de apps sin stream propio (pino escribe en el
+  descriptor 1 del worker) y la salida de procesos hijo no se revisaban en conjunto.
+- **Corrección (`backend/test/support/`):**
+  - `log-capture.ts`: catálogo de 27 valores sensibles ficticios (nombres que nunca contienen el valor), captura de los
+    streams de prueba (`recordOutput`) y registro en ejecución de las contraseñas aleatorias de las bases efímeras;
+  - `log-capture.setup.ts` (`setupFiles`): copia `fs.writeSync`/`fs.write` a los descriptores 1 y 2 y
+    `process.stdout/stderr.write` de cada worker a la captura;
+  - `log-privacy.global.ts` (`globalSetup`): al terminar la suite busca cada valor (también codificado en URL y escapado
+    en JSON) en todo lo capturado; si aparece, Vitest termina con 1 y el informe nombra el valor y el archivo, nunca el
+    valor;
+  - una prueba estática exige que todo `new Writable(` y todo `spawn(` de `test/` pase por la captura.
+- **Autoverificación (`scripts/ci/tests/log-privacy.test.sh`, en el job `backend`):** una fuga deliberada por cada vía
+  (stream, log de aplicación que la redacción no reconoce, salida de proceso hijo y valor registrado en forma codificada)
+  → Vitest sale con 1, las 4 se nombran y el informe no contiene ningún valor.
+- **Mutaciones:** sin la captura de streams o sin la captura de stdout/stderr, la autoverificación falla. Quitar solo
+  uno de los tres enganches de stdout/stderr no la hace fallar: los logs llegan también por otra vía.
+- **Resultado sobre la suite real:** 0 valores sensibles en toda la salida capturada.
+
+#### T103: eliminación de un campo opcional de una respuesta
+
+- **Comportamiento real de oasdiff 1.39.0:** `response-optional-property-removed` es de nivel `info`. Ni
+  `--fail-on ERR` ni `--fail-on WARN` lo bloquean (comprobado: exit 0 en ambos, también en respuestas de error).
+- **Corrección:** `scripts/contracts/oasdiff-severity-levels.txt` eleva solo esa comprobación a `ERR` (la "lista
+  explícita" del criterio de T103); `breaking.sh` la pasa con `--severity-levels` y falla con salida 2 si falta.
+- **Pruebas (`breaking.test.sh`):** `client_supported` (200 de `/v1/meta/compatibility`) y `detail` (Problem, respuestas
+  de error) eliminados → exit 1 con la regla; sin la lista, oasdiff no lo bloquea (prueba de que la detección depende de
+  ella); control sin cambios → 0; el contrato del repositorio no cambia.
+- **Sin cambios en el contrato de producción ni baseline inventado:** la comparación con `main` sigue OMITIDA (T049).
+- **Decisión pendiente (no se cambia la política):** las 23 comprobaciones de nivel `warning` de oasdiff (p. ej.
+  `request-property-removed`, `response-media-type-name-changed`, `response-property-pattern-changed`) siguen sin
+  bloquear con `--fail-on ERR`. Pasar a `--fail-on WARN` o elevar otras comprobaciones amplía FR-028 y requiere decisión
+  del responsable.
+
+#### T104: regla anti-float (SIN CERRAR, requiere decisión sobre FR-021)
+
+- **Medición de la regla actual** (ESLint con la configuración real sobre archivos virtuales; sin versionar):
+
+  | Caso | `common/money` o `domain/` | `interface/` |
+  |---|---|---|
+  | `amount: number`, `parseFloat`, `Number(…)`, `Number.parseFloat`, `Math.round`, `toFixed` | Bloquea | Permite |
+  | `total: number` (nombre no monetario), literal `0.1 + 0.2`, `Decimal#toNumber()`, `Math.floor(p * 100)`, `+'1.5'`, `a / 3`, `BigInt(numberNoEntero)`, `JSON.parse` de un monto | Permite (falsos negativos) | Permite |
+  | `Number.parseInt`, contadores `number` | Permite (correcto) | Permite |
+
+- **Opción literal de T104** (toda anotación `number` y literal flotante en `money`, `domain` e `interface`): 18
+  coincidencias en el código actual, todas legítimas (configuración de `Decimal`, tipos de índice de tuplas, ratios y
+  partes de `allocate`, `minorUnits`, versiones y límites de paginación). Exigiría cambiar firmas de Money (prohibido sin
+  aprobación) o una lista de excepciones.
+- **Alternativas para decidir:**
+  - **A.** Literal de T104: prohibir todo `number` en esas rutas; 18 falsos positivos hoy; cambia Money o requiere
+    excepciones.
+  - **B.** Registrar una aprobación que estreche FR-021 al alcance de R-10 (estado actual, con los falsos negativos de la
+    tabla documentados).
+  - **C (recomendada).** Regla local con análisis de tipos (typescript-eslint) en `common/money`, `**/domain` y los DTO de
+    `interface/` que transportan dinero: prohíbe literales no enteros, `toNumber()`/`valueOf()` sobre `Decimal`,
+    `Number()`/`parseFloat`/más unario sobre `bigint`, `Decimal` o cadenas de monto, `BigInt(x)` con `x: number` no
+    literal, y `/`, `*`, `**` o `Math.*` sobre `number` en esas rutas; permite `number` entero para contadores, índices,
+    escalas y versiones. Requiere decidir qué es un "DTO financiero" en `interface/` (alcance de FR-021).
+  - **D.** Tipos de marca (`MinorUnits`, `Scale`) en las firmas, con la regla prohibiendo `number` solo donde se espera
+    un monto. Cambia Money: requiere aprobación.
+
+#### T105–T108
+
+- **T105:** `plan.md` registra 0002, 0003, `02-maintenance-roles.sql`, `migration-preflight.ts`,
+  `purge-idempotency.ts`, `check-no-float.ts` y el preflight de `up.sh`. `test/unit/plan-traceability.spec.ts` falla si
+  falta cualquier migración, script de `backend/scripts/` o script de `infra/docker/postgres/init/` (falla con el
+  `plan.md` anterior y pasa con el nuevo).
+- **T106:** defecto `cliente-generado` en `prove-gates.sh`: edición a mano de `api_util.dart` confirmada en un commit sin
+  rama del worktree temporal (sin confirmar, `contracts.sh` fallaría antes, en su comprobación previa). Control limpio 0,
+  con defecto 1 y la firma "el cliente regenerado difiere del versionado".
+- **T107:** `scripts/dev/tests/doctor.test.sh` (job `general`): 11 casos con binarios simulados; cada requisito
+  incumplido sale con 1, cuenta un requisito y nombra la versión leída del repositorio. Mutaciones (mensaje sin versión,
+  comparación de FVM anulada) detectadas.
+- **T108:** `metrics`, `meta-compatibility`, `not-found` y `cors` (y `log-privacy-scan`) en `required-suites.txt`;
+  `scripts/ci/tests/required-suites.test.sh` prueba que el control falla si falta cualquiera de ellas u omite una prueba.
+
+#### Revisión adicional de T099 (sin cambios de esquema)
+
+Verificado en una base efímera (prueba puntual no versionada) además de `platform-audit.spec.ts`:
+
+| Punto | Resultado |
+|---|---|
+| `started` antes de borrar | Se inserta en autocommit antes del bloqueo; si falla, no se borra nada |
+| Bloqueo consultivo | `pg_advisory_lock(7213001)` de **sesión**, no de transacción: abarca todos los lotes y se libera en `finally` o al cerrarse la conexión. `lock_timeout` (5 s) también se aplica a su espera: una segunda purga que espera más falla con 55P03 y queda auditada como `failed`. Solo serializa purgas; no bloquea a los tenants |
+| Lotes | Cada lote es su propia transacción; un fallo entre lotes deja confirmados los anteriores y `failed` registra las filas y lotes confirmados hasta ese punto |
+| Fallo del evento final | `PlatformAuditError('outcome')` (salida 2) y queda un `started` sin resultado |
+| Reejecuciones | Cada ejecución tiene un `run_id` nuevo; reutilizarlo se rechaza antes de borrar (`UNIQUE (run_id, status)`) |
+| Privilegios de mantenimiento | Solo INSERT; sin SELECT, UPDATE ni DELETE (42501). `executed_by` y `occurred_at` los fija el servidor aunque el cliente los envíe. **Límite:** puede insertar eventos fabricados (p. ej. un `succeeded` sin `started`) |
+| Usuarios ordinarios (`kuota_app_login`, transacciones de tenant) | Sin ningún privilegio (42501); el modelo sigue expuesto en el cliente protegido de Prisma (riesgo MEDIUM ya registrado), pero ningún código de `src/` lo usa |
+| Propietario (`kuota_migrator`) | **Sin protección efectiva:** puede `DISABLE TRIGGER` y `NO FORCE ROW LEVEL SECURITY` y modificar filas (comprobado: 3 filas), y restaurar después; `db:check-rls` solo ve el estado final |
+| Superusuario | **Sin protección:** los triggers bloquean un UPDATE normal, pero `session_replication_role = replica` los omite (comprobado: UPDATE de 3 filas y DELETE de 1). Los triggers y RLS no protegen frente a un superusuario |
+
+- **Propuesta (diseño, no aplicada; requiere migración y decisión del rol de lectura):**
+  1. Rol `kuota_platform_reader` (NOLOGIN, concedido a un login con MFA de la plataforma): `SELECT` sobre la tabla y una
+     política RLS `FOR SELECT` exacta; `db:check-rls` ampliado.
+  2. Vista `kuota.platform_audit_incomplete_runs` (`security_invoker`): `started` sin resultado del mismo `run_id`, con
+     más de N minutos y sin el bloqueo consultivo en `pg_locks` (`classid 0, objid 7213001, objsubid 1`; visible para
+     roles sin privilegios, comprobado).
+  3. Trigger que rechace un resultado sin `started` previo del mismo `executed_by`.
+  4. Script `db:platform-audit:incomplete` que imprime solo recuentos y sale con 1 si hay ejecuciones incompletas.
+  5. Frente al propietario y al superusuario: copia externa append-only (logs de PostgreSQL o `pgaudit` enviados a
+     almacenamiento WORM) o encadenamiento de hashes anclado fuera de la base; depende de D-ARC-04.
+  6. Pruebas propuestas: el lector lee y no escribe; runtime, tenant y mantenimiento no leen la vista; la vista
+     distingue ejecución en curso (bloqueo tomado), incompleta y completa; un resultado sin `started` se rechaza;
+     `db:check-rls` detecta una política o un privilegio de más.
+- **Retención:** sin mecanismo (no hay política aprobada).
+
+#### Regresión (2026-11-23, secuencial)
+
+- `general` 6/6 (incluye `doctor.test.sh`); `contracts` 5 PASS + OMITIDO (comparación con `main`, T049).
+- `backend` 14/14: 745/745 pruebas en 54 archivos; cobertura 98,2 / 96,54 / 97,98 / 99,42; 36 suites obligatorias;
+  SC-009 sin valores sensibles en ~337 KB de logs capturados (171 valores comprobados); autoverificación SC-009;
+  `test:idempotency`; `db-gate` con 0001–0003 conforme.
+- `prove-gates` 9/9 (incluido `cliente-generado`).
+- `flutter` no se repitió: el workspace no cambió (última ejecución 15/15).
+- Migraciones solo en bases efímeras; ningún volumen persistente modificado.

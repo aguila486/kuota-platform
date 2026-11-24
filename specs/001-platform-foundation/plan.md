@@ -152,6 +152,9 @@ kuota-platform/
 │   ├── prisma/
 │   │   ├── schema.prisma
 │   │   └── migrations/                  # SQL: esquema kuota, tablas, RLS FORCE, policies, grants, triggers
+│   │       ├── 0001_foundation/         # T012–T013: dev_probe_items, idempotency_keys, audit_events, RLS y grants
+│   │       ├── 0002_idempotency_maintenance/  # Aprobaciones 3 y 4 (T079): purga de claves por kuota_maintenance
+│   │       └── 0003_platform_audit/     # T099: platform_audit_events (auditoría de plataforma, sin tenant)
 │   ├── src/
 │   │   ├── main.ts · app.module.ts
 │   │   ├── common/
@@ -166,7 +169,9 @@ kuota-platform/
 │   │       ├── health/                  # live/ready (terminus)
 │   │       ├── meta/                    # compatibility
 │   │       └── dev-probe/               # domain/ application/ infrastructure/ interface/ (solo local/testing)
-│   ├── scripts/                         # check-rls.ts, spike-rls.ts
+│   ├── scripts/                         # check-rls.ts, spike-rls.ts, check-no-float.ts (T065)
+│   │                                    # migration-preflight.ts (Aprobación 4: preflight de solo lectura de 0002)
+│   │                                    # purge-idempotency.ts (Aprobación 3, T079; auditoría de plataforma T099)
 │   └── test/
 │       ├── unit/ · property/            # money, fixtures, idempotency hashing
 │       ├── integration/                 # Testcontainers: RLS, roles, audit append-only, idempotencia concurrente
@@ -182,12 +187,17 @@ kuota-platform/
 │   └── packages/{shared_core, design_system, api_client (lib/src/generated), financial_domain, app_shell (Aprobación 11)}
 ├── infra/docker/
 │   ├── compose.yaml                     # postgres:18 (digest), perfil app opcional
-│   └── postgres/init/01-roles.sql
+│   └── postgres/init/{01-roles.sql, 02-maintenance-roles.sql}   # 02: kuota_maintenance(_login), Aprobación 3
 └── scripts/
-    ├── dev/{doctor,up,down,test-all,test-affected}.sh
+    ├── dev/{doctor,up,down,test-all,test-affected}.sh   # up.sh: preflight de migraciones antes de migrar (Aprobación 4)
     ├── ci/{run-local,general,backend,contracts,flutter,check-no-float,check-no-float-dart,prove-gates}.sh
     └── contracts/generate-dart-client.sh
 ```
+
+> **Trazabilidad (T105, 2026-11-23):** la migración 0002, `02-maintenance-roles.sql`, `migration-preflight.ts` y el
+> preflight de `up.sh` se aprobaron en las Aprobaciones 3 y 4 de `approvals.md`, fuera de la estructura original; 0003 y
+> la auditoría de la purga, en T099. Se registran arriba sin cambiar su alcance. `backend/test/unit/plan-traceability.spec.ts`
+> falla si una migración, un script de `backend/scripts/` o un script de `infra/docker/postgres/init/` no figura aquí.
 
 **Structure Decision**: Se usa la estructura objetivo de `docs/architecture/monorepo-strategy.md`, creando solo lo que
 001 necesita.

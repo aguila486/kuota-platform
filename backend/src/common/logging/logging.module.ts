@@ -6,10 +6,11 @@ import type { DestinationStream } from 'pino';
 import { APP_CONFIG, type AppConfig } from '../config/app-config.js';
 import { CORRELATION_HEADER, correlationIdFor } from './correlation.js';
 import { httpErrorObject, httpSuccessObject, serializeHttpRequest, serializeHttpResponse } from './http-log.js';
+import { stdoutDestination } from './log-destination.js';
 import { buildLoggerOptions, CLS_CORRELATION_ID } from './logger-options.js';
 
 export interface LoggingModuleOptions {
-  /** Destino alternativo (pruebas). Por defecto, stdout. */
+  /** Destino alternativo (pruebas). Por defecto, stdout síncrono (`log-destination.ts`). */
   readonly stream?: DestinationStream;
 }
 
@@ -63,7 +64,7 @@ export class LoggingModule {
             };
             return {
               renameContext: 'module',
-              pinoHttp: options.stream ? [httpOptions, options.stream] : httpOptions,
+              pinoHttp: [httpOptions, options.stream ?? stdoutDestination()],
             };
           },
         }),

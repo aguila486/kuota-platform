@@ -34,7 +34,14 @@ test/integration/dev-probe.spec.ts
 test/integration/dev-probe-repository.spec.ts
 test/integration/dev-probe-disabled.spec.ts
 test/integration/health.spec.ts
+# Excepciones de acceso de la Constitución §II: acceso permitido y denegado de cada una (T108; FR-040)
+test/integration/metrics.spec.ts
+test/integration/meta-compatibility.spec.ts
+test/integration/not-found.spec.ts
+test/integration/cors.spec.ts
 # Privacidad de logs HTTP (FR-009, FR-010; hotfix del 2026-11-23)
 test/integration/http-logging-privacy.spec.ts
 test/unit/logging/http-log.spec.ts
 test/unit/logging/redaction.spec.ts
+# Logs de toda la suite sin valores sensibles ficticios (SC-009, T102)
+test/unit/logging/log-privacy-scan.spec.ts

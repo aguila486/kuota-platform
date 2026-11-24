@@ -5,6 +5,7 @@
 #      (modificados y sin seguimiento). Los hallazgos se imprimen redactados.
 #   3. editorconfig-checker sobre los archivos versionados (y los nuevos sin seguimiento).
 #   4. actionlint sobre .github/workflows (incluye shellcheck de los bloques run).
+#   5. Autoverificación de scripts/dev/doctor.sh con binarios simulados (T107; US1-4, FR-003). Sin Docker ni red.
 #
 # Variables: KUOTA_CI_REPO_DIR (repositorio a revisar; por defecto la raíz; solo para pruebas), KUOTA_CI_BRANCH (rama;
 # por defecto GITHUB_HEAD_REF, GITHUB_REF_NAME o la rama actual).
@@ -103,4 +104,6 @@ check "Secretos: historial (gitleaks)" secrets_history
 check "Secretos: cambios sin confirmar (gitleaks)" secrets_uncommitted
 check "EditorConfig (editorconfig-checker)" editorconfig
 check "Workflows (actionlint)" workflows
+check "Verificación de entorno: doctor.sh falla y nombra la versión requerida (scripts/dev/tests/doctor.test.sh, T107)" \
+  "$KUOTA_ROOT/scripts/dev/tests/doctor.test.sh"
 finish general

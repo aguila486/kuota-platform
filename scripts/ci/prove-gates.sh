@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prueba de que los gates bloquean de verdad (T087; SC-003; US3-5..7). En un `git worktree` temporal (separado, sin
-# rama; se elimina al terminar) y para cada uno de los 8 cambios defectuosos de referencia (los 6 de T087 y 2 de
-# cobertura Dart, C1 de T092):
+# rama; se elimina al terminar) y para cada uno de los 9 cambios defectuosos de referencia (los 6 de T087, 2 de
+# cobertura Dart, C1 de T092, y el cliente Dart generado editado a mano, T106):
 #   1. control positivo: el gate REAL pasa sobre el código limpio de HEAD (si no, no prueba nada → FAIL);
 #   2. se aplica el cambio defectuoso;
 #   3. el gate REAL debe fallar (salida ≠ 0) Y por el motivo esperado (firma en su salida). Fallar por otra causa
@@ -17,6 +17,7 @@
 # | cobertura bajo umbral (money ≥ 90 %)      | vitest --coverage con los umbrales de vitest.config.ts (ver ↓)   |
 # | cobertura Dart bajo umbral (C1)           | check-dart-coverage.sh: financial_domain ≥ 90 % líneas y ramas   |
 # | archivo Dart de lib/ sin pruebas (C1)     | check-dart-coverage.sh: archivo con código que ninguna prueba carga |
+# | cliente Dart generado editado a mano (T106) | contracts.sh → "Cliente Dart regenerado == versionado" (T071)   |
 #
 # Diferencias explícitas con CI (no cambian los criterios ni los umbrales):
 #   - Contrato: en CI la base es `main`, que aún no contiene el contrato (OMITIDO, T049). Aquí se usa la variable
@@ -25,11 +26,14 @@
 #     src/common/money/**, sin Testcontainers (memoria limitada de Docker Desktop). Los umbrales son los de
 #     vitest.config.ts, sin cambios; el control positivo demuestra que ese alcance pasa con el código limpio.
 #   - Secretos: el token de prueba se genera en tiempo de ejecución (nunca se versiona) y gitleaks lo informa redactado.
+#   - Cliente generado (T106): la edición a mano se confirma en un commit SIN RAMA dentro del worktree temporal (si
+#     quedara sin confirmar, contracts.sh fallaría antes, en su comprobación previa, y no probaría la regeneración).
+#     Ese commit no se referencia desde ninguna rama y desaparece con el worktree; el siguiente caso vuelve a HEAD.
 #   - El cambio de RLS es una migración que solo existe en el worktree temporal y se aplica a un PostgreSQL efímero
 #     (db-gate.sh: tmpfs, --rm); nunca a una base persistente.
 #
 # Requiere Docker, Node/pnpm (store local) y Flutter (lo usa contracts.sh). Sin alguno → salida 2, nunca PASS.
-# Uso: scripts/ci/prove-gates.sh [secreto|float|rls|contrato|dominio|cobertura ...]   (por defecto, todos)
+# Uso: scripts/ci/prove-gates.sh [secreto|float|rls|contrato|dominio|cobertura|cliente-generado ...]   (por defecto, todos)
 # Salida: 0 si todos los gates seleccionados quedan probados (pasan limpios y fallan con su defecto); 1 si alguno no; 2 entorno.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -38,7 +42,7 @@ use_project_node
 use_project_flutter
 command -v pnpm >/dev/null 2>&1 || { echo "prove-gates: se requiere pnpm" >&2; exit 2; }
 
-ALL=(secreto float rls contrato dominio cobertura cobertura-dart dart-sin-pruebas)
+ALL=(secreto float rls contrato dominio cobertura cobertura-dart dart-sin-pruebas cliente-generado)
 SELECTED=("$@")
 [ ${#SELECTED[@]} -gt 0 ] || SELECTED=("${ALL[@]}")
 for name in "${SELECTED[@]}"; do
@@ -66,7 +70,9 @@ git -C "$KUOTA_ROOT" worktree add --detach --quiet "$WT" HEAD || { echo "prove-g
 (cd "$WT/flutter" && flutter pub get --offline --enforce-lockfile >"$LOGS/pub.log" 2>&1) ||
   { echo "prove-gates: flutter pub get --offline falló en el worktree" >&2; exit 2; }
 
-reset_worktree() { git -C "$WT" checkout --quiet -- . && git -C "$WT" clean -fdq; }
+ORIGIN="$(git -C "$WT" rev-parse HEAD)"
+# Vuelve al HEAD original (también si un caso confirmó su defecto, T106) y descarta todo cambio y archivo nuevo.
+reset_worktree() { git -C "$WT" checkout --quiet --force --detach "$ORIGIN" && git -C "$WT" clean -fdq; }
 
 # --- Gates (se ejecutan dentro del worktree) -------------------------------------------------------------------------
 gate_secreto() { (cd "$WT" && KUOTA_CI_BRANCH="$BRANCH" bash scripts/ci/general.sh); }
@@ -76,6 +82,7 @@ gate_contrato() { (cd "$WT" && KUOTA_CI_BREAKING_BASE=HEAD bash scripts/ci/contr
 gate_dominio() { (cd "$WT" && pnpm --filter backend run lint); }
 gate_cobertura_dart() { (cd "$WT" && bash scripts/ci/check-dart-coverage.sh "$WT/flutter"); }
 gate_dart_sin_pruebas() { gate_cobertura_dart; }
+gate_cliente_generado() { gate_contrato; }
 gate_cobertura() {
   (cd "$WT/backend" && pnpm exec vitest run test/unit/money test/property --coverage \
     --coverage.include='src/common/money/**' --coverage.reporter=text)
@@ -89,6 +96,7 @@ signature_contrato='^[[:space:]]+FAIL[[:space:]]+Compatibilidad: oasdiff breakin
 signature_dominio='domain-sin-framework'
 signature_cobertura_dart='✗ financial_domain: (líneas|ramas) por debajo de 90'
 signature_dart_sin_pruebas='✗ shared_core: lib/src/prove_gate_untested.dart tiene código y ninguna prueba lo carga'
+signature_cliente_generado='✗ el cliente regenerado difiere del versionado'
 signature_cobertura='ERROR: Coverage for .* does not meet "src/common/money/\*\*" threshold'
 
 # --- Cambios defectuosos de referencia -------------------------------------------------------------------------------
@@ -182,6 +190,14 @@ defect_dart_sin_pruebas() {
 String proveGateUntested(String value) => value.trim();
 ' \
     >"$WT/flutter/packages/shared_core/lib/src/prove_gate_untested.dart"
+}
+defect_cliente_generado() {
+  # Edición a mano de un archivo generado, confirmada (sin rama) para que el gate llegue a regenerar y comparar.
+  local file="$WT/flutter/packages/api_client/lib/src/generated/api_util.dart"
+  [ -f "$file" ] || return 1
+  printf '\n// prove-gates (T106): edición a mano de un archivo generado.\n' >>"$file"
+  git -C "$WT" -c user.name=prove-gates -c user.email=prove-gates@invalid commit --quiet --no-verify \
+    -m "prove-gates: edición a mano del cliente generado" -- "$file"
 }
 
 prove() { # nombre

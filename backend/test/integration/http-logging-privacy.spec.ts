@@ -7,6 +7,7 @@ import { createApp } from '../../src/bootstrap.js';
 import { loadConfig } from '../../src/common/config/load-config.js';
 import { validEnv } from '../support/env.js';
 import { startTestDatabase, type TestDatabase } from '../support/postgres.js';
+import { recordOutput } from '../support/log-capture.js';
 
 /**
  * Hotfix de privacidad de logs HTTP (2026-11-23): se captura el JSON REAL que emite Kuota Core (aplicación completa,
@@ -89,6 +90,7 @@ let output = '';
 const logStream = new Writable({
   write(chunk: Buffer, _enc, done) {
     output += chunk.toString();
+    recordOutput(chunk.toString()); // SC-009 · T102: captura de la suite
     done();
   },
 });

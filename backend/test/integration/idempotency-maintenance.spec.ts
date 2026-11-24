@@ -18,6 +18,7 @@ import { loadConfig } from '../../src/common/config/load-config.js';
 import { validEnv } from '../support/env.js';
 import { applyMigrations, MigrateDeployError, startTestDatabase, type TestDatabase } from '../support/postgres.js';
 import { asTenantSql, rejection, sqlState } from '../support/tenant-data.js';
+import { recordOutput } from '../support/log-capture.js';
 
 /**
  * T079 + migración 0002 (cierre de US6, 2026-11-23): rol de mantenimiento y purga de claves de idempotencia vencidas,
@@ -360,9 +361,11 @@ describe('CLI `idempotency:purge` (proceso real)', () => {
         ['--disable-warning=MODULE_TYPELESS_PACKAGE_JSON', 'scripts/purge-idempotency.ts', ...args],
         { cwd: BACKEND_DIR, env: { PATH: process.env['PATH'], ...env } },
       );
+      recordOutput(stdout + stderr); // SC-009 · T102
       return { code: 0, out: stdout + stderr };
     } catch (error) {
       const e = error as { code: number; stdout: string; stderr: string };
+      recordOutput(e.stdout + e.stderr); // SC-009 · T102
       return { code: e.code, out: e.stdout + e.stderr };
     }
   }

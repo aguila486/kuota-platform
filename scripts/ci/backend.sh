@@ -5,7 +5,9 @@
 #      autoverificación), typecheck, formato (Prettier) y build.
 #   3. Todas las pruebas con cobertura y umbrales (unitarias, integración con Testcontainers, tenancy y contrato):
 #      `vitest run --coverage`; los umbrales de vitest.config.ts hacen fallar si no se alcanzan.
-#   4. Suites obligatorias ejecutadas y sin omisiones (scripts/ci/required-suites.txt).
+#   4. Suites obligatorias ejecutadas y sin omisiones (scripts/ci/required-suites.txt). La misma ejecución comprueba al
+#      final que ningún valor sensible ficticio aparece en la salida agregada de logs de la suite (SC-009, T102:
+#      test/support/log-privacy.global.ts), y su autoverificación demuestra que una fuga deliberada la hace fallar.
 #   5. test:idempotency (SC-006: 100 repeticiones).
 #   6. Gate de PostgreSQL efímero: aprovisionamiento → preflight → migrate deploy → db:check-rls, con autoverificación.
 #   7. Autoverificación del gate de dependencias y osv-scanner sobre pnpm-lock.yaml: falla con severidad alta o crítica
@@ -53,6 +55,8 @@ check "Formato (Prettier)" pnpm --filter backend run format:check
 check "Build" pnpm --filter backend run build
 check "Pruebas: unitarias, integración, tenancy y contrato, con cobertura y umbrales" tests_with_coverage
 check "Suites obligatorias ejecutadas y sin omisiones" required_suites
+check "Autoverificación del gate de privacidad de logs de la suite (scripts/ci/tests/log-privacy.test.sh, SC-009)" \
+  scripts/ci/tests/log-privacy.test.sh
 check "Idempotencia: test:idempotency (100 repeticiones, SC-006)" pnpm --filter backend run test:idempotency
 check "PostgreSQL 18 efímero, preflight y db:check-rls (scripts/ci/db-gate.sh)" "$KUOTA_ROOT/scripts/ci/db-gate.sh"
 check "Autoverificación del gate de dependencias (scripts/ci/tests/osv-gate.test.sh)" scripts/ci/tests/osv-gate.test.sh

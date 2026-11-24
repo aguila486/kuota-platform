@@ -1,5 +1,5 @@
 import type { ServerResponse } from 'node:http';
-import { Controller, Get, HttpStatus, Res, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Logger, Res, ServiceUnavailableException } from '@nestjs/common';
 import { HealthCheckService, type HealthCheckResult } from '@nestjs/terminus';
 import { DatabaseHealthIndicator } from './database.health.js';
 
@@ -20,6 +20,10 @@ export interface ReadinessStatus {
  */
 @Controller('health')
 export class HealthController {
+  private readonly logger = new Logger('Readiness');
+  /** Último estado observado; `unknown` hasta la primera comprobación de este proceso. */
+  private readiness: 'unknown' | 'up' | 'down' = 'unknown';
+
   constructor(
     private readonly health: HealthCheckService,
     private readonly database: DatabaseHealthIndicator,
@@ -42,7 +46,27 @@ export class HealthController {
     }
     const database = result.details['database']?.status === 'up' ? 'up' : 'down';
     const ready = result.status === 'ok' && database === 'up';
+    this.recordTransition(ready ? 'up' : 'down', result.details['database']?.['reason']);
     res.statusCode = ready ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
     return { status: ready ? 'ok' : 'error', checks: { database: { status: database } } };
+  }
+
+  /**
+   * T101: un evento `readiness.changed` SOLO cuando cambia el estado (no en cada sonda: los orquestadores consultan cada
+   * pocos segundos). Caída → `warn` con el motivo acotado; recuperación o primer estado `up` → `info`.
+   */
+  private recordTransition(next: 'up' | 'down', reason: unknown): void {
+    const previous = this.readiness;
+    if (previous === next) return;
+    this.readiness = next;
+    const event = { event: 'readiness.changed', check: 'database', from: previous, to: next };
+    if (next === 'down') {
+      this.logger.warn(
+        { ...event, reason: typeof reason === 'string' ? reason : 'error' },
+        'PostgreSQL no disponible: readiness en 503',
+      );
+    } else {
+      this.logger.log(event, 'Readiness disponible');
+    }
   }
 }

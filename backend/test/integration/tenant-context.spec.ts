@@ -10,6 +10,7 @@ import { TenantPrismaService } from '../../src/common/tenant-context/tenant-pris
 import { STRONG_TOKEN, validEnv } from '../support/env.js';
 import { startTestDatabase, type TestDatabase } from '../support/postgres.js';
 import { TENANT_A, TENANT_B } from '../support/tenant-data.js';
+import { recordOutput } from '../support/log-capture.js';
 
 /**
  * T038 sobre la aplicación real (createApp): `DevTenantGuard` + `TenantContext` + `withTenant`, por HTTP. El
@@ -72,6 +73,7 @@ let logs = '';
 const logStream = new Writable({
   write(chunk: Buffer, _enc, done) {
     logs += chunk.toString();
+    recordOutput(chunk.toString()); // SC-009 · T102: captura de la suite
     done();
   },
 });

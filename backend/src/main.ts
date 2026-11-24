@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { createApp } from './bootstrap.js';
 import type { AppConfig } from './common/config/app-config.js';
 import { ConfigValidationError, loadConfig } from './common/config/load-config.js';
+import { LifecycleEvents } from './common/logging/lifecycle-events.js';
 import { MetricsRuntime } from './common/metrics/metrics.module.js';
 
 /**
@@ -24,8 +25,9 @@ async function main(): Promise<void> {
   await app.listen(config.port);
   // Escucha de métricas separada y protegida (T094; FR-039, FR-040): nunca en el puerto de la API. Si no puede abrirse
   // (p. ej. puerto ocupado), el servicio no arranca a medias: termina con código 1.
+  let metricsPort: number;
   try {
-    await app.get(MetricsRuntime).listen();
+    metricsPort = await app.get(MetricsRuntime).listen();
   } catch (error) {
     const reason = (error as NodeJS.ErrnoException).code ?? 'error';
     process.stderr.write(
@@ -33,7 +35,10 @@ async function main(): Promise<void> {
     );
     await app.close();
     process.exitCode = 1;
+    return;
   }
+  // T101: un único evento de arranque cuando ambas escuchas aceptan conexiones.
+  app.get(LifecycleEvents).started({ api: config.port, metrics: metricsPort });
 }
 
 void main();

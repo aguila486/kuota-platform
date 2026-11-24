@@ -7,6 +7,7 @@ import { loadConfig } from '../../src/common/config/load-config.js';
 import { validEnv } from '../support/env.js';
 import { startTestDatabase, type TestDatabase } from '../support/postgres.js';
 import { startTcpProxy, type TcpProxy } from '../support/tcp-proxy.js';
+import { recordOutput } from '../support/log-capture.js';
 
 /**
  * T026 (US1-1, US1-2; FR-040): sondas reales contra PostgreSQL efímero (Testcontainers) a través de un proxy TCP que
@@ -22,6 +23,7 @@ let logs = '';
 const logStream = new Writable({
   write(chunk: Buffer, _enc, done) {
     logs += chunk.toString();
+    recordOutput(chunk.toString()); // SC-009 · T102: captura de la suite
     done();
   },
 });
@@ -126,6 +128,8 @@ describe('GET /health/ready (T026)', () => {
   });
 
   it('el motivo del fallo va solo al log (nivel warn, con correlación) y sin la contraseña de la conexión', async () => {
+    // Parte de un estado `up` para que la caída sea una transición (T101: solo los cambios de estado van a warn).
+    expect((await get('/health/ready')).res.status).toBe(200);
     logs = '';
     proxy.mode = 'refuse';
     proxy.dropConnections();
@@ -138,7 +142,11 @@ describe('GET /health/ready (T026)', () => {
       expect(record['level']).toBe('warn');
       expect(record['check']).toBe('database');
       expect(record['correlation_id']).toBe(res.headers.get('x-correlation-id'));
+      // T101: motivo acotado (código), nunca el mensaje del driver con host, puerto o usuario.
+      expect(record['reason']).toMatch(/^[A-Z0-9_]{2,32}$|^timeout$|^error$/);
+      expect(record).not.toHaveProperty('err');
       expect(logs).not.toContain(decodeURIComponent(new URL(db.appUrl).password));
+      for (const leak of [String(proxy.port), 'kuota_app_login']) expect(line, leak).not.toContain(leak);
     } finally {
       proxy.mode = 'forward';
     }
@@ -165,6 +173,42 @@ describe('GET /health/ready (T026)', () => {
     expect((await get('/health/ready')).res.status).toBe(503);
     proxy.mode = 'forward';
     expect((await get('/health/ready')).res.status).toBe(200);
+  });
+});
+
+describe('eventos de transición de readiness (T101)', () => {
+  function transitions(): Array<Record<string, unknown>> {
+    return logs
+      .split('\n')
+      .filter((line) => line.includes('"event":"readiness.changed"'))
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+  }
+
+  it('un solo evento por cambio de estado: caída (warn) y recuperación (info), sin repetir en sondas iguales', async () => {
+    proxy.mode = 'forward';
+    expect((await get('/health/ready')).res.status).toBe(200);
+    logs = '';
+    proxy.mode = 'refuse';
+    proxy.dropConnections();
+    try {
+      for (let i = 0; i < 3; i += 1) expect((await get('/health/ready')).res.status).toBe(503);
+    } finally {
+      proxy.mode = 'forward';
+    }
+    for (let i = 0; i < 3; i += 1) expect((await get('/health/ready')).res.status).toBe(200);
+
+    const events = transitions();
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({ level: 'warn', check: 'database', from: 'up', to: 'down', module: 'Readiness' });
+    expect(events[1]).toMatchObject({ level: 'info', check: 'database', from: 'down', to: 'up', module: 'Readiness' });
+    expect(events[1]).not.toHaveProperty('reason');
+  });
+
+  it('sondas sanas consecutivas no emiten eventos', async () => {
+    expect((await get('/health/ready')).res.status).toBe(200);
+    logs = '';
+    for (let i = 0; i < 5; i += 1) await get('/health/ready');
+    expect(transitions()).toHaveLength(0);
   });
 });
 

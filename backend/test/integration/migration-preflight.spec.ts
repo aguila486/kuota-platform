@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { migrationPreflight, PreflightAccessError } from '../../scripts/migration-preflight.js';
 import { applyMigrations, startTestDatabase, type TestDatabase } from '../support/postgres.js';
 import { rejection } from '../support/tenant-data.js';
+import { recordOutput } from '../support/log-capture.js';
 
 /**
  * Preflight de migraciones (cierre de US6, Aprobación 4): sobre PostgreSQL 18 efímero, con la identidad de migración
@@ -66,9 +67,11 @@ async function cli(env: Record<string, string>) {
       ['--disable-warning=MODULE_TYPELESS_PACKAGE_JSON', 'scripts/migration-preflight.ts'],
       { cwd: BACKEND_DIR, env: { PATH: process.env['PATH'], ...env } },
     );
+    recordOutput(stdout + stderr); // SC-009 · T102
     return { code: 0, out: stdout + stderr };
   } catch (error) {
     const e = error as { code: number; stdout: string; stderr: string };
+    recordOutput(e.stdout + e.stderr); // SC-009 · T102
     return { code: e.code, out: e.stdout + e.stderr };
   }
 }

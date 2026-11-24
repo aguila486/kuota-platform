@@ -4,6 +4,7 @@ import type { DestinationStream } from 'pino';
 import { type AppConfig, devTenantContextEnabled } from './common/config/app-config.js';
 import { ConfigModule } from './common/config/config.module.js';
 import { ProblemDetailsFilter } from './common/errors/problem.filter.js';
+import { ENABLED_MODULES, LifecycleEvents, moduleName } from './common/logging/lifecycle-events.js';
 import { LoggingModule } from './common/logging/logging.module.js';
 import { MetricsModule } from './common/metrics/metrics.module.js';
 import { TenantContextModule } from './common/tenant-context/tenant-context.module.js';
@@ -33,19 +34,21 @@ export function devModulesEnabled(config: AppConfig): boolean {
 export class AppModule {
   static forRoot(config: AppConfig, options: AppModuleOptions = {}): DynamicModule {
     const devModules = devModulesEnabled(config) ? (options.devModules ?? DEV_ONLY_MODULES) : [];
+    const applicationModules = [TenantContextModule, MetricsModule, HealthModule, MetaModule, ...devModules];
     return {
       module: AppModule,
       imports: [
         ConfigModule.forConfig(config),
         LoggingModule.forRoot(options.logStream ? { stream: options.logStream } : {}),
-        TenantContextModule,
-        MetricsModule,
-        HealthModule,
-        MetaModule,
-        ...devModules,
+        ...applicationModules,
         ...(options.modules ?? []),
       ],
-      providers: [{ provide: APP_FILTER, useClass: ProblemDetailsFilter }],
+      providers: [
+        { provide: APP_FILTER, useClass: ProblemDetailsFilter },
+        // T101: el evento `service.started` nombra los módulos de aplicación habilitados (incluidos los de desarrollo).
+        { provide: ENABLED_MODULES, useValue: applicationModules.map(moduleName) },
+        LifecycleEvents,
+      ],
     };
   }
 }

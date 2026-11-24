@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { checkRls, TENANT_TABLE_ALLOWLIST } from '../../scripts/check-rls.js';
 import { startTestDatabase, type TestDatabase } from '../support/postgres.js';
 import { TENANT_TABLES } from '../support/tenant-data.js';
+import { recordOutput } from '../support/log-capture.js';
 
 /**
  * T036 (US2-4; FR-015) y T043: el verificador de catálogo sobre PostgreSQL 18 real. Cada caso negativo rompe algo
@@ -47,9 +48,11 @@ async function runCli(env: Record<string, string>, args: string[] = []) {
         env: { PATH: process.env['PATH'], ...env },
       },
     );
+    recordOutput(stdout); // SC-009 · T102
     return { code: 0, stdout };
   } catch (error) {
-    const e = error as { code: number; stdout: string };
+    const e = error as { code: number; stdout: string; stderr?: string };
+    recordOutput(`${e.stdout ?? ''}${e.stderr ?? ''}`); // SC-009 · T102
     return { code: e.code, stdout: e.stdout };
   }
 }

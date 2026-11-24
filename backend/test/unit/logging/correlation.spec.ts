@@ -8,12 +8,14 @@ import { ConfigModule } from '../../../src/common/config/config.module.js';
 import { LoggingModule, requestContextMiddleware } from '../../../src/common/logging/logging.module.js';
 import { CORRELATION_HEADER, resolveCorrelationId } from '../../../src/common/logging/correlation.js';
 import { validEnv } from '../../support/env.js';
+import { recordOutput } from '../../support/log-capture.js';
 
 // T019 · FR-009: correlation_id propagado o generado (UUIDv7), módulo, nivel y tenant/actor desde CLS.
 let logs = '';
 const stream = new Writable({
   write(chunk: Buffer, _enc, done) {
     logs += chunk.toString();
+    recordOutput(chunk.toString()); // SC-009 · T102: captura de la suite
     done();
   },
 });

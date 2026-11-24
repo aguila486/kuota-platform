@@ -15,8 +15,17 @@ export default defineConfig({
   ],
   test: {
     environment: 'node',
+    // SC-009 · T102: captura de toda la salida de logs y comprobación final de valores sensibles ficticios.
+    globalSetup: ['test/support/log-privacy.global.ts'],
+    setupFiles: ['test/support/log-capture.setup.ts'],
     // `pnpm spike:rls` (T014) ejecuta solo el spike; el resto de comandos, solo las pruebas.
-    include: process.env['KUOTA_SPIKE'] === '1' ? ['scripts/spike-rls.ts'] : ['test/**/*.spec.ts'],
+    // `KUOTA_LOG_PRIVACY_SELFTEST=1` ejecuta solo la fuga deliberada de la autoverificación del gate SC-009 (T102).
+    include:
+      process.env['KUOTA_SPIKE'] === '1'
+        ? ['scripts/spike-rls.ts']
+        : process.env['KUOTA_LOG_PRIVACY_SELFTEST'] === '1'
+          ? ['test/fixtures/log-privacy/*.fixture.ts']
+          : ['test/**/*.spec.ts'],
     testTimeout: process.env['KUOTA_SPIKE'] === '1' ? 300_000 : 15_000,
     // Las pruebas con Testcontainers incluyen el arranque del contenedor.
     hookTimeout: 180_000,

@@ -15,6 +15,7 @@ import { buildLoggerOptions } from '../../../src/common/logging/logger-options.j
 import { OMITTED_HTTP_OBJECT, sanitizeLogObject } from '../../../src/common/logging/redaction.js';
 import { loadConfig } from '../../../src/common/config/load-config.js';
 import { validEnv } from '../../support/env.js';
+import { recordOutput } from '../../support/log-capture.js';
 
 /** Hotfix de privacidad de logs HTTP (2026-11-23): serializadores por lista permitida y omisión de objetos HTTP. */
 const FICTITIOUS = {
@@ -102,6 +103,7 @@ describe('objetos HTTP pasados por error a un log', () => {
     const stream = new Writable({
       write(chunk: Buffer, _enc, done) {
         output += chunk.toString();
+        recordOutput(chunk.toString()); // SC-009 · T102: captura de la suite
         done();
       },
     });

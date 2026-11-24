@@ -3,7 +3,9 @@ import { Controller, Get, Logger, Module, type INestApplication } from '@nestjs/
 import { afterEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/bootstrap.js';
 import { loadConfig } from '../../src/common/config/load-config.js';
+import { LifecycleEvents } from '../../src/common/logging/lifecycle-events.js';
 import { STRONG_TOKEN, validEnv } from '../support/env.js';
+import { recordOutput } from '../support/log-capture.js';
 
 /**
  * T025: la aplicación REAL (AppModule.forRoot + createApp) registra configuración, logging, filtro global y el registro
@@ -42,6 +44,7 @@ let logs = '';
 const logStream = new Writable({
   write(chunk: Buffer, _enc, done) {
     logs += chunk.toString();
+    recordOutput(chunk.toString()); // SC-009 · T102: captura de la suite
     done();
   },
 });
@@ -134,5 +137,66 @@ describe('bootstrap real de Kuota Core (T025)', () => {
     await app.listen(0, '127.0.0.1');
     // La ruta existe: sin contexto técnico responde 401 del guard (no 404).
     expect((await fetch(`${await app.getUrl()}/v1/dev/probe-items`)).status).toBe(401);
+  });
+
+  /** Registros con un `event` dado (T101). */
+  function events(name: string): Array<Record<string, unknown>> {
+    return logs
+      .split('\n')
+      .filter((line) => line.includes(`"event":"${name}"`))
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+  }
+
+  it('T101: un único evento service.started con entorno, versión y módulos, sin secretos ni URLs', async () => {
+    const env = {
+      KUOTA_ENV: 'local',
+      KUOTA_DEV_TENANT_CONTEXT: 'enabled',
+      KUOTA_METRICS_TOKEN: STRONG_TOKEN,
+      DATABASE_URL_APP: 'postgresql://kuota_app_login:ficticio-secreto-db@127.0.0.1:55432/kuota',
+      KUOTA_CORS_ALLOWED_ORIGINS: 'http://localhost:8080',
+    };
+    logs = '';
+    app = await createApp(loadConfig(validEnv(env)), { logStream });
+    await app.listen(0, '127.0.0.1');
+    const lifecycle = app.get(LifecycleEvents);
+    lifecycle.started({ api: 3000, metrics: 9464 });
+    lifecycle.started({ api: 3000, metrics: 9464 });
+
+    const started = events('service.started');
+    expect(started).toHaveLength(1);
+    expect(started[0]).toMatchObject({
+      level: 'info',
+      module: 'Lifecycle',
+      env: 'local',
+      api_version: loadConfig(validEnv(env)).apiVersion,
+      modules: ['tenant-context', 'metrics', 'health', 'meta', 'dev-probe'],
+      port: 3000,
+      metrics_port: 9464,
+    });
+    for (const leak of ['ficticio-secreto-db', STRONG_TOKEN, 'postgresql://', 'localhost:8080', '55432']) {
+      expect(JSON.stringify(started[0]), leak).not.toContain(leak);
+    }
+  });
+
+  it('T101: los módulos de desarrollo no aparecen en service.started fuera de local/testing', async () => {
+    logs = '';
+    app = await createApp(loadConfig(validEnv({ KUOTA_ENV: 'production', KUOTA_METRICS_TOKEN: STRONG_TOKEN })), {
+      logStream,
+    });
+    app.get(LifecycleEvents).started({ api: 3000, metrics: 9464 });
+    // Solo `modules`: `env` sale de la base de pino, y nestjs-pino 5 conserva un único logger raíz por proceso, así que
+    // en este proceso de pruebas (varias apps) lleva el entorno de la primera. En el proceso real hay una sola app.
+    expect(events('service.started')[0]!['modules']).toStrictEqual(['tenant-context', 'metrics', 'health', 'meta']);
+  });
+
+  it('T101: un único evento service.stopped al cerrar, con señal y tiempo en marcha', async () => {
+    await start({ KUOTA_ENV: 'local' });
+    app!.get(LifecycleEvents).started({ api: 3000, metrics: 9464 });
+    await app!.close();
+    app = undefined;
+    const stopped = events('service.stopped');
+    expect(stopped).toHaveLength(1);
+    expect(stopped[0]).toMatchObject({ level: 'info', module: 'Lifecycle', signal: 'close' });
+    expect(typeof stopped[0]!['uptime_ms']).toBe('number');
   });
 });

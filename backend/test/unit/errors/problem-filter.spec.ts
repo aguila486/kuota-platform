@@ -20,12 +20,14 @@ import { ProblemDetailsFilter } from '../../../src/common/errors/problem.filter.
 import { CORRELATION_HEADER } from '../../../src/common/logging/correlation.js';
 import { LoggingModule } from '../../../src/common/logging/logging.module.js';
 import { validEnv } from '../../support/env.js';
+import { recordOutput } from '../../support/log-capture.js';
 
 // T020 · FR-011: toda excepción → application/problem+json (RFC 9457) con code y correlation_id, sin stack ni secretos.
 let logs = '';
 const stream = new Writable({
   write(chunk: Buffer, _enc, done) {
     logs += chunk.toString();
+    recordOutput(chunk.toString()); // SC-009 · T102: captura de la suite
     done();
   },
 });
@@ -92,6 +94,11 @@ class ProbeErrorsController {
   @Get('app-version')
   appVersion(): never {
     throw new KuotaProblemError('app-version-unsupported');
+  }
+
+  @Get('key-reused')
+  keyReused(): never {
+    throw new KuotaProblemError('idempotency-key-reused', { detail: 'clave 7f3c-ficticia-idem con otro cuerpo' });
   }
 
   @Get('thrown-string')
@@ -215,5 +222,43 @@ describe('filtro problem+json (T020/T021)', () => {
     expect(res.status).toBe(404);
     expect(res.headers.get('content-type')).toMatch(/^application\/problem\+json/);
     expect(((await res.json()) as { code: string }).code).toBe('not-found');
+  });
+
+  /** Registros JSON del log con un `event` dado (T101). */
+  function events(name: string): Array<Record<string, unknown>> {
+    return logs
+      .split('\n')
+      .filter((line) => line.includes(`"event":"${name}"`))
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+  }
+
+  it('T101: conflictos de idempotencia (409/422) y de versión → un evento info `request.conflict`, sin detalle ni clave', async () => {
+    logs = '';
+    const cases: Array<[string, string, number]> = [
+      ['in-progress', 'idempotency-request-in-progress', 409],
+      ['key-reused', 'idempotency-key-reused', 422],
+      ['domain', 'version-conflict', 409],
+    ];
+    for (const [path, code, status] of cases) {
+      const id = `0193b6f0-0000-7000-8000-00000000000${status === 422 ? 2 : path === 'domain' ? 3 : 1}`;
+      await call(path, id);
+      const matching = events('request.conflict').filter((e) => e['correlation_id'] === id);
+      expect(matching, path).toHaveLength(1);
+      expect(matching[0]).toMatchObject({ level: 'info', code, status, module: 'ProblemDetails' });
+      expect(Object.keys(matching[0]!).sort(), path).toStrictEqual(
+        ['code', 'correlation_id', 'env', 'event', 'level', 'module', 'msg', 'req', 'service', 'status', 'time'].sort(),
+      );
+      // `req` es el enlace mínimo de pino-http (solo el método; http-log.ts).
+      expect(matching[0]!['req']).toStrictEqual({ method: 'GET' });
+    }
+    for (const leak of ['7f3c-ficticia-idem', 'otro cuerpo', 'La versión enviada']) expect(logs).not.toContain(leak);
+  });
+
+  it('T101: los demás errores de cliente no se registran como conflicto ni en info', async () => {
+    logs = '';
+    for (const path of ['not-found', 'validation', 'tenant', 'app-version']) await call(path);
+    expect(events('request.conflict')).toHaveLength(0);
+    const fromFilter = logs.split('\n').filter((line) => line.includes('"module":"ProblemDetails"'));
+    expect(fromFilter.some((line) => line.includes('"level":"info"'))).toBe(false);
   });
 });

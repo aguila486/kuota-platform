@@ -11,6 +11,7 @@ import { loadConfig } from '../../src/common/config/load-config.js';
 import { DevProbeService } from '../../src/modules/dev-probe/application/dev-probe.service.js';
 import { STRONG_TOKEN, validEnv } from '../support/env.js';
 import { startTestDatabase, type TestDatabase } from '../support/postgres.js';
+import { recordOutput } from '../support/log-capture.js';
 
 /**
  * T096 (FR-040; excepción `/v1/dev/*`): fuera de local/testing con el contexto técnico habilitado, `dev-probe` NO se
@@ -143,8 +144,15 @@ describe('proceso real `node dist/main.js` en producción (T096)', () => {
       env: { PATH: process.env['PATH'], ...env },
     });
     let output = '';
-    child.stdout.on('data', (c: Buffer) => (output += c.toString()));
-    child.stderr.on('data', (c: Buffer) => (output += c.toString()));
+    // SC-009 · T102: la salida del proceso real también entra en la captura de la suite.
+    child.stdout.on('data', (c: Buffer) => {
+      output += c.toString();
+      recordOutput(c.toString());
+    });
+    child.stderr.on('data', (c: Buffer) => {
+      output += c.toString();
+      recordOutput(c.toString());
+    });
     try {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error(`no arrancó: ${output}`)), 20_000);

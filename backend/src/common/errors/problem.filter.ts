@@ -19,6 +19,17 @@ interface MappedProblem {
   readonly headers?: Readonly<Record<string, string>>;
 }
 
+/**
+ * Conflictos que se registran en `info` (T101; spec: Observability Signals): idempotencia (409/422) y versión. Son
+ * señales operativas (reintentos concurrentes, clientes que reutilizan claves, ediciones concurrentes), no errores del
+ * servidor. El resto de errores 4xx se queda en `debug`.
+ */
+const CONFLICT_CODES: ReadonlySet<ProblemCode> = new Set([
+  'idempotency-request-in-progress',
+  'idempotency-key-reused',
+  'version-conflict',
+]);
+
 /** Estados de HttpException que el contrato sí cubre: errores de entrada (validation-error) y recurso inexistente. */
 const INPUT_ERROR_STATUSES = new Set([400, 413, 415, 422]);
 
@@ -96,6 +107,13 @@ export class ProblemDetailsFilter implements ExceptionFilter {
         ? `HttpException ${(exception as HttpException).getStatus()} sin código en el contrato: usar KuotaProblemError`
         : 'Error no controlado';
       this.logger.error({ err, code: problem.code, correlation_id: correlationId }, message);
+    } else if (CONFLICT_CODES.has(problem.code)) {
+      // Solo el código estable, el estado y la correlación (tenant y actor los añade el contexto): nunca la clave de
+      // idempotencia, el cuerpo, el hash ni el `detail`.
+      this.logger.log(
+        { event: 'request.conflict', code: problem.code, status: problem.status, correlation_id: correlationId },
+        'Conflicto de solicitud',
+      );
     } else {
       this.logger.debug(
         { code: problem.code, status: problem.status, correlation_id: correlationId },

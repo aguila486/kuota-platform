@@ -5,6 +5,7 @@ import { loadConfig } from '../../../src/common/config/load-config.js';
 import { buildLoggerOptions } from '../../../src/common/logging/logger-options.js';
 import { maskSensitiveText } from '../../../src/common/logging/redaction.js';
 import { validEnv } from '../../support/env.js';
+import { recordOutput } from '../../support/log-capture.js';
 
 // T018 · FR-010 · SC-009: los datos sensibles nunca aparecen en la salida de log.
 const SENSITIVE = {
@@ -24,6 +25,7 @@ function capture(level = 'info'): { logger: pino.Logger; lines: () => string } {
   const stream = new Writable({
     write(chunk: Buffer, _enc, done) {
       buffer += chunk.toString();
+      recordOutput(chunk.toString()); // SC-009 · T102: captura de la suite
       done();
     },
   });

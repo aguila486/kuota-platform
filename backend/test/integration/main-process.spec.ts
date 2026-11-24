@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { STRONG_TOKEN, validEnv } from '../support/env.js';
+import { recordOutput } from '../support/log-capture.js';
 
 /** T025: el proceso real `node dist/main.js` (build SWC) arranca con configuración válida y aborta con una inválida. */
 const BACKEND_DIR = join(__dirname, '../..');
@@ -24,8 +25,15 @@ function run(env: Record<string, string | undefined>, untilListening: boolean) {
   const child = spawn(process.execPath, [MAIN], { cwd: BACKEND_DIR, env: { PATH: process.env['PATH'], ...env } });
   let stdout = '';
   let stderr = '';
-  child.stdout.on('data', (c: Buffer) => (stdout += c.toString()));
-  child.stderr.on('data', (c: Buffer) => (stderr += c.toString()));
+  // SC-009 · T102: la salida del proceso real también entra en la captura de la suite.
+  child.stdout.on('data', (c: Buffer) => {
+    stdout += c.toString();
+    recordOutput(c.toString());
+  });
+  child.stderr.on('data', (c: Buffer) => {
+    stderr += c.toString();
+    recordOutput(c.toString());
+  });
   const exited = new Promise<number | null>((resolve) => child.on('exit', (code) => resolve(code)));
   const ready = untilListening
     ? new Promise<void>((resolve, reject) => {
@@ -84,10 +92,28 @@ describe('proceso main.ts (T025)', () => {
       const lines = proc.output().stdout.trim().split('\n');
       expect(lines.every((line) => (JSON.parse(line) as { service: string }).service === 'kuota-core')).toBe(true);
       expect(proc.output().stdout).not.toContain('ficticio-secreto-db');
+      // T101: un único evento de arranque, emitido cuando ambas escuchas están abiertas.
+      const started = lines.filter((line) => line.includes('"event":"service.started"'));
+      expect(started).toHaveLength(1);
+      expect(JSON.parse(started[0]!)).toMatchObject({
+        level: 'info',
+        env: 'local',
+        port,
+        metrics_port: metricsPort,
+        modules: expect.arrayContaining(['health', 'meta', 'metrics', 'tenant-context']) as unknown,
+      });
+      expect(started[0]).not.toContain(STRONG_TOKEN);
     } finally {
       proc.child.kill('SIGTERM');
       await proc.exited;
     }
+    // T101: al recibir SIGTERM, un único evento de apagado con la señal.
+    const stopped = proc
+      .output()
+      .stdout.split('\n')
+      .filter((line) => line.includes('"event":"service.stopped"'));
+    expect(stopped).toHaveLength(1);
+    expect(JSON.parse(stopped[0]!)).toMatchObject({ level: 'info', signal: 'SIGTERM' });
   });
 
   it('aborta con código 1 si la configuración es inválida, sin revelar valores', async () => {
@@ -109,6 +135,7 @@ describe('proceso main.ts (T025)', () => {
     expect(stderr + stdout).not.toContain('ficticio-secreto-db');
     expect(stderr + stdout).not.toContain(STRONG_TOKEN);
     expect(stdout).not.toContain('Nest application successfully started');
+    expect(stdout).not.toContain('service.started');
   });
 
   it('termina con código 1 si la escucha de métricas no puede abrirse (puerto ocupado), sin revelar el token', async () => {
@@ -132,6 +159,8 @@ describe('proceso main.ts (T025)', () => {
       expect(fatal.msg).toMatch(/métricas/);
       expect(stderr + stdout).not.toContain(STRONG_TOKEN);
       expect(stderr + stdout).not.toContain('ficticio-secreto-db');
+      // T101: sin escucha de métricas no hay evento de arranque (el servicio no llegó a estar disponible).
+      expect(stdout).not.toContain('"event":"service.started"');
     } finally {
       await new Promise<void>((resolve) => busy.close(() => resolve()));
     }

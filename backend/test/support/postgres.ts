@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { Client } from 'pg';
 import { getContainerRuntimeClient } from 'testcontainers';
+import { registerSensitiveValue } from './log-capture.js';
 
 /**
  * PostgreSQL efímero para pruebas de integración (T011, research R-18).
@@ -182,10 +183,16 @@ export async function startTestDatabase(options: StartOptions = {}): Promise<Tes
   const migratorPassword = randomPassword();
   const appLoginPassword = randomPassword();
   const maintenancePassword = randomPassword();
+  const superuserPassword = randomPassword();
+  // SC-009 · T102: las contraseñas de la base efímera tampoco pueden aparecer en ningún log de la suite.
+  registerSensitiveValue('contraseña de kuota_migrator (base efímera)', migratorPassword);
+  registerSensitiveValue('contraseña de kuota_app_login (base efímera)', appLoginPassword);
+  registerSensitiveValue('contraseña de kuota_maintenance_login (base efímera)', maintenancePassword);
+  registerSensitiveValue('contraseña del superusuario (base efímera)', superuserPassword);
   const container: StartedPostgreSqlContainer = await new PostgreSqlContainer(postgresImage())
     .withDatabase(DATABASE)
     .withUsername('postgres')
-    .withPassword(randomPassword())
+    .withPassword(superuserPassword)
     .withEnvironment({
       KUOTA_MIGRATOR_PASSWORD: migratorPassword,
       KUOTA_APP_LOGIN_PASSWORD: appLoginPassword,

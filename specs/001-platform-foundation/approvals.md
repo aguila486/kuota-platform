@@ -316,3 +316,20 @@ completadas"), no de una enumeración en el propio mensaje de G4.
 - **No autorizado:** debilitar la Constitución, reducir pruebas, alterar el dominio financiero, operaciones remotas,
   iOS, ni implementar 002 (solo análisis y borradores locales).
 
+
+## Aprobación 12 — 2026-11-23: T104 por la opción C (regla anti-float con análisis de tipos) e interpretación de FR-021
+
+- **Quién:** responsable del proyecto, mediante mensaje explícito en la sesión de trabajo ("KUOTA — Cierre de T104
+  mediante análisis de tipos y preparación de 002").
+- **Decisión (cita):** "AUTORIZO la opción C para resolver T104: Implementar una regla anti-float basada en AST y
+  análisis de tipos que detecte operaciones monetarias inseguras, sin prohibir usos legítimos de number."
+- **Interpretación de FR-021 (cita):** "prohibición de utilizar representación y aritmética de punto flotante para
+  valores monetarios. No significa prohibir number en cualquier circunstancia."
+  - **Permitido:** `number` para índices, contadores, versiones, escalas, y ratios o pesos que la API de Money ya admite,
+    respetando su contrato exacto.
+  - **Prohibido:** convertir montos a `number`; `Decimal.toNumber()` sobre importes; `parseFloat()` de cantidades
+    monetarias; aritmética monetaria en punto flotante; conversiones inseguras de `number` a `BigInt`; parsing de montos
+    JSON como números; `Math` para calcular importes cuando corresponde Money.
+- **Límites:** no se modifican las firmas de Money ni las interpretaciones financieras pendientes. La opción literal de
+  T104 ("toda anotación `number`") queda sustituida por esta interpretación; el texto de T104 no se reescribe.
+- **No autorizado:** implementar 002, cambios en la auditoría de plataforma, operaciones remotas, iOS.

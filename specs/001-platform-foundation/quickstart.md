@@ -107,9 +107,10 @@ scripts/ci/run-local.sh general    # gitleaks, editorconfig, nombre de rama, act
 scripts/ci/run-local.sh backend
 scripts/ci/run-local.sh contracts
 scripts/ci/run-local.sh flutter
-scripts/ci/prove-gates.sh          # aplica 9 cambios defectuosos de referencia en un worktree temporal
-                                   # y verifica que cada gate falla (secreto, float, RLS, contrato, dependencia, cobertura TS,
-                                   # cobertura Dart: umbral y archivo sin pruebas, y cliente Dart generado editado a mano)
+scripts/ci/prove-gates.sh          # aplica 10 cambios defectuosos de referencia en un worktree temporal
+                                   # y verifica que cada gate falla (secreto, float por nombre y float tipado, RLS, contrato,
+                                   # dependencia, cobertura TS, cobertura Dart: umbral y archivo sin pruebas, y cliente Dart
+                                   # generado editado a mano)
 scripts/ci/tests/log-privacy.test.sh   # SC-009: una fuga deliberada en los logs de la suite hace fallar Vitest
 scripts/dev/tests/doctor.test.sh       # doctor.sh con binarios simulados: falla y nombra la versión requerida
 ```

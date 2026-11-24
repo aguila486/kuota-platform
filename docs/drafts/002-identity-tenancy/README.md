@@ -10,6 +10,7 @@
 | `decisiones-pendientes.md` | Qué está aprobado y qué no; matriz D-AUTH-01/02/03; recuperación y revocación; decisiones legales y operativas |
 | `spec-borrador.md` | Objetivo, historias, requisitos, C4, modelo de datos, roles y permisos, flujos, secretos, aislamiento, pruebas y riesgos |
 | `roadmap-aplicaciones.md` | Fases verticales para Kuota Core, Admin Web, Collector y Client |
+| `matriz-decisiones-primer-flujo.md` | Matriz ejecutiva de las decisiones necesarias para el primer flujo (alta de organización, primer administrador e inicio de sesión) y propuesta del flujo vertical |
 
 **Por qué vive en `docs/drafts/`:** `/speckit-specify` ejecuta un hook obligatorio (`speckit.git.feature`) que crea
 una rama, y las ramas no están autorizadas. Crear `specs/002-…` a mano alteraría la numeración y la feature activa de

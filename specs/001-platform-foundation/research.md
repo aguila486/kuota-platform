@@ -1611,3 +1611,57 @@ Verificado en una base efímera (prueba puntual no versionada) además de `platf
 - `prove-gates` 9/9 (incluido `cliente-generado`).
 - `flutter` no se repitió: el workspace no cambió (última ejecución 15/15).
 - Migraciones solo en bases efímeras; ningún volumen persistente modificado.
+
+### T104 cerrada: regla anti-float con análisis de tipos (opción C, Aprobación 12)
+
+- **Interpretación de FR-021 (Aprobación 12):** se prohíbe representar o calcular importes con punto flotante; `number`
+  sigue permitido para índices, contadores, versiones, escalas, tamaños de página y los ratios/partes de
+  `Money#allocate`.
+- **Qué es dinero (por tipo, verificado en el código y el contrato):** `Money` (`amountMinor: bigint`, dominio simétrico
+  de int64, ADR-0007), `MoneyJson` (`amount_minor: string`, patrón `^(0|-?[1-9][0-9]{0,18})$` del contrato), `Decimal`
+  de decimal.js (`MoneyDecimal`: factores y tasas), propiedades declaradas en `src/common/money/`, columnas bigint de los
+  modelos de Prisma (`sample_amount_minor`) y `bigint` en `common/money`, `domain/` y `src/modules/**`. Fuera de esas
+  capas, un bigint sin origen monetario (el temporizador de `http-metrics.ts`) no es dinero: el primer borrador lo
+  marcaba y se corrigió la regla, no el código.
+- **Implementación:** `backend/eslint-rules/no-unsafe-money-number.mjs` (`kuota/no-unsafe-money-number`), con el
+  comprobador de tipos de TypeScript que typescript-eslint ya proporciona (sin dependencias nuevas). En todo `src/`:
+  conversiones de un valor monetario a number (Number, parseFloat, parseInt, Math, `+`, métodos que devuelven number
+  como `toNumber`), aserciones o anotaciones a number/any/unknown, `BigInt(number)` sin comprobación de entero seguro y
+  `Decimal` desde un number no entero. En `common/money` y `domain/`, además: literales no enteros, `* / % **` entre
+  numbers y Math salvo `max`, `min` y `abs`. Se conservan los selectores de R-10.
+- **Límites declarados (no se afirma cobertura absoluta):**
+  - el origen monetario se sigue por tipos y por constantes locales, no por flujo de datos completo;
+  - la comprobación de entero seguro de `BigInt` es léxica (en la función que lo contiene); en money/domain un number
+    calculado internamente se acepta porque allí no puede haber literales no enteros ni `* / % **`, pero un parámetro
+    exige la comprobación;
+  - un monto que llega como `any` o desde JSON sin tipar no tiene tipo monetario. Controles complementarios:
+    `no-explicit-any` y `no-unsafe-*` de typescript-eslint (ya activos), `moneyFromJson`/`parseMoneyField` rechazan
+    números JSON en la frontera, y las pruebas de contrato exigen `amount_minor` como string.
+- **Pruebas:** `test/unit/money/typed-money-rule.spec.ts` (obligatoria):
+  - matriz de casos (`test/fixtures/money-rule/`): 21 detecciones en 20 líneas de interfaz y 11 en 10 líneas de dominio, cada una con su motivo
+    exacto, y 3 archivos de usos legítimos sin ningún error (índices, versiones, escalas, contadores, tamaños de página,
+    pesos y partes de `allocate`, `Decimal` desde string o entero, temporizador bigint);
+  - configuración real: alcance por ruta y 0 errores en todo `src/` (incluidos los 18 usos legítimos que la opción literal
+    habría marcado);
+  - 4 mutaciones sobre archivos temporales de `src/` (DTO de interfaz, servicio de aplicación con cast, Money con Math y
+    flotantes, dominio con `BigInt(parámetro)`), cada una con su motivo;
+  - 6 mutaciones de la propia regla detectadas por la prueba (3 de ellas introducen falsos positivos).
+- **Gate:** `prove-gates.sh` añade el defecto `float-tipado` (un DTO de interfaz que convierte `amount_minor` a number):
+  el lint real falla (exit 1) con `kuota/no-unsafe-money-number`. 10/10.
+- **Arneses sin tipos:** `anti-float-rule.spec.ts`, `tenant-context-guard.spec.ts` y `scripts/check-no-float.ts` analizan
+  archivos virtuales sin información de tipos; desactivan solo la regla tipada (la cubre su prueba propia). La regla
+  falla si se ejecuta sin tipos en la configuración real, en lugar de pasar en silencio.
+
+#### Variación del recuento de controles del job `backend`
+
+- El informe del cierre de T099/T100 decía "18/18" y el de T101–T108 "14/14". No se perdió ninguna verificación:
+  - `backend.sh` tenía 13 controles de primer nivel antes de este bloque y tiene 14 ahora (+1: autoverificación del gate
+    SC-009, T102);
+  - "18" sumaba también los resúmenes anidados de `check-no-float.sh ts` (2) y `db-gate.sh` (3): 13 + 2 + 3 = 18;
+  - hoy: 14 + 2 + 3 = 19 líneas PASS (verificado en la ejecución local).
+
+#### Regresión (T104)
+
+- `backend` 14/14 (19 PASS con los anidados): 756/756 pruebas en 55 archivos; cobertura 98,2 / 96,54 / 97,98 / 99,42;
+  37 suites obligatorias; SC-009 sin valores sensibles; `db-gate` conforme.
+- `prove-gates` 10/10; `contracts` 5 PASS + OMITIDO (T049); `general` en verde; `flutter` no se repitió (sin cambios).

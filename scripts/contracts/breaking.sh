@@ -5,6 +5,11 @@
 #   scripts/contracts/breaking.sh --files BASE REV compara dos archivos OpenAPI ya empaquetados (pruebas)
 #
 # Sale con 0 si no hay cambios incompatibles, 1 si los hay (nivel ERR) y 2 ante un error de uso o de entorno.
+#
+# Niveles propios (T103; FR-028 y caso borde "elimina un campo usado por apps desplegadas"): oasdiff 1.39.0 clasifica
+# `response-optional-property-removed` como `info`, así que ni `--fail-on ERR` ni `--fail-on WARN` lo bloquean. La lista
+# explícita de scripts/contracts/oasdiff-severity-levels.txt lo eleva a ERR: una app desplegada puede leer un campo
+# opcional. Las comprobaciones de nivel `warning` siguen sin bloquear (decisión pendiente; research.md, T103).
 # Si REF no contiene todavía el contrato (primera introducción), no hay versión base contra la cual comparar: lo
 # informa y sale con 0. La base nunca se inventa; existirá cuando el contrato llegue a REF por PR.
 set -euo pipefail
@@ -15,6 +20,8 @@ OASDIFF_IMAGE="tufin/oasdiff:v1.39.0@sha256:004bef22058ace818b61f0eb2f05efb89fc6
 CONTRACT_DIR="contracts/openapi"
 CONTRACT_ROOT="$CONTRACT_DIR/kuota-core.v1.yaml"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SEVERITY_LEVELS="$ROOT/scripts/contracts/oasdiff-severity-levels.txt"
+[ -s "$SEVERITY_LEVELS" ] || { echo "breaking.sh: falta $SEVERITY_LEVELS" >&2; exit 2; }
 
 command -v docker >/dev/null 2>&1 || { echo "breaking.sh: se requiere Docker para ejecutar oasdiff" >&2; exit 2; }
 
@@ -29,8 +36,9 @@ oasdiff_breaking() { # base revisión (rutas absolutas)
   local base_dir rev_dir
   base_dir="$(cd "$(dirname "$1")" && pwd)"; rev_dir="$(cd "$(dirname "$2")" && pwd)"
   docker run --rm --network none \
-    -v "$base_dir:/base:ro" -v "$rev_dir:/revision:ro" \
-    "$OASDIFF_IMAGE" breaking "/base/$(basename "$1")" "/revision/$(basename "$2")" --fail-on ERR --format text
+    -v "$base_dir:/base:ro" -v "$rev_dir:/revision:ro" -v "$SEVERITY_LEVELS:/config/severity-levels.txt:ro" \
+    "$OASDIFF_IMAGE" breaking "/base/$(basename "$1")" "/revision/$(basename "$2")" --fail-on ERR \
+    --severity-levels /config/severity-levels.txt --format text
 }
 
 if [ "${1:-}" = "--files" ]; then

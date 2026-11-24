@@ -37,7 +37,7 @@ breaking() {
 
 check "Estructura: Redocly lint (contracts:lint)" pnpm contracts:lint
 check "Reglas propias y detector de incompatibilidades (contracts:test)" pnpm contracts:test
-check "Detector de incompatibilidades: campo requerido eliminado de CompatibilityInfo (T068)" \
+check "Detector de incompatibilidades: campos requeridos y opcionales eliminados de respuestas (T068, T103)" \
   scripts/ci/tests/breaking.test.sh
 breaking
 check "Fixtures de dinero contra fixture.schema.json (Ajv 2020)" \

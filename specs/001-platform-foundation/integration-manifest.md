@@ -61,7 +61,7 @@ monorepo. La desviación vale **solo para este PR inicial** y no autoriza PR fut
 | `run-local.sh flutter` | 15 PASS: análisis, formato, pruebas, `check_deps`, cobertura de paquetes, anti-float, osv, builds Web y Android |
 | `prove-gates.sh` | 10 PASS: cada gate falla con su defecto de referencia y pasa limpio |
 | gitleaks sobre todo lo alcanzable desde el candidato, con `.gitleaksignore` anulado | 161 commits, sin hallazgos |
-| `/speckit-analyze` de 001 (solo lectura) | **0 CRITICAL**; 1 HIGH (E1: tareas sin cita `Entity.field` de `platform_audit_events`), 2 LOW; cobertura 49/49 |
+| `/speckit-analyze` de 001 (solo lectura) | **0 CRITICAL**; 1 HIGH (E1) **resuelto** por la Aprobación 13 (`tasks.md` → `a0592bf2…`: T099 cita los 14 campos de `platform_audit_events`); 2 LOW; cobertura 49/49 |
 | Archivos de 002 en el árbol | ninguno |
 
 **Abiertas** (no se declaran superadas):
@@ -69,7 +69,6 @@ monorepo. La desviación vale **solo para este PR inicial** y no autoriza PR fut
 - T052: primera ejecución real del workflow;
 - T091: clon limpio validado por el mantenedor;
 - US3-8: CODEOWNERS con usuarios reales;
-- E1: requiere aprobación para editar `tasks.md`;
 - iOS: diferido (Aprobación 9).
 
 ## 5. Condiciones obligatorias antes de fusionar

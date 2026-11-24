@@ -333,3 +333,23 @@ completadas"), no de una enumeración en el propio mensaje de G4.
 - **Límites:** no se modifican las firmas de Money ni las interpretaciones financieras pendientes. La opción literal de
   T104 ("toda anotación `number`") queda sustituida por esta interpretación; el texto de T104 no se reescribe.
 - **No autorizado:** implementar 002, cambios en la auditoría de plataforma, operaciones remotas, iOS.
+
+## Aprobación 13 — 2026-11-24: corrección E1 de `tasks.md` (citas de `platform_audit_events` en T099)
+
+- **Quién:** responsable del proyecto, mediante mensaje explícito en la sesión de trabajo.
+- **Decisión (cita):** "Apruebo aplicar exclusivamente `tasks-e1.diff`, SHA-256
+  `945530ba9a6470f00c43b75ce42425b9815de0319478b4bfbd5ce4e915cb2e85`, sobre `specs/001-platform-foundation/tasks.md` en
+  `feature/001-platform-foundation-baseline`. El SHA-256 esperado del documento resultante es
+  `a0592bf2f448e28915a77e518418e3a7ad0b971d9a0b59e9a6579538fc8ec8b3`."
+- **Origen:** hallazgo E1 (HIGH) del `/speckit-analyze` de 001 sobre el candidato de integración (0 CRITICAL): T099 no
+  citaba como `Entity.field` los campos de data-model.md `platform_audit_events`.
+- **Cambio:** solo la línea de T099. Se añaden las 14 citas, verificadas contra data-model.md, la migración
+  `0003_platform_audit` y `backend/test/integration/platform-audit.spec.ts`: `id`, `run_id`, `operation`, `status`,
+  `executed_by`, `occurred_at`, `correlation_id`, `dry_run`, `batch_size`, `max_batches`, `expired_before`,
+  `affected_rows`, `batches`, `result_code`.
+- **Hashes de `tasks.md`:** `247987ebf33bbeb3c33d430be5a44c02054e35f7d79bf25521ec0de970fca72e` →
+  `a0592bf2f448e28915a77e518418e3a7ad0b971d9a0b59e9a6579538fc8ec8b3` (verificado tras aplicar).
+- **Sin cambios:** spec.md, plan.md, data-model.md, el resto de tareas, el código y la Constitución.
+- **Decisión asociada (sin ejecutar):** la futura integración de 002 usará la alternativa B por etapas. No se autoriza
+  todavía construir ni publicar esa rama.
+- **No autorizado:** operaciones remotas, modificaciones de `main`, cambios constitucionales.

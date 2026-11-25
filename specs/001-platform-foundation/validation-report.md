@@ -1,6 +1,6 @@
 # Informe de validación de 001-platform-foundation (T091)
 
-**Estado de T091: ABIERTA.** Este informe recoge la evidencia que Claude Code pudo obtener en local. T091 exige además la
+**Estado de T091: parte técnica completada (§1c); ABIERTA hasta la validación del mantenedor (SC-001).** Este informe recoge la evidencia que Claude Code pudo obtener en local. T091 exige además la
 **validación por el mantenedor** (SC-001) y la medición del arranque en un clon limpio siguiendo solo la guía, que no
 están hechas.
 
@@ -55,6 +55,56 @@ dependencias (store local de pnpm). MacBook arm64, 8 núcleos, Docker Desktop 4.
 - la validación del mantenedor.
 
 Motivos en §2.
+
+## 1c. Ejecución completa de la guía en un entorno Docker aislado (Claude Code, 2026-11-25)
+
+**Autorización**: el responsable permitió crear y eliminar solo recursos Docker temporales de esta prueba («KUOTA —
+Finalizar T091 de 001 con entorno Docker aislado»).
+
+**Condiciones de la prueba:**
+
+- **Origen:** clon local temporal sin red de `feature/001-platform-foundation-baseline` en `8c36c46`. Se eliminó al
+  terminar.
+- **Entorno:** Node del proyecto (`use_project_node`, equivalente a `nvm use`: Node 26.13.1 y pnpm 12.21.0).
+- **Cachés:** instalación **con cachés locales**, imagen de PostgreSQL ya presente y dependencias `--offline`.
+  **No es una máquina completamente limpia.** Las descargas no se midieron porque no hubo.
+
+**Aislamiento:**
+
+- Proyecto de Compose único `kuota-t091-20261125004128`, usando las variables que `up.sh` ya admite
+  (`KUOTA_COMPOSE_PROJECT`, `KUOTA_ENV_FILE`, puertos). No se modificó ningún script.
+- `.env` copiado de `.env.example` (valores ficticios) con puertos propios: PostgreSQL 55991, API 3091 y métricas 9491.
+
+| Hito (cronómetro desde el clon terminado) | Comando | Resultado | Tiempo |
+|---|---|---|---|
+| FR-005 | `find . -type d -empty -not -path './.git/*'` | sin resultados | < 1 s |
+| Herramientas | `make doctor` | entorno listo | 5 s |
+| Dependencias (se miden aparte, SC-001) | `pnpm install --frozen-lockfile --offline` · `fvm flutter pub get --offline` | correcto | 4 s (con cachés) |
+| **Arranque (SC-001 ≤ 15 min)** | `scripts/dev/up.sh` → `/health/ready` 200 | **listo** (17 s desde que se lanzó `up.sh`) | **26 s** |
+| §1 de la guía | `curl` a `health/live`, `health/ready`, compatibilidad y métricas | live `{"status":"ok"}` · ready `up` · compatibilidad 200 · métricas con token (45 líneas de las series de FR-039) · sin token **401** · `/metrics` en el puerto de la API **404** | — |
+| PostgreSQL | `pg_isready` dentro del contenedor temporal | accepting connections | — |
+| Migraciones | `public._prisma_migrations` | `0001_foundation`, `0002_idempotency_maintenance`, `0003_platform_audit` terminadas (las de 001); preflight y `migrate deploy` correctos | — |
+| US1-2 | `docker compose -p <temporal> stop postgres` | ready **503** (`database: down`), live **200** | — |
+| **Arranque + pruebas (SC-001 ≤ 30 min)** | `scripts/dev/test-all.sh` | **verde**: backend 758/758 y cobertura, contratos, Flutter. oasdiff **OMITIDO** (sin baseline) | **368 s** (6 min 8 s) |
+
+**Recursos Docker creados y eliminados**, todos con el prefijo del proyecto temporal:
+
+| Recurso | Nombre | Eliminado con |
+|---|---|---|
+| Contenedor | `kuota-t091-20261125004128-postgres-1` | `docker compose -p … down` |
+| Red | `kuota-t091-20261125004128_default` | `docker compose -p … down` |
+| Volumen | `kuota-t091-20261125004128_kuota-pgdata` | `docker volume rm` por nombre explícito |
+
+No se usó `down -v`, `prune`, ni ninguna acción sobre recursos ajenos.
+
+**Comprobación de antes y después** (`docker ps -a`, `docker volume ls`, `docker network ls`):
+
+- 0 diferencias en contenedores, volúmenes y redes.
+- `kuota-postgres-1` sigue en ejecución y sano.
+- `kuota_kuota-pgdata` y `kuota-g6check_kuota-pgdata` conservan su fecha de creación.
+
+**SC-001: técnicamente cumplido en esta máquina con cachés. PENDIENTE DE APROBACIÓN HUMANA del mantenedor.** Mientras
+no conste su conformidad, no se declara cumplido.
 
 ## 2. No ejecutado en el clon y por qué
 

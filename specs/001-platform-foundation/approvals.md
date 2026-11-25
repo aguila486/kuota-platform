@@ -453,3 +453,30 @@ Falta, por motivos de autorización y no técnicos:
 - `/speckit-analyze` no se repitió: desde el del 2026-11-25 (0 CRITICAL) solo cambiaron `.github/CODEOWNERS`,
   `approvals.md` y `validation-report.md`; ningún documento normativo.
 - `tasks.md` no se marca (fijado por hash).
+
+## Registro 2026-11-25 (3) — T091 en entorno Docker aislado
+
+Autorización del responsable: crear y eliminar solo recursos Docker temporales de esta prueba, con un proyecto único y
+volúmenes nuevos, sin tocar recursos ajenos ni preexistentes.
+
+**Resultado técnico** (detalle en `validation-report.md` §1c; clon temporal de `8c36c46`; con cachés, no es una máquina
+limpia):
+
+- Arranque listo en **26 s** desde el clon, frente a un límite de 15 min.
+- Arranque más pruebas completas en verde en **368 s**, frente a un límite de 30 min.
+- Las comprobaciones del §1 de la guía coinciden con lo esperado; migraciones 0001–0003 aplicadas; FR-005 sin
+  directorios vacíos.
+- oasdiff OMITIDO; no es PASS.
+
+**Docker:**
+
+- Creados y eliminados por nombre: el contenedor, la red y el volumen del proyecto `kuota-t091-20261125004128`.
+- Antes y después: 0 diferencias; volúmenes protegidos intactos.
+
+**SC-001 / T091: PENDIENTE DE APROBACIÓN HUMANA del mantenedor.** No se registra ninguna conformidad en su nombre.
+
+**Spec-Kit:**
+
+- Trazabilidad: T091 → SC-001 y FR-005; FR-005 tiene una observación pendiente (`backend/eslint-rules/` fuera de la
+  estructura de `plan.md`).
+- No cambió ningún documento normativo, así que no se repitió `/speckit-analyze`.

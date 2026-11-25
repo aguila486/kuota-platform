@@ -5,7 +5,9 @@
 #   - Control: todo en la versión requerida → exit 0 y "entorno listo".
 #   - Cada requisito incumplido por separado → exit 1, "1 requisito(s) sin cumplir" y un mensaje que NOMBRA la versión
 #     requerida (o el requisito, para el demonio de Docker y Compose).
-# No usa las herramientas reales del sistema: el PATH solo contiene los simulados y utilidades POSIX de /usr/bin y /bin.
+# No usa las herramientas reales del sistema: el PATH solo contiene los simulados y un directorio propio con enlaces a
+# las utilidades que doctor.sh necesita (dirname, tr, sed, sort, head). No se añaden /usr/bin ni /bin completos porque
+# en Linux (p. ej., el runner ubuntu-24.04 de CI) contienen docker real y el caso "Docker ausente" dejaría de serlo.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 TMP="$(mktemp -d)"
@@ -16,6 +18,13 @@ REQ_NODE="$(tr -d '[:space:]v' <"$ROOT/.nvmrc")"
 REQ_PNPM="$(sed -n 's/.*"packageManager": *"pnpm@\([0-9.]*\).*/\1/p' "$ROOT/package.json")"
 REQ_FLUTTER="$(sed -n 's/.*"flutter": *"\([^"]*\)".*/\1/p' "$ROOT/flutter/.fvmrc")"
 REQ_FVM="3.2.0"
+TOOLS="$TMP/herramientas"
+mkdir -p "$TOOLS"
+for tool in dirname tr sed sort head; do
+  real="$(command -v "$tool")" || { echo "  ✗ falta la utilidad $tool"; exit 1; }
+  ln -s "$real" "$TOOLS/$tool"
+done
+doctor() { PATH="$1:$TOOLS" "$BASH" "$ROOT/scripts/dev/doctor.sh" 2>&1; }
 [ -n "$REQ_NODE" ] && [ -n "$REQ_PNPM" ] && [ -n "$REQ_FLUTTER" ] || { echo "  ✗ no se pudieron leer las versiones requeridas"; exit 1; }
 
 # fakes DIR node pnpm fvm flutter docker-daemon(up|down) compose(yes|no); "" = binario ausente.
@@ -39,7 +48,7 @@ SH
 case_() { # nombre exit-esperado texto-esperado node pnpm fvm flutter daemon compose
   local name="$1" expected="$2" text="$3" dir="$TMP/$4-$5-$6-$7-$8-$9-$RANDOM" output status
   fakes "$dir" "$4" "$5" "$6" "$7" "$8" "$9"
-  output="$(PATH="$dir:/usr/bin:/bin" bash "$ROOT/scripts/dev/doctor.sh" 2>&1)"
+  output="$(doctor "$dir")"
   status=$?
   local failures_ok=1
   if [ "$expected" -eq 1 ]; then grep -q "Resultado: 1 requisito(s) sin cumplir." <<<"$output" || failures_ok=0; fi
@@ -79,7 +88,10 @@ case_ "Flutter del proyecto en otra versión" 1 "se requiere $REQ_FLUTTER (flutt
 dir="$TMP/sin-docker"
 fakes "$dir" "$REQ_NODE" "$REQ_PNPM" "$REQ_FVM" "$REQ_FLUTTER" up yes
 rm -f "${dir:?}/docker"
-output="$(PATH="$dir:/usr/bin:/bin" bash "$ROOT/scripts/dev/doctor.sh" 2>&1)"
+if (PATH="$dir:$TOOLS"; command -v docker >/dev/null 2>&1); then
+  echo "  ✗ Docker ausente: el PATH de la prueba todavía resuelve un docker"; FAILED=$((FAILED + 1))
+fi
+output="$(doctor "$dir")"
 status=$?
 if [ "$status" -eq 1 ] && grep -qF "Docker no está instalado: se requiere Docker con Compose v2" <<<"$output"; then
   echo "  ✓ Docker ausente → exit 1"

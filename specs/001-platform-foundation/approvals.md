@@ -542,3 +542,13 @@ creada en 2013. El plan solo es visible para la propia cuenta autenticada: **no 
 
 **R0: BLOQUEADO** (plan sin verificar). Lo resuelve el responsable ampliando los ámbitos de su propio token, sin que
 Claude Code los cambie.
+
+## Registro 2026-11-25 (6) — R0: NO-GO con el plan actual
+
+El responsable declara: «no es una cuenta pro, es una cuenta free». El dato lo confirma el responsable; no se verificó por
+API.
+
+Según la documentación pública de GitHub (registro 4), las ramas protegidas en repositorios **privados** requieren
+GitHub Pro o superior. El plan de integración exige protección efectiva de `main` antes del primer PR, y la Constitución
+exige `main` protegida y merge solo vía PR. **R0: NO-GO** mientras la cuenta sea Free y el repositorio privado. No se
+crea nada en GitHub; la decisión sobre cómo seguir es del responsable.

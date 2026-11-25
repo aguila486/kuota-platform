@@ -552,3 +552,9 @@ Según la documentación pública de GitHub (registro 4), las ramas protegidas e
 GitHub Pro o superior. El plan de integración exige protección efectiva de `main` antes del primer PR, y la Constitución
 exige `main` protegida y merge solo vía PR. **R0: NO-GO** mientras la cuenta sea Free y el repositorio privado. No se
 crea nada en GitHub; la decisión sobre cómo seguir es del responsable.
+
+## Registro 2026-11-25 (7) — Plan verificado por API
+
+El responsable amplió él mismo los ámbitos del token (`gh auth refresh --scopes read:user,workflow`). `GET /user` con la
+cuenta activa `aguila486` devuelve **`plan: free`**. Coincide con lo declarado en el registro 6. **R0 sigue en NO-GO**
+para un repositorio privado.

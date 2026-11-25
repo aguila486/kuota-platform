@@ -480,3 +480,27 @@ limpia):
 - Trazabilidad: T091 → SC-001 y FR-005; FR-005 tiene una observación pendiente (`backend/eslint-rules/` fuera de la
   estructura de `plan.md`).
 - No cambió ningún documento normativo, así que no se repitió `/speckit-analyze`.
+
+## Aprobación 14 — 2026-11-25: SC-001 y cierre de T091
+
+Texto del responsable («KUOTA — Aprobar SC-001 y ejecutar R0 (solo lectura)», §1), mantenedor único `@aguila486`:
+
+> «Acepto la ejecución documentada sin reproducirla personalmente. […] Como responsable técnico y propietario de Kuota:
+> Apruebo SC-001 y autorizo el cierre de T091.»
+
+Evidencia: `validation-report.md` §1c (commit `6e5356d`).
+
+Reconocimientos expresos del responsable:
+
+- La validación usó cachés locales; no se probó una instalación nueva sin cachés.
+- Su aprobación no es una revisión técnica independiente.
+- La observación FR-005 sobre `backend/eslint-rules/` sigue **abierta**.
+- oasdiff contra `main` sigue **OMITIDO** y no se registra como PASS.
+
+**Estado**: **SC-001 aprobado por el mantenedor** (con las salvedades anteriores) y **T091 cerrada**, con trazabilidad
+T091 → SC-001 y FR-005. `tasks.md` no se marca porque está fijado por SHA-256 (Aprobación 13); el cierre consta aquí.
+El `/speckit-analyze` del 2026-11-25 (0 CRITICAL) sigue vigente: no cambió ningún documento normativo.
+
+**Tareas de 001 aún abiertas**: T049 (oasdiff, necesita `main` con el contrato) y T052 (primera ejecución del CI en
+GitHub). También siguen pendientes SC-008 (validación iOS diferida, Aprobación 9) y US3-8 (asignación automática de
+revisores en un PR real).

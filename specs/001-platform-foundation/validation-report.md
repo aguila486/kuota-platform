@@ -1,6 +1,6 @@
 # Informe de validación de 001-platform-foundation (T091)
 
-**Estado de T091: parte técnica completada (§1c); ABIERTA hasta la validación del mantenedor (SC-001).** Este informe recoge la evidencia que Claude Code pudo obtener en local. T091 exige además la
+**Estado de T091: CERRADA (2026-11-25).** SC-001 aprobado por el mantenedor único `@aguila486` sobre la evidencia de §1c, sin reproducirla, con cachés locales y sin que sea una revisión independiente (`approvals.md`, Aprobación 14). Sigue abierta la observación FR-005 sobre `backend/eslint-rules/`. Este informe recoge la evidencia que Claude Code pudo obtener en local. T091 exige además la
 **validación por el mantenedor** (SC-001) y la medición del arranque en un clon limpio siguiendo solo la guía, que no
 están hechas.
 
@@ -103,8 +103,7 @@ No se usó `down -v`, `prune`, ni ninguna acción sobre recursos ajenos.
 - `kuota-postgres-1` sigue en ejecución y sano.
 - `kuota_kuota-pgdata` y `kuota-g6check_kuota-pgdata` conservan su fecha de creación.
 
-**SC-001: técnicamente cumplido en esta máquina con cachés. PENDIENTE DE APROBACIÓN HUMANA del mantenedor.** Mientras
-no conste su conformidad, no se declara cumplido.
+**SC-001: técnicamente cumplido en esta máquina con cachés; aprobado por el mantenedor el 2026-11-25 (Aprobación 14).**
 
 ## 2. No ejecutado en el clon y por qué
 

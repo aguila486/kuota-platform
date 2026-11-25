@@ -528,3 +528,17 @@ creada en 2013. El plan solo es visible para la propia cuenta autenticada: **no 
 | Checks requeridos, historial lineal, resolución de conversaciones, sin *bypass* | Forman parte de la protección de ramas (Pro). El historial lineal exige permitir *squash* o *rebase*. Las listas de *bypass* y las restricciones de usuarios son solo de organización |
 
 **R0: BLOQUEADO** hasta que el responsable inicie sesión con `@aguila486` y confirme un plan Pro o superior.
+
+## Registro 2026-11-25 (5) — R0 tras iniciar sesión como `@aguila486`
+
+- El responsable inició sesión él mismo con `gh auth login --web`. La cuenta **activa es `aguila486`** (tipo `User`); las
+  otras dos cuentas guardadas quedan inactivas y no se tocaron.
+- Ámbitos del token de `aguila486`: `gist`, `read:org`, `repo`. **Faltan `workflow` y `user`/`read:user`.**
+  - Sin `read:user`, `GET /user` devuelve `plan: null`. **El plan sigue sin verificar.**
+  - Sin `workflow`, GitHub rechaza publicar commits que contengan `.github/workflows/`. 001 contiene `ci.yml`, así que
+    **R5 fallaría.**
+- `aguila486/kuota-platform` **no existe** (404): el nombre está libre para R1.
+- No se crearon recursos ni se cambiaron ámbitos, cuentas o permisos.
+
+**R0: BLOQUEADO** (plan sin verificar). Lo resuelve el responsable ampliando los ámbitos de su propio token, sin que
+Claude Code los cambie.

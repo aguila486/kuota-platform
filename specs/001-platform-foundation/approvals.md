@@ -353,3 +353,63 @@ completadas"), no de una enumeración en el propio mensaje de G4.
 - **Decisión asociada (sin ejecutar):** la futura integración de 002 usará la alternativa B por etapas. No se autoriza
   todavía construir ni publicar esa rama.
 - **No autorizado:** operaciones remotas, modificaciones de `main`, cambios constitucionales.
+
+## Registro 2026-11-25 — Gobernanza de mantenedor único, L3 detenida y L4 sobre el candidato
+
+Texto del responsable («KUOTA — Aprobar gobernanza de mantenedor único y ejecutar L3/L4 de 001»):
+
+- Es el único desarrollador y ejerce las responsabilidades técnica y de producto.
+- Adopta `docs/drafts/governance-single-maintainer.md` (`f4feb3a`).
+- No existe segundo desarrollador ni segundo revisor técnico.
+
+**Interpretación registrada del propietario**: con un solo mantenedor, la aprobación humana que exige la Constitución
+(Flujo de desarrollo, excepción de mantenedor único) la da el propio propietario, registrada en el PR y en
+`approvals.md`. **No es una revisión independiente.** La Constitución 1.2.0 no cambia; la aclaración 1.3.1 sigue como
+propuesta.
+
+**Cambios aplicados en esta rama**: `6d4c256`, que fija la política de revisión de `docs/process/git-workflow.md` §5
+(T055): 0 reviews exigidas en GitHub y ninguna review de CODEOWNERS mientras haya un solo mantenedor. Los borradores
+del plan de integración y del paquete 1.3.0 se ajustaron en la rama de trabajo, no en esta.
+
+**L3 (CODEOWNERS): DETENIDA.** El texto de aprobación traía el usuario como marcador literal (`@[TU_USUARIO_GITHUB]`),
+sin un valor real. `.github/CODEOWNERS` conserva `<maintainer-handle>` en sus 17 reglas; no se escribe ningún usuario
+no confirmado.
+
+**L4** (2026-11-25, árbol `bb4521cf…`, commit `6d4c256`, anterior a L3; `scripts/ci/run-local.sh` y
+`scripts/ci/prove-gates.sh` en secuencia, deteniéndose ante cualquier fallo):
+
+| Job | PASS | FAIL | OMITIDO |
+|---|---|---|---|
+| `general` | 6 | 0 | 0 |
+| `contracts` | 5 | 0 | **1**: oasdiff contra `main`, sin baseline legítimo. No es PASS; se desbloquea al fusionar el contrato (T049) |
+| `backend` | 19 | 0 | 0. 758/758 pruebas; cobertura global 98,21 % sentencias / 96,54 % ramas |
+| `flutter` | 15 | 0 | 0. Builds de Android y Web; **iOS fuera** (Aprobación 9) |
+| `prove-gates` | 10 | 0 | 0 |
+
+**Validez tras L3**: el único cambio pendiente es `.github/CODEOWNERS`. Ningún job lo lee como entrada; solo aparece en
+`scripts/dev/path-filters.sh`, como disparador de la suite completa. Tras L3 se demostrará que el diff contra
+`bb4521cf…` se limita a ese archivo; el commit de este registro solo añade documentación.
+
+**`/speckit-analyze` de 001** (solo lectura): **0 CRITICAL**, 0 HIGH, 3 MEDIUM y 5 LOW.
+
+- Cobertura: 49/49 requisitos (100 %) y 46/46 campos restringidos citados.
+- Checklist `requirements.md` 16/16; sin violaciones de la Constitución 1.2.0.
+- `tasks.md` coincide con el SHA-256 de la Aprobación 13.
+- Los 3 MEDIUM son condiciones de fusión ya conocidas:
+  - C1: OMITIDO de oasdiff, que necesita aprobación explícita al fusionar;
+  - C2: SC-008 pendiente de validar en iOS;
+  - C3: T091 (clon limpio) y CODEOWNERS sin usuario real.
+- Los 5 LOW son documentales:
+  - recuento de tareas en las notas de `tasks.md` (96 frente a 108);
+  - cifras de alcance de `plan.md`;
+  - textos de T094 y T104 frente a las decisiones aprobadas;
+  - estado «Draft» de `spec.md`;
+  - hash de la versión vigente de `plan.md` no registrado.
+
+**Pendiente de CI remoto (no PASS):**
+
+- T052: primera ejecución real de `CI: resultado`.
+- T049: oasdiff.
+- US3-8: asignación automática de revisores.
+
+**Pendiente local:** L3 (usuario confirmado) y T091.

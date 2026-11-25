@@ -504,3 +504,27 @@ El `/speckit-analyze` del 2026-11-25 (0 CRITICAL) sigue vigente: no cambió ning
 **Tareas de 001 aún abiertas**: T049 (oasdiff, necesita `main` con el contrato) y T052 (primera ejecución del CI en
 GitHub). También siguen pendientes SC-008 (validación iOS diferida, Aprobación 9) y US3-8 (asignación automática de
 revisores en un PR real).
+
+## Registro 2026-11-25 (4) — R0 de solo lectura: BLOQUEADO
+
+Autorización del responsable: solo consultas de lectura para verificar la viabilidad de GitHub; usuario oficial
+`@aguila486`; no cambiar cuentas, credenciales ni permisos.
+
+**Identidad**: `gh auth status` muestra dos cuentas autenticadas (nombres omitidos por privacidad). **Ninguna es
+`@aguila486`.** Se detuvo toda consulta que requiera acceso autorizado; no se cambió de cuenta ni de token.
+
+**Sin credenciales**: `GET https://api.github.com/users/aguila486` (anónimo) confirma que la cuenta existe: tipo `User`,
+creada en 2013. El plan solo es visible para la propia cuenta autenticada: **no verificado**.
+
+**Documentación pública de GitHub** (docs.github.com; consultada el 2026-11-25):
+
+| Capacidad | Resultado |
+|---|---|
+| Ramas protegidas en repositorios privados de cuenta personal | Requieren **GitHub Pro** o superior; Free solo en públicos. Esto último se deduce de que Free no las lista |
+| Rulesets | La documentación las sitúa en Team o Enterprise; no confirma su disponibilidad en Pro personal. Se usará la protección clásica |
+| `required_approving_review_count: 0` | Admitido: «0 to not require reviewers» |
+| PR obligatorio con 0 aprobaciones | **No confirmado** por la documentación; verificar en R4 tras aplicarlo, leyendo la protección y probando un push directo rechazado |
+| `require_last_push_approval` | Debe ser `false`: exige la aprobación de otra persona |
+| Checks requeridos, historial lineal, resolución de conversaciones, sin *bypass* | Forman parte de la protección de ramas (Pro). El historial lineal exige permitir *squash* o *rebase*. Las listas de *bypass* y las restricciones de usuarios son solo de organización |
+
+**R0: BLOQUEADO** hasta que el responsable inicie sesión con `@aguila486` y confirme un plan Pro o superior.

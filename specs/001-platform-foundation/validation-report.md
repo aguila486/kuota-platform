@@ -23,6 +23,39 @@ dependencias (store local de pnpm). MacBook arm64, 8 núcleos, Docker Desktop 4.
   `contracts/{fixtures,openapi}`, `flutter/{apps,config,packages,tool}`, `infra/docker`, `scripts/{ci,contracts,dev}`,
   `.github/workflows`) o ya existían antes de 001 (`docs/*`, `specs/`, y las de herramientas `.claude/`, `.specify/`).
 
+## 1b. Segunda ejecución en un clon limpio (Claude Code, 2026-11-25)
+
+- **Origen:** clon local `git clone --no-hardlinks` de `feature/001-platform-foundation-baseline` en `a5caf9b` (L3 aplicada),
+  en un directorio temporal y sin remoto.
+- **Red:** sin red. Dependencias con `--offline` desde las cachés locales; las imágenes de contenedor ya estaban
+  presentes.
+- **Máquina:** la misma de §1.
+- **Advertencia:** los tiempos **no representan una máquina nueva** (cachés llenas).
+
+| Paso de la guía | Comando | Resultado | Tiempo |
+|---|---|---|---|
+| Clonar | `git clone` (local) | correcto | 1 s |
+| FR-005, directorios vacíos | `find . -type d -empty -not -path './.git/*'` (antes de instalar) | **sin resultados** | < 1 s |
+| Herramientas | `make doctor` | **entorno listo**, con el Node del proyecto (`.nvmrc`), como indica §0. Un primer intento sin `nvm use` falló como debía (Node 24 y sin pnpm): fue un error de invocación, no del proyecto | 3 s |
+| Dependencias | `pnpm install --frozen-lockfile --offline` · `fvm flutter pub get --offline` | correcto · correcto | 2 s · 2 s |
+| Pruebas de todo el monorepo (§2) | `scripts/dev/test-all.sh` | **verde**: backend (tipos, lint, formato, 758/758 pruebas, cobertura 98,21 % / 96,54 %), contratos (lint y reglas) y Flutter (análisis y pruebas). **oasdiff OMITIDO**, sin baseline. Un primer intento sin el Node del proyecto falló en los pasos con pnpm; mismo error de invocación | **304 s** |
+
+**FR-005, carpetas de primer y segundo nivel:**
+
+- Coinciden con la lista de §1, más **`backend/eslint-rules/`**.
+- Esa carpeta la creó T104 (opción C de la Aprobación 12) y está documentada en `research.md`, pero **no figura en la
+  estructura de `plan.md`**.
+- Observación: alinear `plan.md` en su próxima enmienda, con nuevo hash (relacionado con I2/I5 del análisis del
+  2026-11-25). No se modifica `plan.md` aquí.
+
+**Sigue sin ejecutarse:**
+
+- `scripts/dev/up.sh` (arranque ≤ 15 min);
+- por tanto, «arranque + pruebas ≤ 30 min»;
+- la validación del mantenedor.
+
+Motivos en §2.
+
 ## 2. No ejecutado en el clon y por qué
 
 | Paso | Motivo |
@@ -46,9 +79,9 @@ Ejecutada con los mismos scripts que CI, en secuencia (los jobs pesados nunca en
 
 ## 4. Pendientes registrados
 
-- **US3-8 (asignación automática de revisores, FR-036): PENDIENTE.** `.github/CODEOWNERS` tiene el marcador
-  `<maintainer-handle>`: la asignación no puede verificarse hasta sustituirlo por un usuario real y abrir un PR en
-  GitHub (requiere autorización de push).
+- **US3-8 (asignación automática de revisores, FR-036): PENDIENTE.** Desde `a5caf9b`, `.github/CODEOWNERS` nombra al
+  mantenedor único `@aguila486` en sus 15 reglas. La asignación solo puede verificarse abriendo un PR en GitHub, lo que
+  requiere autorización remota.
 - **SC-001:** pendiente de la ejecución y validación del mantenedor (sección 2).
 - **SC-008 / checkpoint de US7:** PENDIENTE DE VALIDACIÓN iOS (Aprobación 9). iOS: DIFERIDO POR DECISIÓN
   ARQUITECTÓNICA — NO PROBADO.

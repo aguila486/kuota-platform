@@ -413,3 +413,43 @@ no confirmado.
 - US3-8: asignación automática de revisores.
 
 **Pendiente local:** L3 (usuario confirmado) y T091.
+
+## Registro 2026-11-25 (2) — L3 completada y T091 avanzada
+
+Texto del responsable («KUOTA — Completar L3 de 001 con el CODEOWNER confirmado»): «Confirmo expresamente que mi usuario
+oficial de GitHub es @aguila486.» Autoriza L3, `general`, T091 en un clon local temporal sin red y estos registros.
+
+**L3: COMPLETADA** (`a5caf9b`, `chore(ci)`, T053).
+
+- `.github/CODEOWNERS` tiene 15 reglas, cada una con un patrón y un único dueño, `@aguila486`, sin patrones duplicados.
+- No queda ningún `<maintainer-handle>` y no hay segundo dueño.
+- La sustitución alcanzó también 2 comentarios, que se reescribieron:
+  - el usuario está confirmado y ser CODEOWNER no es una aprobación;
+  - no se añade un segundo dueño sin decisión expresa.
+- El recuento de «17 reglas» de los informes anteriores era el de ocurrencias del marcador, no el de reglas.
+- No es una revisión independiente de GitHub.
+
+**Validez de L4**: el árbol de `a5caf9b` solo difiere del de L4 (`bb4521cf`) en `.github/CODEOWNERS` y en este archivo,
+y ningún job lee ninguno de los dos como entrada. Las 55 verificaciones PASS, 0 FAIL y 1 OMITIDO (oasdiff) de L4 siguen
+siendo válidas.
+
+**Job `general` sobre `a5caf9b`**: **6 PASS, 0 FAIL, 0 OMITIDO**.
+
+**T091: SIGUE ABIERTA**, con avance; detalle en `validation-report.md` §1b.
+
+- Clon limpio sin red: FR-005 sin directorios vacíos y `make doctor` con «entorno listo».
+- `scripts/dev/test-all.sh` en verde en 304 s, con oasdiff OMITIDO.
+- Observación FR-005: `backend/eslint-rules/` no figura en la estructura de `plan.md`.
+
+Falta, por motivos de autorización y no técnicos:
+
+1. `scripts/dev/up.sh` con su medición (≤ 15 min y ≤ 30 min con pruebas). Crea un volumen persistente de Compose y la
+   política vigente prohíbe crearlo o borrarlo sin autorización. Lo puede ejecutar el propio mantenedor.
+2. La validación por el mantenedor (SC-001), que es una acción humana suya.
+
+**Spec-Kit:**
+
+- Trazabilidad verificada: T053 → FR-036 / US3-8, y T091 → SC-001 / FR-005.
+- `/speckit-analyze` no se repitió: desde el del 2026-11-25 (0 CRITICAL) solo cambiaron `.github/CODEOWNERS`,
+  `approvals.md` y `validation-report.md`; ningún documento normativo.
+- `tasks.md` no se marca (fijado por hash).

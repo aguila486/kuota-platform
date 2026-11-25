@@ -1,14 +1,14 @@
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import type { INestApplication } from '@nestjs/common';
 import { Client } from 'pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/bootstrap.js';
 import { loadConfig } from '../../src/common/config/load-config.js';
 import { DevProbeService } from '../../src/modules/dev-probe/application/dev-probe.service.js';
+import { type BuiltMain, buildPrivateMain } from '../support/built-main.js';
 import { STRONG_TOKEN, validEnv } from '../support/env.js';
 import { startTestDatabase, type TestDatabase } from '../support/postgres.js';
 import { recordOutput } from '../support/log-capture.js';
@@ -117,12 +117,11 @@ describe('dev-probe habilitado: control positivo (las rutas existen)', () => {
 });
 
 describe('proceso real `node dist/main.js` en producción (T096)', () => {
+  let built: BuiltMain;
   beforeAll(async () => {
-    await promisify(execFile)(join(BACKEND_DIR, 'node_modules/.bin/nest'), ['build'], {
-      cwd: BACKEND_DIR,
-      timeout: 120_000,
-    });
+    built = await buildPrivateMain();
   }, 180_000);
+  afterAll(() => built?.cleanup());
 
   it('KUOTA_ENV=production: /v1/dev/probe-items → 404 con encabezados técnicos, sin escribir filas', async () => {
     const port = await new Promise<number>((resolve, reject) => {
@@ -139,7 +138,7 @@ describe('proceso real `node dist/main.js` en producción (T096)', () => {
       DATABASE_URL_APP: db.appUrl,
       PORT: String(port),
     });
-    const child = spawn(process.execPath, [join(BACKEND_DIR, 'dist/main.js')], {
+    const child = spawn(process.execPath, [built.main], {
       cwd: BACKEND_DIR,
       env: { PATH: process.env['PATH'], ...env },
     });

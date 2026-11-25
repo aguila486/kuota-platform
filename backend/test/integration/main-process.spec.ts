@@ -1,14 +1,17 @@
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { type AddressInfo, createServer } from 'node:net';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { type BuiltMain, buildPrivateMain } from '../support/built-main.js';
 import { STRONG_TOKEN, validEnv } from '../support/env.js';
 import { recordOutput } from '../support/log-capture.js';
 
-/** T025: el proceso real `node dist/main.js` (build SWC) arranca con configuración válida y aborta con una inválida. */
+/**
+ * T025: el proceso real `node dist/main.js` (build SWC) arranca con configuración válida y aborta con una inválida.
+ * Se ejecuta una copia privada del build (`buildPrivateMain`): otras suites compilan en paralelo y `nest build` borra dist/.
+ */
 const BACKEND_DIR = join(__dirname, '../..');
-const MAIN = join(BACKEND_DIR, 'dist/main.js');
+let built: BuiltMain;
 
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -22,7 +25,7 @@ async function freePort(): Promise<number> {
 }
 
 function run(env: Record<string, string | undefined>, untilListening: boolean) {
-  const child = spawn(process.execPath, [MAIN], { cwd: BACKEND_DIR, env: { PATH: process.env['PATH'], ...env } });
+  const child = spawn(process.execPath, [built.main], { cwd: BACKEND_DIR, env: { PATH: process.env['PATH'], ...env } });
   let stdout = '';
   let stderr = '';
   // SC-009 · T102: la salida del proceso real también entra en la captura de la suite.
@@ -51,11 +54,9 @@ function run(env: Record<string, string | undefined>, untilListening: boolean) {
 
 describe('proceso main.ts (T025)', () => {
   beforeAll(async () => {
-    await promisify(execFile)(join(BACKEND_DIR, 'node_modules/.bin/nest'), ['build'], {
-      cwd: BACKEND_DIR,
-      timeout: 120_000,
-    });
+    built = await buildPrivateMain();
   }, 180_000);
+  afterAll(() => built?.cleanup());
 
   it('arranca con configuración válida, responde problem+json y emite logs JSON', async () => {
     const port = await freePort();

@@ -614,3 +614,47 @@ Regresión local completa sobre `c504fb6` (macOS, Node 26.13.1): `general` 0, `c
 `flutter` 0, `prove-gates` 0. Único OMITIDO: oasdiff sin baseline en `main` (pendiente conocido; **no es PASS**).
 
 Siguiente paso autorizado: publicar solo esta rama en el PR #1 y esperar `CI: resultado`. Sin merge.
+
+## Registro 2026-11-25 (10) — CI real en verde sobre `faff72c` (evidencia de T052)
+
+Autorización del responsable: «Autorizar reejecución de CI del PR #1», opción 1 (solo jobs fallidos).
+
+- Run `45596776064` (`pull_request`, PR #1, `faff72c`):
+  https://github.com/aguila486/kuota-platform/actions/runs/45596776064
+- **Intento 1**: `changes`, `general`, `contracts` y `backend` en verde. `flutter` falló en `assembleDebug`, porque
+  Maven Central respondió HTTP 429 (límite de peticiones externo) al resolver dependencias de Gradle. Las pruebas Dart
+  y Flutter habían pasado y ningún commit nuevo toca `flutter/`.
+- **Intento 2** (`gh run rerun 45596776064 --failed`, cuenta `aguila486`): `flutter` success. **`CI: resultado`
+  success.** Los jobs del intento 1 siguen en verde: `changes`, `general`, `contracts` y `backend`.
+- PR #1: abierto, `mergeable`, `mergeStateStatus: CLEAN`. Sin merge.
+- **T052**: se cumple su criterio pendiente (primera ejecución real de `CI: resultado` en verde). Su cierre lo aprueba
+  el responsable en la Aprobación 15.
+- Riesgo observado: la descarga de Gradle depende de un servicio externo con límite de peticiones. Una caché o
+  reintentos necesitarían una tarea y una aprobación propias.
+
+## Aprobación 15 — 2026-11-25: cierre de T052 y condiciones de integración de 001 (PR #1)
+
+Aprobación humana de `@aguila486`, responsable técnico y de producto, como **mantenedor único**. **No es una revisión
+independiente** y no hay otros revisores.
+
+1. **T052 cerrada.** Evidencia: run `45596776064`, intento 2, commit `faff72c`. `CI: resultado`, `flutter`, `general`,
+   `contracts` y `backend` en SUCCESS. La aprobación vale para ese commit; no garantiza el resultado de commits
+   posteriores, que necesitan su propio CI en verde.
+2. **oasdiff: OMITIDO**, no PASS. Se acepta fusionar este primer PR sin comparación de compatibilidad, porque `main` no
+   contiene un contrato que sirva de baseline. Este PR establece la baseline. **T049 sigue abierta** y se valida con la
+   primera comparación real.
+3. **SC-008 / iOS: diferido** (Aprobación 9), ni validado ni completado. No bloquea la integración inicial de 001. Sigue
+   siendo requisito para las funcionalidades que dependan de él (checkpoint de US7).
+4. **Estrategia de fusión: solo «Rebase and merge»**, sin squash ni merge commits, para conservar cada commit con sus
+   líneas `Spec:`/`Tasks:` en un historial lineal. GitHub puede generar hashes nuevos en `main`; la trazabilidad se
+   verifica por mensaje y por árbol.
+5. **Tamaño del PR**: excepción **exclusiva** para la integración inicial de 001 (100 commits antes del registro 10,
+   533 archivos, unas 50 082 líneas añadidas). Los PR posteriores respetan los límites ordinarios de la gobernanza.
+6. Condiciones verificadas para el mantenedor único (Constitución 1.2.0, excepción vigente):
+   - checklist constitucional del PR completo (27/27);
+   - `/speckit-analyze` del 2026-11-25 con 0 CRITICAL, vigente porque no cambió ningún documento normativo;
+   - CI obligatorio en verde en `faff72c`. El head final que incluya este registro necesita su propio CI en verde antes
+     de fusionar.
+
+Se mantienen: sin bypass administrativo; sin cambios de protección; sin push directo a `main`; Constitución 1.2.0 sin
+cambios y 1.3.0 sin ratificar.

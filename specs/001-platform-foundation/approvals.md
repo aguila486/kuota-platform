@@ -658,3 +658,245 @@ independiente** y no hay otros revisores.
 
 Se mantienen: sin bypass administrativo; sin cambios de protección; sin push directo a `main`; Constitución 1.2.0 sin
 cambios y 1.3.0 sin ratificar.
+
+## Registro 2026-11-25 (11) — «Rebase and merge» rechazado y linealización local del historial de 001
+
+Autorización del responsable: «Corregir historial de PR #1 mediante linearización local segura» (solo local; sin push,
+sin force-push y sin merge). Este registro **corrige** un dato de la Aprobación 15 sin modificar su texto.
+
+**Corrección de la Aprobación 15, punto 5.** El PR #1 tenía **176 commits**, no 100. `gh pr view --json commits`
+devuelve como máximo 100 y ese límite se tomó por el total. Tamaño real en `dcd80b4` respecto a `main` (`b63f9a4`):
+176 commits (175 tras la linealización), 533 archivos, 50 126 líneas añadidas y 202 eliminadas. La excepción de
+tamaño sigue siendo **exclusiva** de la integración inicial de 001 y cubre estas cifras.
+
+**Causa del bloqueo.** Tras el CI en verde del run `45622784250` sobre `dcd80b4`, `gh pr merge 1 --rebase
+--match-head-commit dcd80b4…` fue rechazado («This branch can't be rebased»). La rama contenía el merge commit
+`8e2182f` («integrate constitution v1.2.0 into 001-platform-foundation»; padres `5189da7` y `b63f9a4`), y «Rebase and
+merge» no puede reaplicar merge commits. No se fusionó nada.
+
+**Procedimiento (local).**
+
+1. Estado verificado: worktree limpio; rama local, remota y head del PR en `dcd80b4`; `main` en `b63f9a4`.
+2. Respaldo local, no publicado: `refs/backup/001-baseline-pre-linearize-20261125` → `dcd80b4`. Árbol original
+   `c8b9497a74b98c058d3c84167880270c6da6bf9c`. `git fsck --connectivity-only` sin errores. El respaldo anterior
+   `refs/backup/001-baseline-pre-rewrite-20261125` → `8844f52` se conserva.
+3. Reconstrucción sobre `b63f9a4` en la rama local `tmp/001-linear-20261125`, con `commit-tree`. Se conservan, byte a
+   byte, autor, committer, fechas y mensajes (incluidas las líneas `Spec:`/`Tasks:`):
+   - los 9 commits anteriores al merge (desde la base común `2f9e193`) se reaplican en orden;
+   - el merge `8e2182f` se **omite**: sobre la nueva base su árbol es idéntico al del commit anterior (commit vacío);
+   - los 166 commits posteriores conservan su árbol exacto, con el nuevo padre.
+4. **Conflicto único**, resuelto de forma explícita y no con «ours»/«theirs» global. `bd3cfec` (commit 2) añadía a
+   `.specify/memory/constitution.md` el mismo texto de la excepción de mantenedor único que `main` y fijaba la versión
+   **1.1.0**. `main` ya contiene la Constitución **1.2.0** y `docs/process/constitution-amendments.md`. Se conserva el
+   blob 1.2.0 (`677092e2`), el mismo que tenían `b63f9a4`, `8e2182f` y `dcd80b4`. Un cherry-pick real de control
+   produjo un único hunk en conflicto, la línea de versión (1.2.0 frente a 1.1.0), y con la resolución 1.2.0 dio el
+   mismo árbol. Ningún commit posterior toca la Constitución. 1.3.0 no se ratifica.
+
+**Equivalencia verificada** (head reconstruido `7b54565`, antes de este registro):
+
+| Verificación | Resultado |
+|---|---|
+| A. Árbol final | `c8b9497a…`, idéntico al de `dcd80b4`; `git diff` vacío |
+| B. Constitución | blob `677092e2` (1.2.0) en ambos |
+| C. Commits | 176 originales → 175 nuevos + 1 merge omitido; 0 perdidos, 0 duplicados, 0 vacíos, 0 combinados |
+| D. Merges | 0 en el historial nuevo (antes, 1) |
+| E. Metadatos | autor, committer y mensajes idénticos byte a byte; `Spec:` 20 y `Tasks:` 20 en ambos historiales |
+| F. Cambios por commit | los 166 posteriores, árbol y parche idénticos; los 9 anteriores, parche idéntico salvo los hunks de la Constitución de `bd3cfec` |
+
+Ningún commit original estaba firmado.
+
+**Pruebas locales sobre `7b54565`** (macOS, Node 26.13.1; el CI anterior no es evidencia del historial nuevo):
+`contracts` 0, `backend` 0, `flutter` 0 (sin iOS). `general`: todas las verificaciones en PASS salvo «Nombre de
+rama», que falla por el nombre temporal `tmp/…` y se valida aparte con el nombre del PR. `prove-gates`: 9/10 gates en
+PASS; `secreto` falla solo en su control positivo por la misma causa de nombre de rama y se repite aparte. Un primer
+intento de `prove-gates` quedó bloqueado en `cobertura-dart` (`flutter test` de `app_shell` sin CPU durante 2 h 48 min);
+se detuvo y, al repetirlo, el gate pasó. oasdiff sigue **OMITIDO** (no PASS) y T049 sigue abierta.
+
+**Pendiente:** actualizar la rama del PR #1 con `--force-with-lease`, ejecutar un CI nuevo y fusionar con «Rebase and
+merge». Cada paso requiere una autorización expresa del responsable. Las referencias a SHA en los registros 9 y 10 y
+en la Aprobación 15 (`1d9914e`, `fc8ef05`, `1e9003d`, `c504fb6`, `faff72c`, `dcd80b4`) son del historial anterior;
+su equivalencia está en la tabla siguiente. Las corridas de CI citadas se ejecutaron sobre esos SHA anteriores.
+
+<details>
+<summary>Correspondencia de commits: historial anterior → historial lineal (176 filas)</summary>
+
+| n | Anterior | Nuevo | Asunto |
+|---|---|---|---|
+| 1 | `2d47f96` | `42df91e` | docs(specs): add 001-platform-foundation specification |
+| 2 | `bd3cfec` | `17e5ea7` | docs(specs): clarify 001 (FVM toolchain, single-maintainer review, CI build targets) |
+| 3 | `395049d` | `8f5d73c` | docs(specs): add 001 implementation plan, research, data model, contracts and quickstart |
+| 4 | `7c6ccec` | `1f3708a` | docs(specs): add 001 tasks (92 tasks, tests-first, spike RLS gate) |
+| 5 | `79906e6` | `fe22ad8` | docs(specs): resolve 001 analyze findings (D1–D4, F1, C1–C4) |
+| 6 | `002b28e` | `573eb65` | docs(spec): align platform foundation with constitution v1.2.0 |
+| 7 | `47dd7aa` | `2b60733` | docs(adr): record architecture decisions and add ADR-0007 money representation |
+| 8 | `78a8d49` | `734efc7` | docs(docs): align architecture, security and quality docs with accepted decisions |
+| 9 | `5189da7` | `c69f832` | docs(specs): trace 001 to D-FIN-01, D-ARC-02 and ADR-0004 spike criteria |
+| 10 | `8e2182f` | — (omitido) | docs(constitution): integrate constitution v1.2.0 into 001-platform-foundation |
+| 11 | `b2becb4` | `62b9fce` | docs(specs): resolve final 001 analyze findings (A1, B1, C1, I1, I2) |
+| 12 | `94356ee` | `fd79f89` | docs(specs): record approval of 001 spec, plan and tasks (G1 authorized) |
+| 13 | `6adbbbb` | `4c3430d` | chore: pin Node 26.13.1 and pnpm 12.21.0, add env example and doctor script |
+| 14 | `9788788` | `a6372b9` | chore(infra): add local PostgreSQL 18 compose and database roles |
+| 15 | `081f15a` | `19e51ba` | chore(backend): scaffold NestJS 12 backend with SWC, Vitest, lint and Testcontainers |
+| 16 | `d154a26` | `665c5fc` | docs(specs): record G1 implementation decisions and mark T001-T011 done |
+| 17 | `054c24e` | `093ced0` | feat(backend): add 0001_foundation migration with forced RLS, grants and append-only audit |
+| 18 | `9dfa9b8` | `55761c8` | docs(specs): record 0001_foundation implementation details and mark T013 done |
+| 19 | `e843977` | `f9c38df` | docs(specs): amend T012/T014/T015 scope and close T012 |
+| 20 | `e6e4b91` | `6d0e423` | chore(backend): add Prisma 7 spike tooling and T014 RLS spike |
+| 21 | `76db959` | `8e1bf3b` | docs(specs): add T014 spike report and mark T014 done |
+| 22 | `2670c4b` | `5c7d354` | chore(backend): apply ADR-0004 conditions P1-P4 for Prisma migrations and tenant context |
+| 23 | `68fb152` | `f1671e7` | docs(adr): accept ADR-0004 with conditions P1-P8 (D-ARC-01: Prisma 7) |
+| 24 | `8cf8580` | `a17365b` | docs(specs): close T015 with the conditional Prisma approval |
+| 25 | `389162f` | `3b14910` | feat(backend): add validated configuration with startup guards (T016, T017) |
+| 26 | `9c4b4b3` | `39cf57e` | feat(backend): add structured logging with correlation and redaction (T018, T019) |
+| 27 | `e844393` | `7c60054` | feat(backend): add global problem+json error filter (T020, T021) |
+| 28 | `a1938a9` | `c20983c` | docs(specs): record G4 implementation decisions and mark T016-T021 done |
+| 29 | `11655f8` | `af11ab6` | feat(contracts): materialize multi-file OpenAPI source, Redocly rules and oasdiff check (T022-T024) |
+| 30 | `3127f5a` | `05205fe` | fix(backend): stop mapping uncovered HttpException statuses to validation-error |
+| 31 | `48e37f0` | `d44e01b` | feat(backend): wire bootstrap with config, logging, problem filter and dev-module registry (T025) |
+| 32 | `61741c6` | `20b9f26` | docs(specs): record G5 implementation decisions and mark T022-T025 done |
+| 33 | `07478e9` | `4c892c3` | fix(backend): mount request context middleware for routes outside the /v1 prefix |
+| 34 | `9a99bb5` | `72af188` | feat(backend): add health and compatibility endpoints (T026-T029) |
+| 35 | `ca72b6b` | `9401ab3` | feat: add local up/down, test-all and test-affected scripts with Makefile (T030-T032) |
+| 36 | `d97e11d` | `340e343` | docs: add developer quick start to README (T033) |
+| 37 | `47aa7b1` | `513328f` | docs(specs): record G6 implementation decisions and pending items; mark T026-T033 done |
+| 38 | `a876b1b` | `5e14f8a` | feat(backend): add TenantContext, DevTenantGuard and withTenant (T038, T039) |
+| 39 | `7fb40c9` | `054b8bb` | feat(backend): add db:check-rls catalog verifier and RLS database tests (T035, T036, T043) |
+| 40 | `869f826` | `b14fc66` | docs: adopt index.ts as the public API of a module |
+| 41 | `2b3e9d9` | `1929359` | docs(specs): record G7a implementation decisions and mark T035, T036, T038, T039, T043 done |
+| 42 | `62aabd9` | `dc8f9d7` | docs(adr): amend ADR-0002 to name index.ts as the module public API |
+| 43 | `7d8c1fd` | `d5a97c1` | test(backend): add P2 residual-risk evidence and cover tenant-context defensive branches |
+| 44 | `fc0b429` | `c699780` | docs(adr): record P2 residual-risk assessment; P2 stays partial |
+| 45 | `fd39ca0` | `ddaeb46` | feat(contracts): add shared Money fixtures, schema and currency catalog (T056) |
+| 46 | `94150d6` | `3fd30cb` | feat(backend): add exact Money primitive, JSON boundary and anti-float rule (T057, T061, T062 partial, T064) |
+| 47 | `66c5ea4` | `ffe0ecd` | docs(specs): record US4 backend decisions and pending items; mark T056, T057, T061, T064 done |
+| 48 | `1f6057e` | `b730fe5` | test(backend): reproduce P2 risk R3 on the transactional client before hardening |
+| 49 | `d19bb14` | `61f1e41` | fix(backend): bind the transactional client to its owning withTenant (P2 R3) |
+| 50 | `db8c2d4` | `ec60a4f` | docs(adr): record R3 hardening in the P2 assessment; P2 stays partial |
+| 51 | `56b3e0f` | `45cf4d1` | docs(specs): mark P2 R3 resolved and flag ADR-0002 C2-1 wording for review |
+| 52 | `f5e4434` | `7b8d244` | docs(adr): ADR-0002 amendment 2 — clarify C2-1 (CLS context, private ALS transaction ownership) |
+| 53 | `678546f` | `4274f43` | feat(backend): add dev-probe module with tenant-scoped repository and Money boundary (T040–T042, T062) |
+| 54 | `ccd251f` | `dbf3d0e` | test(backend): add reusable describeTenantIsolation suite and test:tenancy (T034, T037, T044) |
+| 55 | `4629613` | `c32b7cc` | test(backend): verify dev-probe routes do not exist outside local/testing (T096) |
+| 56 | `65f801c` | `d00d2f5` | test(backend): give the in-test container start of foundation-schema an explicit timeout |
+| 57 | `234b3cf` | `89fb210` | docs(specs): mark G7b tasks done (T034, T037, T040–T042, T044, T096, T062) and record dev-probe decisions |
+| 58 | `240d308` | `753468e` | test(backend): attach the rejection handler of the late-query R3 test immediately |
+| 59 | `8d1f65d` | `53a4fb6` | feat(backend): add reusable idempotency and append-only audit building blocks (T074–T077) |
+| 60 | `64593fc` | `429b2a4` | feat(backend): make dev-probe create idempotent and audit create/update (T072, T073, T078 partial, T079 partial) |
+| 61 | `47a2ca9` | `4ab7fb3` | docs(specs): mark T072, T074–T077 done; record US6 decisions and the DELETE-audit and purge blockers |
+| 62 | `63edf38` | `3196d62` | test(backend): check input reflection only in errors[] of dev-probe validation responses |
+| 63 | `6a303ac` | `a04dad7` | feat(contracts): declare 400 validation-error on deleteDevProbeItem for the audited-operation actor policy |
+| 64 | `16e70b2` | `2a5fc93` | feat(backend): audit deleteDevProbeItem with the explicit-actor policy (T073, T078) |
+| 65 | `2edd08b` | `9a91eaa` | feat(infra): provision least-privilege maintenance roles for idempotency purge (US6, T079) |
+| 66 | `7fbf2fa` | `a9b2f86` | feat(backend): add migration 0002 for expired-key purge and verify it in db:check-rls (T079) |
+| 67 | `7b3c1e8` | `e107f50` | feat(backend): add manual idempotency purge run by the maintenance identity (T079) |
+| 68 | `46e57d1` | `a895893` | docs(adr): assess audit origin ip-hash privacy and propose HMAC (no algorithm change) |
+| 69 | `1f9ad1c` | `23ad3f2` | docs(specs): close US6 tasks T073, T078, T079; unmark T072 pending its text amendment; record approval 3 |
+| 70 | `04381fc` | `76eb60e` | test(backend): add expectToMatchContract and contract tests for real responses (T066, T067) |
+| 71 | `4ba7b45` | `f1814af` | test(backend): contract-test the idempotency responses of createDevProbeItem (T095) |
+| 72 | `73b0ca2` | `5139d1e` | docs(specs): apply the approved T072 amendment and close T072, T066, T067, T095 (approval 4) |
+| 73 | `dd9f9ce` | `1b8e01a` | docs(adr): ADR-0004 amendment 1 — record the idempotency maintenance roles in C4-1 |
+| 74 | `77a24eb` | `e405c9a` | feat(backend): read-only migration preflight before make up migrates (0002 prerequisites) |
+| 75 | `71d59cb` | `6c0bb29` | test(backend): regression review of the maintenance roles' effective privileges |
+| 76 | `6a05430` | `848eb2a` | docs(specs): record US5a notes, preflight mitigation and the origin minimization recommendation |
+| 77 | `08e42c6` | `61de639` | style(backend): strip two trailing spaces in schema.prisma |
+| 78 | `de0fda9` | `8db580d` | feat(ci): add CI job scripts and their tests (T045–T049, T051) |
+| 79 | `ab14b55` | `d26a2b8` | feat(ci): add the GitHub Actions workflow with a fail-closed result job (T052) |
+| 80 | `bdcc831` | `8b14a3b` | chore(ci): add CODEOWNERS with a placeholder owner and update the PR template (T053, T054) |
+| 81 | `8f5bd19` | `ae2e273` | docs(specs): document main branch protection ready to apply and record CI validation limits (T055) |
+| 82 | `9573293` | `0ad5fcd` | fix(ci): report the skipped oasdiff comparison as OMITIDO in make test, not as passed |
+| 83 | `b413537` | `9436553` | docs(specs): close T045–T048, T051, T053–T055; keep T049, T050, T052 open; record G12 decisions |
+| 84 | `1803b0e` | `5583c0d` | fix(backend): override effect to 3.22.1 under @prisma/config (GHSA-7589-6fvf-x4pw) |
+| 85 | `ac2d07e` | `9481328` | fix(ci): make the dependency gate fail closed on invalid osv-scanner reports |
+| 86 | `af2e1f4` | `98a249e` | docs(specs): record security decision SEC-2026-001 for effect GHSA-7589-6fvf-x4pw |
+| 87 | `a80da0c` | `df25424` | feat(backend): record a logical audit origin with no network data (Approval 5) |
+| 88 | `9c845cc` | `77c871a` | docs(specs): amend data-model audit_events.origin to a logical origin and record Approval 5 |
+| 89 | `c5a6877` | `11ff251` | docs(adr): mark the audit origin assessment resolved by minimization; track SEC-2026-001 |
+| 90 | `f0ed0b9` | `f5babc1` | fix(backend): log HTTP requests through allowlist serializers (no IP, headers or query) |
+| 91 | `16db35e` | `c4ae4dc` | chore(ci): require the HTTP log privacy suites in the backend job |
+| 92 | `bc6fa09` | `ad4e19a` | docs(specs): record Approval 6 and the HTTP log minimization notes |
+| 93 | `4fae968` | `f3b54fd` | docs(adr): add the HTTP log minimization policy and close the access-log finding |
+| 94 | `5b2568a` | `cf2956d` | test(backend): add fast-check property tests for Money (T058) |
+| 95 | `14ef560` | `e98ede1` | feat(ci): add the anti-float reference file and gate scripts in the backend job (T060, T065) |
+| 96 | `cfcf1cd` | `ad855ae` | docs(specs): close T058 and T060; keep T065 open for its Dart part; record US4 TS notes |
+| 97 | `bcf55d6` | `e4b483e` | test(backend): move service-level audit tests to their own file so the HTTP app keeps its CLS host |
+| 98 | `b9cffcf` | `216db73` | feat(flutter-pkg): add the FVM-pinned Flutter workspace with shared_core, financial_domain, design_system and check_deps (T080–T084) |
+| 99 | `8d41796` | `8b415a0` | fix(ci): treat a Dart directory without files as PENDIENTE and list local Flutter checks in run-local |
+| 100 | `34c958c` | `7fcd59f` | docs(specs): close T081–T084, keep T080 open with an amendment proposal, record US7a decisions |
+| 101 | `e07bb8f` | `5824143` | docs(specs): split T080 into initialization (A) and final composition (B) to break the T070/T085 cycle (Approval 7) |
+| 102 | `1e8d7c6` | `14ebfff` | test(ci): require breaking.sh to fail when a required CompatibilityInfo field is removed (T068) |
+| 103 | `8de9b61` | `52ee038` | feat(contracts): add the client bundle without dev-probe and the pinned dart-dio generator script (T069, T070) |
+| 104 | `ca910ca` | `b2197cd` | feat(flutter-pkg): add api_client generated from the client contract with correlation and app-version interceptors (T070) |
+| 105 | `7c97f02` | `8e6fc6f` | docs(specs): close T068–T070 and record the dart-dio spike result in R-12 |
+| 106 | `81331d8` | `26c0d7d` | feat(ci): make the Dart client regeneration gate mandatory and add test:contract (T071) |
+| 107 | `eeafe98` | `a724f81` | feat(ci): add the Flutter job script with Dart dependency scanning and coverage (T050) |
+| 108 | `51242f1` | `27e90eb` | feat(flutter-pkg): add compatibility classification to api_client and the common startup screen to design_system (T085) |
+| 109 | `6bf5584` | `1b9f225` | feat(admin): add the Kuota Admin, Flutter Web shell (provisional, D-ARC-03) with the startup screen (T085) |
+| 110 | `2b19aac` | `fc4addd` | feat(collector): add the Kuota Collector, Android and iOS shell with the startup screen (T085) |
+| 111 | `db88a9b` | `ada9937` | feat(client): add the Kuota Client, Android and iOS shell with the startup screen (T085) |
+| 112 | `ac846e0` | `d5a4550` | feat(flutter-pkg): register the three apps in the workspace and add per-environment configs (T085, T080 stage B) |
+| 113 | `1f2d99a` | `51062ab` | docs(specs): close T050, T071, T080 and T085; record CI Flutter, app evidence, CORS gap and iOS blocker |
+| 114 | `7501ed7` | `e68dbf6` | feat(backend): add an exact-origin CORS policy for Kuota Admin on Flutter Web (Approval 8) |
+| 115 | `839f719` | `d35944c` | fix(backend): wait for Docker to confirm exit before removing Testcontainers databases |
+| 116 | `93c35cb` | `952e37a` | feat(ci): verify the single workspace lockfile and document the mobile commands (T086) |
+| 117 | `7f808b8` | `5a64640` | docs(specs): record Approval 8, close T086 and T097, document CORS, iOS blocker and Testcontainers root cause |
+| 118 | `a54378b` | `5ff1d04` | feat(flutter-pkg): implement Money and RoundingMode in Dart with BigInt (T063) |
+| 119 | `d8ed355` | `a851a97` | test(flutter-pkg): run the shared Money fixtures on the Dart VM and in Chrome (T059) |
+| 120 | `e930167` | `2396ed9` | feat(ci): verify the Dart anti-float rule on real Money code and a defective reference (T065) |
+| 121 | `f9240a1` | `86a1cff` | docs(specs): record Approval 9 (iOS validation deferred), close T059, T063 and T065, and fix quickstart section 5 |
+| 122 | `1902a5f` | `c745efe` | docs(specs): correct the Flutter test total in the US4 Dart record (124) |
+| 123 | `d569081` | `c2981a6` | feat(backend): add OpenTelemetry metrics on a separate, token-protected listener (T094) |
+| 124 | `4f576c5` | `1888248` | test(backend): cover metrics access, content, privacy and cardinality (T093) |
+| 125 | `f554ae5` | `10c3b8f` | feat(ci): prove that each blocking gate fails on its reference defect (T087) |
+| 126 | `6a8f901` | `23f8467` | docs(specs): record the documentation-only CI duration in the quickstart (T088) |
+| 127 | `776a6a6` | `1125645` | docs: update CLAUDE.md with the real commands and the existing folders (T089) |
+| 128 | `163c529` | `942f9d7` | docs(adr): record the post-implementation state of ADR-0002, 0003 and 0004 without re-approving them (T090) |
+| 129 | `5dfc6a1` | `5447018` | docs(specs): add the 001 validation report with clean-clone evidence; T091 stays open |
+| 130 | `fc3fbc9` | `2acf9fd` | docs(specs): close T093 and T087-T090, keep T094 pending ratification, record the read-only T092 analysis (2 CRITICAL) |
+| 131 | `ee3fd55` | `74eec13` | feat(ci): add a blocking line and branch coverage gate for the shared Dart packages (C1) |
+| 132 | `28277f5` | `15f8e2e` | fix(ci): resolve symlinks in the Dart coverage gate package path (C1) |
+| 133 | `87b5874` | `968fcd1` | refactor(flutter-pkg): move config loading and compatibility classification out of the apps (C2, partial) |
+| 134 | `c207e58` | `fbafe73` | docs(specs): record verified past authorizations (H1), Approval 10 (local-only) and the ratification of T094 |
+| 135 | `ce76132` | `829227a` | fix(backend): answer problem+json not-found for every unmatched path, not only under /v1 (H3) |
+| 136 | `5737ffd` | `489e386` | docs(specs): record C1 coverage before/after, C2 alternatives, H3 fix and the local regression |
+| 137 | `f9d4062` | `5597d66` | docs(specs): record Approval 11 (app_shell, generated-code coverage rule) and add task T098 |
+| 138 | `fbe568d` | `b2a16e0` | feat(flutter-pkg): add app_shell and move the shared app composition out of the three apps (T098, C2) |
+| 139 | `bb49614` | `a67be84` | docs(adr): amend ADR-0003 with app_shell and update the architecture, plan and README (Approval 11) |
+| 140 | `1831bde` | `5fcd5fd` | docs(specs): close T098 with C2 evidence, keep T092 open, specify H2 behavior and add the 002 draft analysis |
+| 141 | `4b9602b` | `2d9eec9` | docs: add the 002 draft package (D-ARC-07 ADR proposal, decision matrices, draft spec, roadmap) |
+| 142 | `4cc9e4e` | `7bb8485` | docs(specs): run the local convergence of 001 (T092): append T099-T108, fix stale doc comments |
+| 143 | `ec53fa3` | `f40a585` | fix(flutter-pkg): quote-free test:financial description so the workspace pubspec parses again |
+| 144 | `ff204cc` | `993a333` | feat(backend): audit every cross-tenant idempotency purge in platform_audit_events (T099) |
+| 145 | `815368b` | `50022ae` | feat(backend): enforce allowlist dependency rules for domain/ and common/money (T100) |
+| 146 | `62ea557` | `aa94da5` | docs: reflect the platform audit separation in the 002 drafts and list the decisions needed before tenants, users and sessions |
+| 147 | `9eee7e8` | `40467cd` | fix(backend): finish the T099/T100 test and format updates |
+| 148 | `c8c52b6` | `3ec187f` | docs(specs): close T099, T100 and T092 with evidence; record the residual tenant-client exposure as a proposal |
+| 149 | `bde6385` | `2dc8b77` | feat(backend): structured lifecycle, readiness and conflict events, and a suite-wide log privacy gate (T101, T102) |
+| 150 | `e09e00e` | `011805b` | feat(contracts): block removal of optional response properties in the breaking-change gate (T103) |
+| 151 | `e0d5381` | `fe4921a` | feat(ci): prove the generated-client gate, test doctor.sh with fake binaries, require the access-exception suites (T106-T108) |
+| 152 | `849249b` | `4d3d4b6` | docs(specs): trace migrations 0002 and 0003, the maintenance roles and the migration preflight in the plan structure (T105) |
+| 153 | `13294f8` | `f84f001` | docs(specs): close T101-T103 and T105-T108 with evidence; keep T104 pending a FR-021 decision; record the T099 re-audit |
+| 154 | `beae6db` | `2333f73` | feat(backend): type-aware anti-float rule for monetary values (T104, option C of Approval 12) |
+| 155 | `793712e` | `074c261` | docs(specs): record Approval 12 (T104 option C and the FR-021 interpretation) |
+| 156 | `9f6f8af` | `1754fa4` | docs(specs): close T104 with evidence, explain the backend gate count, and add the 002 first-flow decision matrix |
+| 157 | `c48d37c` | `3a4fabf` | fix(backend): synchronous stdout log destination so shutdown events survive SIGTERM (001 T101) |
+| 158 | `eb4c780` | `debefff` | docs: keep the 002 drafts out of the 001 baseline |
+| 159 | `b6c1cad` | `ade682e` | docs(specs): add the 001 baseline PR manifest with review sections and local evidence |
+| 160 | `cba357d` | `1c55b33` | docs(specs): cite the platform_audit_events fields in T099 and record Approval 13 (E1) |
+| 161 | `6d4c256` | `9dc63b8` | docs(process): single-maintainer review policy for main protection (001 T055) |
+| 162 | `3cf8517` | `80bdeb8` | docs(specs): record single-maintainer interpretation, L3 stop and L4 results on the 001 candidate |
+| 163 | `a5caf9b` | `f9a772f` | chore(ci): name the single real code owner @aguila486 (001 T053) |
+| 164 | `8c36c46` | `81ade8b` | docs(specs): record L3 completion, general job and the second clean-clone run of T091 (001) |
+| 165 | `6e5356d` | `5220abb` | docs(specs): record the isolated Docker run of the 001 quickstart for T091 (technical part done) |
+| 166 | `7b865f4` | `e87561d` | docs(specs): record the maintainer's SC-001 approval and close T091 (001 approval 14) |
+| 167 | `4d16536` | `9823b7c` | docs(specs): record the read-only R0 result for the 001 integration (blocked: authenticated account is not @aguila486) |
+| 168 | `28a826d` | `4d7e198` | docs(specs): record R0 after logging in as @aguila486 (plan unverifiable: token lacks read:user; workflow scope needed for R5) |
+| 169 | `f253539` | `3f138f9` | docs(specs): record R0 NO-GO for the 001 integration (owner states @aguila486 is on GitHub Free) |
+| 170 | `731f8bb` | `c94bbee` | docs(specs): record API-verified GitHub plan for @aguila486 (free): R0 stays NO-GO |
+| 171 | `1d9914e` | `ceed14d` | docs(specs): record the owner's decision to publish 001 as a public repository and the pre-publication exposure review |
+| 172 | `fc8ef05` | `044571f` | fix(ci): isolate the doctor test PATH from system binaries so "Docker absent" holds on Linux |
+| 173 | `1e9003d` | `f486421` | fix(ci): run the contract lint-rule test without colors so rule names match on GitHub Actions |
+| 174 | `c504fb6` | `a4f0a15` | fix(backend): give each process test its own build so parallel `nest build` cannot delete it |
+| 175 | `faff72c` | `cbb18cf` | docs(specs): record the 001 publication (R1-R6), the first CI run and the three portability fixes |
+| 176 | `dcd80b4` | `7b54565` | docs(specs): record the green CI run for 001 and Approval 15 (close T052, integration conditions) |
+
+</details>

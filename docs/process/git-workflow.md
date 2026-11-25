@@ -91,7 +91,7 @@ Configuración de *branch protection* (o *ruleset*) para `main`:
 | Force-push y borrado de `main` | Prohibidos |
 | Historial lineal | Requerido (squash o rebase merge; sin merge commits) |
 | Status checks requeridos | **`CI: resultado`** (job agregador de `.github/workflows/ci.yml`), con "Require branches to be up to date" |
-| Aprobaciones | 1 aprobación + CODEOWNERS (*Require review from Code Owners*); descartar aprobaciones al añadir commits |
+| Aprobaciones | Con un solo mantenedor (excepción de la Constitución): 0 reviews exigidas en GitHub (`required_approving_review_count: 0`, `require_code_owner_reviews: false`); la aprobación humana del propietario se registra como comentario del PR y en `approvals.md`, y no es una revisión independiente. Con un segundo mantenedor en CODEOWNERS: 1 review (2 en ledger, motores financieros, autenticación o RLS) + *Require review from Code Owners*; descartar aprobaciones al añadir commits |
 | Conversaciones | Deben estar resueltas |
 | Administradores | Las reglas también les aplican (sin *bypass*) |
 | Commits firmados | Recomendado |

@@ -558,3 +558,24 @@ crea nada en GitHub; la decisión sobre cómo seguir es del responsable.
 El responsable amplió él mismo los ámbitos del token (`gh auth refresh --scopes read:user,workflow`). `GET /user` con la
 cuenta activa `aguila486` devuelve **`plan: free`**. Coincide con lo declarado en el registro 6. **R0 sigue en NO-GO**
 para un repositorio privado.
+
+## Registro 2026-11-25 (8) — Decisión: repositorio PÚBLICO (opción B)
+
+Decisión del responsable ante el NO-GO de R0 con plan Free: **publicar `aguila486/kuota-platform` como repositorio
+público**. GitHub Free permite proteger ramas en repositorios públicos. Sustituye, por decisión expresa del responsable,
+la frase del plan de integración «hacer público el repositorio no es aceptable».
+
+Revisión previa de exposición (lo que se publicaría: `main` y esta rama, 175 commits):
+
+| Dato expuesto | Decisión del responsable |
+|---|---|
+| Correo de autor de todos los commits | **Aceptado**: se publica tal cual (permanente) |
+| Nombres de otras cuentas de GitHub del responsable, en el registro 4 (commits sin publicar del 2026-11-25) | **Eliminados del historial**. Se reescribieron solo los 4 commits de registro del 2026-11-25 posteriores a `7b865f4` (`746e897`…`8844f52` → `4d16536`…`731f8bb`). El árbol solo cambia en esa línea. Copia local `refs/backup/001-baseline-pre-rewrite-20261125`, que no se publica |
+| Usuario del sistema operativo en una ruta local del registro H1 (`c207e58`, 2026-11-23) | Pendiente de decisión. Riesgo bajo; reescribirlo cambiaría commits ya aprobados |
+
+Consecuencias que se asumen:
+
+- Código, specs, documentos de seguridad y el modelo financiero quedan públicos.
+- Sin licencia, el código conserva todos los derechos reservados; la licencia es una decisión pendiente.
+- El CI de un repositorio público no consume minutos del plan.
+- R1–R9 siguen necesitando autorización expresa.

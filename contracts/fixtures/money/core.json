@@ -1,0 +1,1621 @@
+{
+  "schema_version": 1,
+  "description": "Fixtures de Money (ADR-0007; T056). Valores esperados calculados con un oráculo independiente (enteros exactos y decimal de Python). Convenciones: `parse` toma la moneda de `inputs.a.currency` (con `amount_minor` \"0\", que se ignora) porque el esquema aprobado no tiene `inputs.currency`; `multiply` sin `rounding` significa sin modo; HALF_UP redondea la mitad alejándose de cero. Orden de validación: moneda, forma, dominio.",
+  "cases": [
+    {
+      "id": "ADD-001",
+      "operation": "add",
+      "inputs": {
+        "a": {
+          "amount_minor": "150000",
+          "currency": "MXN"
+        },
+        "b": {
+          "amount_minor": "2550",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "152550",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "ADD-002",
+      "description": "negativos",
+      "operation": "add",
+      "inputs": {
+        "a": {
+          "amount_minor": "-500",
+          "currency": "MXN"
+        },
+        "b": {
+          "amount_minor": "200",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "-300",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "ADD-003",
+      "description": "cero",
+      "operation": "add",
+      "inputs": {
+        "a": {
+          "amount_minor": "0",
+          "currency": "JPY"
+        },
+        "b": {
+          "amount_minor": "0",
+          "currency": "JPY"
+        }
+      },
+      "expected": {
+        "amount_minor": "0",
+        "currency": "JPY"
+      }
+    },
+    {
+      "id": "ADD-004",
+      "description": "mayor que 2^53",
+      "operation": "add",
+      "inputs": {
+        "a": {
+          "amount_minor": "9007199254740993",
+          "currency": "USD"
+        },
+        "b": {
+          "amount_minor": "2",
+          "currency": "USD"
+        }
+      },
+      "expected": {
+        "amount_minor": "9007199254740995",
+        "currency": "USD"
+      }
+    },
+    {
+      "id": "ADD-005",
+      "description": "llega al máximo del dominio",
+      "operation": "add",
+      "inputs": {
+        "a": {
+          "amount_minor": "9223372036854775806",
+          "currency": "MXN"
+        },
+        "b": {
+          "amount_minor": "1",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "9223372036854775807",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "ADD-006",
+      "description": "desbordamiento positivo",
+      "operation": "add",
+      "inputs": {
+        "a": {
+          "amount_minor": "9223372036854775807",
+          "currency": "MXN"
+        },
+        "b": {
+          "amount_minor": "1",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "AMOUNT_OUT_OF_RANGE"
+    },
+    {
+      "id": "ADD-007",
+      "description": "monedas distintas",
+      "operation": "add",
+      "inputs": {
+        "a": {
+          "amount_minor": "100",
+          "currency": "MXN"
+        },
+        "b": {
+          "amount_minor": "100",
+          "currency": "USD"
+        }
+      },
+      "expected_error": "CURRENCY_MISMATCH"
+    },
+    {
+      "id": "SUB-001",
+      "description": "resultado negativo",
+      "operation": "subtract",
+      "inputs": {
+        "a": {
+          "amount_minor": "1000",
+          "currency": "MXN"
+        },
+        "b": {
+          "amount_minor": "2500",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "-1500",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "SUB-002",
+      "description": "mínimo del dominio",
+      "operation": "subtract",
+      "inputs": {
+        "a": {
+          "amount_minor": "-9223372036854775807",
+          "currency": "MXN"
+        },
+        "b": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "-9223372036854775807",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "SUB-003",
+      "description": "llegaría a -2^63, fuera del dominio simétrico",
+      "operation": "subtract",
+      "inputs": {
+        "a": {
+          "amount_minor": "-9223372036854775807",
+          "currency": "MXN"
+        },
+        "b": {
+          "amount_minor": "1",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "AMOUNT_OUT_OF_RANGE"
+    },
+    {
+      "id": "SUB-004",
+      "description": "mayor que 2^53",
+      "operation": "subtract",
+      "inputs": {
+        "a": {
+          "amount_minor": "18014398509481985",
+          "currency": "USD"
+        },
+        "b": {
+          "amount_minor": "1",
+          "currency": "USD"
+        }
+      },
+      "expected": {
+        "amount_minor": "18014398509481984",
+        "currency": "USD"
+      }
+    },
+    {
+      "id": "SUB-005",
+      "description": "monedas distintas",
+      "operation": "subtract",
+      "inputs": {
+        "a": {
+          "amount_minor": "1",
+          "currency": "JPY"
+        },
+        "b": {
+          "amount_minor": "1",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "CURRENCY_MISMATCH"
+    },
+    {
+      "id": "MUL-001",
+      "description": "12.5 → HALF_UP",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "125",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "HALF_UP",
+      "expected": {
+        "amount_minor": "13",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-002",
+      "description": "-12.5 → HALF_UP",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "-125",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "HALF_UP",
+      "expected": {
+        "amount_minor": "-13",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-003",
+      "description": "12.5 → HALF_EVEN",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "125",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "HALF_EVEN",
+      "expected": {
+        "amount_minor": "12",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-004",
+      "description": "-12.5 → HALF_EVEN",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "-125",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "HALF_EVEN",
+      "expected": {
+        "amount_minor": "-12",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-005",
+      "description": "12.5 → DOWN",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "125",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "DOWN",
+      "expected": {
+        "amount_minor": "12",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-006",
+      "description": "-12.5 → DOWN",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "-125",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "DOWN",
+      "expected": {
+        "amount_minor": "-12",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-007",
+      "description": "12.5 → UP",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "125",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "UP",
+      "expected": {
+        "amount_minor": "13",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-008",
+      "description": "-12.5 → UP",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "-125",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "UP",
+      "expected": {
+        "amount_minor": "-13",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-009",
+      "description": "12.5 → FLOOR",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "125",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "FLOOR",
+      "expected": {
+        "amount_minor": "12",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-010",
+      "description": "-12.5 → FLOOR",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "-125",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "FLOOR",
+      "expected": {
+        "amount_minor": "-13",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-011",
+      "description": "12.5 → CEILING",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "125",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "CEILING",
+      "expected": {
+        "amount_minor": "13",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-012",
+      "description": "-12.5 → CEILING",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "-125",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "CEILING",
+      "expected": {
+        "amount_minor": "-12",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-013",
+      "description": "13.5 → par superior",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "135",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "HALF_EVEN",
+      "expected": {
+        "amount_minor": "14",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-014",
+      "description": "-13.5 → par",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "-135",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "rounding": "HALF_EVEN",
+      "expected": {
+        "amount_minor": "-14",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-015",
+      "description": "inexacto no medio → HALF_UP",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "1001",
+          "currency": "MXN"
+        },
+        "factor": "0.333"
+      },
+      "rounding": "HALF_UP",
+      "expected": {
+        "amount_minor": "333",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-016",
+      "description": "inexacto no medio → HALF_EVEN",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "1001",
+          "currency": "MXN"
+        },
+        "factor": "0.333"
+      },
+      "rounding": "HALF_EVEN",
+      "expected": {
+        "amount_minor": "333",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-017",
+      "description": "inexacto no medio → DOWN",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "1001",
+          "currency": "MXN"
+        },
+        "factor": "0.333"
+      },
+      "rounding": "DOWN",
+      "expected": {
+        "amount_minor": "333",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-018",
+      "description": "inexacto no medio → UP",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "1001",
+          "currency": "MXN"
+        },
+        "factor": "0.333"
+      },
+      "rounding": "UP",
+      "expected": {
+        "amount_minor": "334",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-019",
+      "description": "inexacto no medio → FLOOR",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "1001",
+          "currency": "MXN"
+        },
+        "factor": "0.333"
+      },
+      "rounding": "FLOOR",
+      "expected": {
+        "amount_minor": "333",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-020",
+      "description": "inexacto no medio → CEILING",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "1001",
+          "currency": "MXN"
+        },
+        "factor": "0.333"
+      },
+      "rounding": "CEILING",
+      "expected": {
+        "amount_minor": "334",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-021",
+      "description": "exacto sin modo de redondeo",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "1000",
+          "currency": "MXN"
+        },
+        "factor": "1.5"
+      },
+      "expected": {
+        "amount_minor": "1500",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-022",
+      "description": "inexacto sin modo",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "125",
+          "currency": "MXN"
+        },
+        "factor": "0.1"
+      },
+      "expected_error": "ROUNDING_REQUIRED"
+    },
+    {
+      "id": "MUL-023",
+      "description": "factor negativo",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "100",
+          "currency": "USD"
+        },
+        "factor": "-0.5"
+      },
+      "expected": {
+        "amount_minor": "-50",
+        "currency": "USD"
+      }
+    },
+    {
+      "id": "MUL-024",
+      "description": "mayor que 2^53",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "9007199254740993",
+          "currency": "USD"
+        },
+        "factor": "3"
+      },
+      "expected": {
+        "amount_minor": "27021597764222979",
+        "currency": "USD"
+      }
+    },
+    {
+      "id": "MUL-025",
+      "description": "desbordamiento",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "9223372036854775807",
+          "currency": "MXN"
+        },
+        "factor": "2"
+      },
+      "expected_error": "AMOUNT_OUT_OF_RANGE"
+    },
+    {
+      "id": "MUL-026",
+      "description": "igual a 2^63: fuera",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "4611686018427387904",
+          "currency": "MXN"
+        },
+        "factor": "2"
+      },
+      "expected_error": "AMOUNT_OUT_OF_RANGE"
+    },
+    {
+      "id": "MUL-027",
+      "description": "igual a -2^63: fuera del dominio simétrico",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "-4611686018427387904",
+          "currency": "MXN"
+        },
+        "factor": "2"
+      },
+      "expected_error": "AMOUNT_OUT_OF_RANGE"
+    },
+    {
+      "id": "MUL-028",
+      "description": "producto de 49 dígitos significativos, exacto",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "9223372036854775807",
+          "currency": "MXN"
+        },
+        "factor": "0.123456789012345678901234567890"
+      },
+      "rounding": "HALF_EVEN",
+      "expected": {
+        "amount_minor": "1138687895536349070",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "MUL-029",
+      "description": "identidad en el máximo",
+      "operation": "multiply",
+      "inputs": {
+        "a": {
+          "amount_minor": "9223372036854775807",
+          "currency": "MXN"
+        },
+        "factor": "1"
+      },
+      "expected": {
+        "amount_minor": "9223372036854775807",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "ALLOC-001",
+      "operation": "allocate",
+      "inputs": {
+        "a": {
+          "amount_minor": "100",
+          "currency": "MXN"
+        },
+        "parts": 3
+      },
+      "expected": [
+        {
+          "amount_minor": "34",
+          "currency": "MXN"
+        },
+        {
+          "amount_minor": "33",
+          "currency": "MXN"
+        },
+        {
+          "amount_minor": "33",
+          "currency": "MXN"
+        }
+      ]
+    },
+    {
+      "id": "ALLOC-002",
+      "description": "dos residuos iguales: gana el índice menor",
+      "operation": "allocate",
+      "inputs": {
+        "a": {
+          "amount_minor": "101",
+          "currency": "MXN"
+        },
+        "parts": 3
+      },
+      "expected": [
+        {
+          "amount_minor": "34",
+          "currency": "MXN"
+        },
+        {
+          "amount_minor": "34",
+          "currency": "MXN"
+        },
+        {
+          "amount_minor": "33",
+          "currency": "MXN"
+        }
+      ]
+    },
+    {
+      "id": "ALLOC-003",
+      "description": "empate por índice",
+      "operation": "allocate",
+      "inputs": {
+        "a": {
+          "amount_minor": "5",
+          "currency": "MXN"
+        },
+        "ratios": [
+          1,
+          1
+        ]
+      },
+      "expected": [
+        {
+          "amount_minor": "3",
+          "currency": "MXN"
+        },
+        {
+          "amount_minor": "2",
+          "currency": "MXN"
+        }
+      ]
+    },
+    {
+      "id": "ALLOC-004",
+      "description": "mayor residuo",
+      "operation": "allocate",
+      "inputs": {
+        "a": {
+          "amount_minor": "10",
+          "currency": "MXN"
+        },
+        "ratios": [
+          1,
+          2
+        ]
+      },
+      "expected": [
+        {
+          "amount_minor": "3",
+          "currency": "MXN"
+        },
+        {
+          "amount_minor": "7",
+          "currency": "MXN"
+        }
+      ]
+    },
+    {
+      "id": "ALLOC-005",
+      "operation": "allocate",
+      "inputs": {
+        "a": {
+          "amount_minor": "10",
+          "currency": "MXN"
+        },
+        "ratios": [
+          50,
+          30,
+          20
+        ]
+      },
+      "expected": [
+        {
+          "amount_minor": "5",
+          "currency": "MXN"
+        },
+        {
+          "amount_minor": "3",
+          "currency": "MXN"
+        },
+        {
+          "amount_minor": "2",
+          "currency": "MXN"
+        }
+      ]
+    },
+    {
+      "id": "ALLOC-006",
+      "description": "proporción cero",
+      "operation": "allocate",
+      "inputs": {
+        "a": {
+          "amount_minor": "5",
+          "currency": "JPY"
+        },
+        "ratios": [
+          0,
+          1,
+          1
+        ]
+      },
+      "expected": [
+        {
+          "amount_minor": "0",
+          "currency": "JPY"
+        },
+        {
+          "amount_minor": "3",
+          "currency": "JPY"
+        },
+        {
+          "amount_minor": "2",
+          "currency": "JPY"
+        }
+      ]
+    },
+    {
+      "id": "ALLOC-007",
+      "description": "mayor que 2^53",
+      "operation": "allocate",
+      "inputs": {
+        "a": {
+          "amount_minor": "9007199254740993",
+          "currency": "USD"
+        },
+        "parts": 2
+      },
+      "expected": [
+        {
+          "amount_minor": "4503599627370497",
+          "currency": "USD"
+        },
+        {
+          "amount_minor": "4503599627370496",
+          "currency": "USD"
+        }
+      ]
+    },
+    {
+      "id": "ALLOC-008",
+      "operation": "allocate",
+      "inputs": {
+        "a": {
+          "amount_minor": "7",
+          "currency": "BHD"
+        },
+        "parts": 1
+      },
+      "expected": [
+        {
+          "amount_minor": "7",
+          "currency": "BHD"
+        }
+      ]
+    },
+    {
+      "id": "ALLOC-009",
+      "description": "cero",
+      "operation": "allocate",
+      "inputs": {
+        "a": {
+          "amount_minor": "0",
+          "currency": "CLF"
+        },
+        "parts": 4
+      },
+      "expected": [
+        {
+          "amount_minor": "0",
+          "currency": "CLF"
+        },
+        {
+          "amount_minor": "0",
+          "currency": "CLF"
+        },
+        {
+          "amount_minor": "0",
+          "currency": "CLF"
+        },
+        {
+          "amount_minor": "0",
+          "currency": "CLF"
+        }
+      ]
+    },
+    {
+      "id": "PARSE-001",
+      "operation": "parse",
+      "inputs": {
+        "text": "1234.5",
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "123450",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "PARSE-002",
+      "operation": "parse",
+      "inputs": {
+        "text": "-0.75",
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "-75",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "PARSE-003",
+      "operation": "parse",
+      "inputs": {
+        "text": "0",
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "0",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "PARSE-004",
+      "operation": "parse",
+      "inputs": {
+        "text": "100",
+        "a": {
+          "amount_minor": "0",
+          "currency": "JPY"
+        }
+      },
+      "expected": {
+        "amount_minor": "100",
+        "currency": "JPY"
+      }
+    },
+    {
+      "id": "PARSE-005",
+      "operation": "parse",
+      "inputs": {
+        "text": "1.234",
+        "a": {
+          "amount_minor": "0",
+          "currency": "BHD"
+        }
+      },
+      "expected": {
+        "amount_minor": "1234",
+        "currency": "BHD"
+      }
+    },
+    {
+      "id": "PARSE-006",
+      "operation": "parse",
+      "inputs": {
+        "text": "-1.2345",
+        "a": {
+          "amount_minor": "0",
+          "currency": "CLF"
+        }
+      },
+      "expected": {
+        "amount_minor": "-12345",
+        "currency": "CLF"
+      }
+    },
+    {
+      "id": "PARSE-007",
+      "description": "máximo del dominio",
+      "operation": "parse",
+      "inputs": {
+        "text": "92233720368547758.07",
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "9223372036854775807",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "PARSE-008",
+      "description": "máximo + 1",
+      "operation": "parse",
+      "inputs": {
+        "text": "92233720368547758.08",
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "AMOUNT_OUT_OF_RANGE"
+    },
+    {
+      "id": "PARSE-009",
+      "description": "-2^63, fuera del dominio simétrico",
+      "operation": "parse",
+      "inputs": {
+        "text": "-9223372036854775808",
+        "a": {
+          "amount_minor": "0",
+          "currency": "JPY"
+        }
+      },
+      "expected_error": "AMOUNT_OUT_OF_RANGE"
+    },
+    {
+      "id": "PARSE-010",
+      "description": "mayor que 2^53",
+      "operation": "parse",
+      "inputs": {
+        "text": "9007199254740993",
+        "a": {
+          "amount_minor": "0",
+          "currency": "JPY"
+        }
+      },
+      "expected": {
+        "amount_minor": "9007199254740993",
+        "currency": "JPY"
+      }
+    },
+    {
+      "id": "PARSE-011",
+      "description": "tres decimales en escala 2",
+      "operation": "parse",
+      "inputs": {
+        "text": "1.234",
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "TOO_MANY_DECIMALS"
+    },
+    {
+      "id": "PARSE-012",
+      "description": "decimales en escala 0",
+      "operation": "parse",
+      "inputs": {
+        "text": "100.0",
+        "a": {
+          "amount_minor": "0",
+          "currency": "JPY"
+        }
+      },
+      "expected_error": "TOO_MANY_DECIMALS"
+    },
+    {
+      "id": "PARSE-013",
+      "operation": "parse",
+      "inputs": {
+        "text": "1.23456",
+        "a": {
+          "amount_minor": "0",
+          "currency": "CLF"
+        }
+      },
+      "expected_error": "TOO_MANY_DECIMALS"
+    },
+    {
+      "id": "PARSE-014",
+      "description": "formato inválido",
+      "operation": "parse",
+      "inputs": {
+        "text": "1,234.50",
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "PARSE-015",
+      "description": "formato inválido",
+      "operation": "parse",
+      "inputs": {
+        "text": "1e3",
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "PARSE-016",
+      "description": "formato inválido",
+      "operation": "parse",
+      "inputs": {
+        "text": "12 ",
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "PARSE-017",
+      "description": "formato inválido",
+      "operation": "parse",
+      "inputs": {
+        "text": "abc",
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "PARSE-018",
+      "description": "formato inválido",
+      "operation": "parse",
+      "inputs": {
+        "text": "",
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "PARSE-019",
+      "description": "formato inválido",
+      "operation": "parse",
+      "inputs": {
+        "text": "+1",
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "PARSE-020",
+      "description": "formato inválido",
+      "operation": "parse",
+      "inputs": {
+        "text": "1.2.3",
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "PARSE-021",
+      "description": "moneda fuera del catálogo",
+      "operation": "parse",
+      "inputs": {
+        "text": "10",
+        "a": {
+          "amount_minor": "0",
+          "currency": "ZZZ"
+        }
+      },
+      "expected_error": "UNSUPPORTED_CURRENCY"
+    },
+    {
+      "id": "FMT-001",
+      "operation": "format",
+      "inputs": {
+        "a": {
+          "amount_minor": "123450",
+          "currency": "MXN"
+        }
+      },
+      "expected": "1234.50"
+    },
+    {
+      "id": "FMT-002",
+      "operation": "format",
+      "inputs": {
+        "a": {
+          "amount_minor": "-75",
+          "currency": "MXN"
+        }
+      },
+      "expected": "-0.75"
+    },
+    {
+      "id": "FMT-003",
+      "operation": "format",
+      "inputs": {
+        "a": {
+          "amount_minor": "5",
+          "currency": "MXN"
+        }
+      },
+      "expected": "0.05"
+    },
+    {
+      "id": "FMT-004",
+      "operation": "format",
+      "inputs": {
+        "a": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected": "0.00"
+    },
+    {
+      "id": "FMT-005",
+      "operation": "format",
+      "inputs": {
+        "a": {
+          "amount_minor": "100",
+          "currency": "JPY"
+        }
+      },
+      "expected": "100"
+    },
+    {
+      "id": "FMT-006",
+      "operation": "format",
+      "inputs": {
+        "a": {
+          "amount_minor": "1",
+          "currency": "BHD"
+        }
+      },
+      "expected": "0.001"
+    },
+    {
+      "id": "FMT-007",
+      "operation": "format",
+      "inputs": {
+        "a": {
+          "amount_minor": "-12345",
+          "currency": "CLF"
+        }
+      },
+      "expected": "-1.2345"
+    },
+    {
+      "id": "FMT-008",
+      "description": "máximo",
+      "operation": "format",
+      "inputs": {
+        "a": {
+          "amount_minor": "9223372036854775807",
+          "currency": "MXN"
+        }
+      },
+      "expected": "92233720368547758.07"
+    },
+    {
+      "id": "FMT-009",
+      "description": "mínimo",
+      "operation": "format",
+      "inputs": {
+        "a": {
+          "amount_minor": "-9223372036854775807",
+          "currency": "USD"
+        }
+      },
+      "expected": "-92233720368547758.07"
+    },
+    {
+      "id": "FMT-010",
+      "description": "mayor que 2^53",
+      "operation": "format",
+      "inputs": {
+        "a": {
+          "amount_minor": "9007199254740993",
+          "currency": "JPY"
+        }
+      },
+      "expected": "9007199254740993"
+    },
+    {
+      "id": "JSON-001",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "150000",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "150000",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "JSON-002",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "0",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "0",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "JSON-003",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "-9223372036854775807",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "-9223372036854775807",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "JSON-004",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "9223372036854775807",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "9223372036854775807",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "JSON-005",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "9007199254740993",
+          "currency": "MXN"
+        }
+      },
+      "expected": {
+        "amount_minor": "9007199254740993",
+        "currency": "MXN"
+      }
+    },
+    {
+      "id": "JSON-006",
+      "description": "-2^63: forma válida, fuera de dominio",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "-9223372036854775808",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "AMOUNT_OUT_OF_RANGE"
+    },
+    {
+      "id": "JSON-007",
+      "description": "2^63",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "9223372036854775808",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "AMOUNT_OUT_OF_RANGE"
+    },
+    {
+      "id": "JSON-008",
+      "description": "19 dígitos fuera de dominio",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "9999999999999999999",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "AMOUNT_OUT_OF_RANGE"
+    },
+    {
+      "id": "JSON-009",
+      "description": "cero negativo",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "-0",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "JSON-010",
+      "description": "ceros a la izquierda",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "007",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "JSON-011",
+      "description": "decimales",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "1.5",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "JSON-012",
+      "description": "exponente",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "1e3",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "JSON-013",
+      "description": "espacio",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": " 1",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "JSON-014",
+      "description": "vacío",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "JSON-015",
+      "description": "signo +",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "+1",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "JSON-016",
+      "description": "20 dígitos",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "10000000000000000000",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "JSON-017",
+      "description": "solo signo",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "-",
+          "currency": "MXN"
+        }
+      },
+      "expected_error": "INVALID_AMOUNT"
+    },
+    {
+      "id": "JSON-018",
+      "description": "moneda fuera del catálogo",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "100",
+          "currency": "ZZZ"
+        }
+      },
+      "expected_error": "UNSUPPORTED_CURRENCY"
+    },
+    {
+      "id": "JSON-019",
+      "description": "minúsculas",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "100",
+          "currency": "mxn"
+        }
+      },
+      "expected_error": "UNSUPPORTED_CURRENCY"
+    },
+    {
+      "id": "JSON-020",
+      "description": "cuatro letras",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "100",
+          "currency": "EURO"
+        }
+      },
+      "expected_error": "UNSUPPORTED_CURRENCY"
+    },
+    {
+      "id": "JSON-021",
+      "description": "escala 0",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "5",
+          "currency": "JPY"
+        }
+      },
+      "expected": {
+        "amount_minor": "5",
+        "currency": "JPY"
+      }
+    },
+    {
+      "id": "JSON-022",
+      "description": "escala 3",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "5",
+          "currency": "BHD"
+        }
+      },
+      "expected": {
+        "amount_minor": "5",
+        "currency": "BHD"
+      }
+    },
+    {
+      "id": "JSON-023",
+      "description": "escala 4",
+      "operation": "from_json",
+      "inputs": {
+        "json": {
+          "amount_minor": "5",
+          "currency": "CLF"
+        }
+      },
+      "expected": {
+        "amount_minor": "5",
+        "currency": "CLF"
+      }
+    }
+  ]
+}

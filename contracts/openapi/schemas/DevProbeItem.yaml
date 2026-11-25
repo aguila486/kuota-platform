@@ -1,0 +1,26 @@
+# Contrato fuente de Kuota Core v1 — schema DevProbeItem. Editar aquí; los bundles son derivados (T022, R-13).
+type: object
+required:
+- id
+- label
+- version
+- created_at
+- updated_at
+properties:
+  id:
+    type: string
+    format: uuid
+  label:
+    type: string
+  sample_amount:
+    oneOf:
+    - $ref: ./Money.yaml
+    - type: 'null'
+  version:
+    type: integer
+  created_at:
+    type: string
+    format: date-time
+  updated_at:
+    type: string
+    format: date-time

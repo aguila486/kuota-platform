@@ -19,3 +19,9 @@ indent_size = 4
 
 [Makefile]
 indent_style = tab
+
+# Archivos de proyecto de Xcode (apps iOS, T085): Xcode decide su indentación (tabuladores en .pbxproj y en la mayoría de
+# .plist, espacios en .xcscheme y AppFrameworkInfo.plist) y la reescribe al guardar. Solo se deja libre la indentación;
+# siguen sujetos al resto de reglas (UTF-8, LF, salto final, sin espacios finales).
+[*.{pbxproj,plist,xcsettings,xcscheme}]
+indent_style = unset

@@ -1,71 +1,215 @@
-# ADR-0004: PostgreSQL 17 + Prisma con Row-Level Security
+# ADR-0004: PostgreSQL 18 + Prisma con Row-Level Security
 
-- **Estado:** Propuesto — **condicionado a spike técnico** (tarea de la feature 001)
+- **Estado:** **Aceptado con condiciones** (2026-11-22, responsable del proyecto; D-ARC-01, cierre de T015). Prisma 7 es
+  el ORM principal de Kuota. La aceptación **no** implica que las condiciones P1–P8 estén mitigadas: su estado está en
+  *Condiciones de la aceptación*. Kysely sigue documentado como alternativa si aparece una limitación obligatoria que
+  Prisma no pueda superar. Texto corregido antes del spike (C4-1…C4-6) para alinearlo con research R-04 y data-model.
+  **Enmienda 1 (2026-11-23):** roles de mantenimiento de idempotencia en C4-1 (ver §Enmiendas); no cambia la decisión ni
+  P1–P8.
 - **Fecha:** 2026-11-22
 - **Decisores:** Responsable técnico
-- **Relacionado:** Constitución III, IV, V, XIV; D-ARC-01; ADR-0005; `docs/security/multi-tenant-isolation.md`
+- **Relacionado:** Constitución III, IV, V, XIV; D-ARC-01; ADR-0002 (C2-1, propagación transaccional); ADR-0005;
+  ADR-0007; `docs/security/multi-tenant-isolation.md`
 
 ## Contexto
 
-Requisitos: transacciones ACID, `NUMERIC`/`BIGINT` exactos, aislamiento multi-tenant con **RLS forzado**, ledger
-append-only protegido a nivel de base de datos, migraciones compatibles hacia atrás (expand → migrate → contract) y
-consultas de reportes/ledger que necesitan SQL explícito.
+Requisitos: transacciones ACID, montos exactos (ADR-0007), aislamiento multi-tenant con **RLS forzado**, ledger
+append-only protegido en la base de datos, migraciones compatibles hacia atrás (expand → migrate → contract) y SQL
+explícito para reportes y ledger.
 
-RLS en PostgreSQL depende de un parámetro de sesión (`app.tenant_id`) fijado **por transacción** con
-`set_config('app.tenant_id', $1, true)` (equivalente a `SET LOCAL`). Con *connection pooling*, fijarlo a nivel de
-sesión filtraría contexto entre solicitudes; debe hacerse dentro de cada transacción.
+RLS depende del parámetro `app.tenant_id`, fijado **por transacción** con `set_config('app.tenant_id', $1, true)`
+(equivalente a `SET LOCAL`). Con *connection pooling*, fijarlo a nivel de sesión filtraría contexto entre solicitudes.
+
+**Contexto ausente.** Cuando una conexión ya ejecutó un `set_config(..., true)` en una transacción anterior, en la misma
+sesión `current_setting('app.tenant_id', true)` devuelve `''` (cadena vacía), no `NULL`. Un cast directo `''::uuid`
+produce un error en vez de 0 filas. Por eso toda política usa `nullif(..., '')` (C4-3).
 
 ## Opciones consideradas
 
-| Criterio | Prisma | TypeORM | Drizzle / Kysely |
+| Criterio | Prisma 7 (`adapter-pg`) | TypeORM | Kysely |
 |---|---|---|---|
-| Tipado de consultas | ✅ Generado desde esquema | ⚠️ Decoradores, tipado parcial | ✅ Excelente (SQL-like) |
-| Migraciones | ✅ `prisma migrate` declarativo + SQL editable | ⚠️ Generación frágil | ⚠️ Drizzle-kit / manual |
-| SQL crudo tipado | ✅ TypedSQL | ⚠️ `query()` sin tipos | ✅ Nativo |
-| RLS por transacción | ⚠️ Requiere extensión de cliente que envuelva en transacción | ⚠️ Posible con QueryRunner | ✅ Control directo |
-| `Decimal`/`BigInt` | ✅ `Decimal` (decimal.js) y `BigInt` | ⚠️ Strings | ✅ Configurable |
-| Mantenimiento/comunidad | ✅ Activo | ⚠️ Mantenimiento irregular | ✅ Activo, más joven |
-| Políticas RLS, triggers | ⚠️ En SQL de migración (no en el esquema) | ⚠️ Ídem | ⚠️ Ídem |
+| Tipado de consultas | ✅ Generado desde esquema | ⚠️ Decoradores, tipado parcial | ✅ Excelente (SQL tipado; tipos con `kysely-codegen`) |
+| Migraciones | ✅ `prisma migrate` + SQL editable | ⚠️ Generación frágil | ⚠️ Migraciones SQL propias (Kysely Migrator) |
+| SQL crudo | ✅ `$queryRaw`; TypedSQL (compatibilidad con driver adapters **no verificada**) | ⚠️ `query()` sin tipos | ✅ Nativo |
+| RLS por transacción | ⚠️ Transacción interactiva propia (`withTenant`) | ⚠️ Posible con QueryRunner | ✅ Control directo de la transacción |
+| Pool de conexiones | ✅ Pool `pg` propio vía driver adapter | ✅ | ✅ Pool `pg` propio |
+| Mantenimiento/comunidad | ✅ Activo | ⚠️ Irregular | ✅ Activo |
+| Políticas RLS, triggers | SQL de migración | SQL de migración | SQL de migración |
 
-## Decisión
+Drizzle se evaluó (research R-04) y no es fallback: menor madurez en migraciones con SQL personalizado.
 
-- **PostgreSQL 17** como base de datos única (OLTP). Réplica de lectura para reportes cuando se justifique.
-- **Prisma** como ORM y herramienta de migraciones (recomendación; D-ARC-01), frente a TypeORM.
-  Drizzle/Kysely queda como alternativa si el spike falla.
-- Patrón RLS: **Prisma Client extension** que ejecuta cada operación de negocio dentro de una transacción y como primera
-  sentencia `SELECT set_config('app.tenant_id', $1, true)` con el tenant de `TenantContext` (AsyncLocalStorage).
-- Ledger, reportes y consultas complejas: **TypedSQL / SQL explícito**.
+## Decisión (propuesta, condicionada)
+
+- **PostgreSQL 18** como base de datos OLTP única (Constitución, restricciones de stack). Réplica de lectura para
+  reportes cuando se justifique.
+- **Prisma 7.10.1 con `@prisma/adapter-pg`** como ORM y herramienta de migraciones (`prisma migrate deploy`), aceptado
+  con las condiciones P1–P8 tras superar los criterios obligatorios del spike. Alternativa documentada: **Kysely** (C4-4).
+- **Fuente de verdad del esquema (P4):** las migraciones SQL versionadas y revisadas. `schema.prisma` es un espejo
+  derivado; Prisma no representa CHECK, RLS, FORCE, triggers, funciones ni grants.
+- **Mecanismo (C4-2):** `TenantPrismaService.withTenant(fn)` en `backend/src/common/tenant-context/` abre una
+  `$transaction` interactiva cuya primera sentencia es
+  `SELECT set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), set_config('app.correlation_id', $3, true)`.
+  El cliente transaccional se propaga por CLS y es el único acceso a datos de los repositorios. El comportamiento con
+  llamadas anidadas está definido en ADR-0002 (C2-1): mismo tenant → reutiliza la transacción; tenant distinto → error.
+- **Lint (C4-2):** solo `backend/src/common/tenant-context/**` puede importar o instanciar el cliente Prisma base
+  (`no-restricted-imports` + dependency-cruiser). Los repositorios reciben el cliente transaccional.
+- **Políticas (C4-3):** plantilla canónica en `specs/001-platform-foundation/data-model.md`:
+  `USING / WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)`. Una función equivalente
+  `app_current_tenant()` (ver `docs/security/multi-tenant-isolation.md` §4) es aceptable. Sin contexto → 0 filas.
+- **SQL crudo:** `$queryRaw` solo dentro de `withTenant`. TypedSQL se adopta únicamente si el criterio S7 lo verifica
+  con el driver adapter (C4-6).
 - Políticas RLS, `FORCE ROW LEVEL SECURITY`, triggers de inmutabilidad y `GRANT`s se escriben como **SQL en las
-  migraciones** y se verifican con pruebas.
+  migraciones**. El verificador de catálogo `db:check-rls` falla si una tabla del esquema `kuota` con `tenant_id`
+  carece de RLS habilitado, forzado o de política.
 
-### Roles de base de datos
+### Roles de base de datos (C4-1)
 
-| Rol | Uso | Propiedades |
-|---|---|---|
-| `kuota_owner` | Propietario de tablas; solo migraciones | No usado por la app en runtime |
-| `kuota_app` | Runtime de la API | Sin `BYPASSRLS`, no owner, sin `UPDATE`/`DELETE` en tablas del ledger |
-| `kuota_platform` | Módulo `platform-admin` (cross-tenant) | Políticas específicas, auditado |
-| `kuota_readonly` | Reportes / soporte | Solo `SELECT`, con RLS |
+| Rol | Uso | Propiedades | Se crea en |
+|---|---|---|---|
+| `kuota_migrator` | Migraciones (CI/CD y local) | Propietario de esquema y tablas; DDL. Nunca en runtime | 001 |
+| `kuota_app` | Privilegios de la API | `NOLOGIN`, sin `BYPASSRLS`, no propietario, sin DDL, sin `UPDATE`/`DELETE` en ledger y auditoría | 001 |
+| `kuota_app_login` | Credencial de la API | `LOGIN`, miembro de `kuota_app` | 001 |
+| `kuota_worker` | Proceso worker (ADR-0002, C2-3) | Como `kuota_app` + DML en tablas de cola/outbox; sujeto a RLS | Primera feature con jobs |
+| `kuota_platform` | Módulo `platform-admin` | Cross-tenant solo vía funciones `SECURITY DEFINER` auditadas; conexión separada | 002 |
+| `kuota_readonly` | Reportes y soporte | Solo `SELECT`, sujeto a RLS | Cuando se requiera |
+| `kuota_maintenance` | Purga de claves de idempotencia vencidas (enmienda 1) | `NOLOGIN`, sin `BYPASSRLS`; solo `SELECT (tenant_id, key, expires_at)` y `DELETE` en `idempotency_keys`, con políticas limitadas a `expires_at <= now()` | 001 (US6; aprovisionamiento + migración 0002) |
+| `kuota_maintenance_login` | Credencial de la purga manual (enmienda 1) | `LOGIN`, miembro solo de `kuota_maintenance`; `CONNECTION LIMIT 2` | 001 (US6; aprovisionamiento) |
 
 ## Consecuencias
 
-- **Positivas:** productividad y tipado; migraciones versionadas; SQL explícito donde la exactitud contable lo exige.
-- **Negativas:** cada operación de negocio corre en transacción (costo menor aceptable); políticas RLS fuera del
-  esquema Prisma (se mantienen en SQL).
-- **Riesgos:** una consulta fuera de la extensión (cliente "crudo") ejecutaría sin contexto → con RLS forzado devuelve
-  **0 filas** (falla segura) y además hay lint que prohíbe importar el cliente base fuera de `infrastructure/db`.
+- **Positivas:** tipado y migraciones versionadas; contexto local a la transacción, seguro con pooling (incluido
+  PgBouncer en modo *transaction*); falla segura (0 filas) sin contexto.
+- **Negativas:** cada operación de negocio corre en una transacción; las políticas RLS viven fuera del esquema Prisma.
+- **Riesgos:** acceso fuera de `withTenant` → 0 filas o violación de `WITH CHECK` (falla segura) y regla de lint;
+  dependencia de que el spike demuestre los criterios S1–S7.
 
-## Validación (spike obligatorio en 001)
+## Validación — spike T014 (criterios S1–S8)
 
-1. Consulta sin contexto de tenant → 0 filas en tabla con RLS forzado.
-2. Dos solicitudes concurrentes con tenants distintos bajo pooling → sin fuga de contexto (prueba de concurrencia).
-3. `kuota_app` no puede `UPDATE`/`DELETE` en tabla de ledger de prueba.
-4. Migración expand/contract de ejemplo ejecutada sobre esquema previo.
-5. Medición de sobrecarga de la transacción envolvente.
+Configuración fija y reproducible: pool `pg` de 2 a 5 conexiones, `maxWait` y `timeout` de transacción explícitos,
+semilla fija para los retardos, 20 repeticiones. Script `backend/scripts/spike-rls.ts`
+(`pnpm --filter backend spike:rls`), que imprime PASS/FAIL por criterio.
 
-Si 1–3 fallan, se rechaza Prisma y se reabre D-ARC-01.
+| # | Criterio | PASS si | Gate |
+|---|---|---|---|
+| S1 | Contexto ausente | 0 filas **y sin error**, en una conexión nueva y en una que ya ejecutó `withTenant` (forzado con pool = 1) | Sí |
+| S2 | Concurrencia | ≥ 50 solicitudes intercaladas de 2 tenants; 0 filas cruzadas; **evidencia de reutilización**: el mismo `pg_backend_pid()` atendió a ambos tenants al menos 10 veces | Sí |
+| S3 | Privilegios | `UPDATE`/`DELETE` sobre `audit_events` y `ALTER TABLE` con `kuota_app_login` → error de permiso; `INSERT` con otro `tenant_id` → violación de `WITH CHECK` | Sí |
+| S4 | Ruta de error | Una excepción dentro de `withTenant` → ROLLBACK; la siguiente transacción en el mismo backend, sin contexto → 0 filas | Sí |
+| S5 | Anidamiento y propagación | `withTenant` anidado con el mismo tenant reutiliza la transacción (un solo `txid_current()`); con otro tenant lanza error y revierte todo | Sí |
+| S6 | Roles y migraciones | `migrate deploy` funciona con `kuota_migrator`; con `kuota_app_login` falla | Sí |
+| S7 | SQL crudo | `$queryRaw` dentro de `withTenant` respeta RLS; TypedSQL con `adapter-pg` compila y respeta RLS (solo si se va a adoptar) | Sí, si se adopta TypedSQL |
+| S8 | Latencia | p50 y p95 del sobrecosto de transacción + `set_config` registrados | No (referencia) |
+
+- **Regla de decisión:**
+  - S1–S6 en PASS → se propone aceptar Prisma (requiere aprobación humana en T015).
+  - Falla cualquiera de S1–S4 o S6 → se activa el fallback Kysely y se repite el spike con él.
+  - Falla S5 o S7 → solución alternativa documentada aquí antes de decidir.
+- **Umbral de reevaluación de S8:** propuesta p95 > 10 ms en local; **pendiente de aprobación**; no es gate.
+- **Migración expand/contract de ejemplo:** ya no es criterio del spike (no informa la decisión sobre RLS); se valida
+  en la primera feature con cambio de esquema (Constitución XIV).
+
+## Fallback: Kysely (C4-4)
+
+- `kysely` 0.29 + `pg`; tipos con `kysely-codegen` 0.20; migraciones SQL versionadas (Kysely Migrator) ejecutadas con
+  `kuota_migrator`; `withTenant` equivalente con `db.transaction().execute()` y el mismo `set_config`.
+- Debe superar los mismos criterios S1–S7. Se pierden el lenguaje de esquema y `prisma migrate`; se gana control
+  explícito de conexiones y transacciones.
+- Costo en 001: rehacer T012, T039, T041, T075 y T077 y repetir T014. El costo crece con cada feature; por eso el gate
+  está en la Fase 2 de 001.
+
+## Resultado del spike
+
+Ejecutado en T014 (`pnpm --filter backend spike:rls`, tres ejecuciones completas con los mismos veredictos) sobre
+PostgreSQL 18.7 efímero, Prisma 7.10.1 y `adapter-pg` 7.10.1. Informe completo: `specs/001-platform-foundation/spike-t014-report.md`.
+
+| Criterio | Resultado observado |
+|---|---|
+| S1 | PASS: 0 filas sin error, en conexión nueva y en conexión reutilizada (mismo backend, variable `''`) |
+| S2 | PASS: 2000 transacciones por ejecución, 0 filas cruzadas, 0 contextos heredados, 981–990 cambios de tenant sobre el mismo backend (mínimo 10) |
+| S3 | PASS: `42501` en los 6 casos de privilegio y `WITH CHECK` |
+| S4 | PASS: rollback ante errores de la aplicación y de la base; el mismo backend queda limpio |
+| S5 | PASS: anidamiento reutiliza la transacción; otro tenant → error y rollback total. **Riesgo:** un `set_config` crudo dentro de la transacción cambia el tenant (condición P2) |
+| S6 | PASS: `migrate deploy` funciona con `kuota_migrator` y falla con `kuota_app_login` sin dejar objetos |
+| S7 | PASS para `$queryRaw`. **TypedSQL NO EJECUTADO** (condición P7) |
+| S8 | Referencia, no gate: sobrecosto de `withTenant` p50 0,73–0,77 ms · p95 1,06–1,55 ms (local) |
+| Adicional MIG-TX | FAIL: `prisma migrate deploy` no envuelve las migraciones en una transacción (condición P1) |
+| Adicional MIG-TX-EXPLICIT | PASS: con `BEGIN`/`COMMIT` en el SQL no quedan cambios parciales |
+
+Regla de decisión aplicada: S1–S6 en PASS → aceptación propuesta y aprobada por el responsable con condiciones.
+
+**Evidencia de T015 (aprobación humana):** Aprobación 2 de `specs/001-platform-foundation/approvals.md` (2026-11-22,
+responsable del proyecto): D-ARC-01 cerrada con Prisma 7 *Aceptado con condiciones* P1–P8. La aceptación no fue
+automática: la decidió el responsable a la vista del informe del spike.
+
+## Condiciones de la aceptación
+
+Responsable de todas: responsable técnico del proyecto (mantenedor único). Estado al 2026-11-22.
+
+| ID | Condición | Severidad | Estado | Evidencia o prueba requerida | Hito |
+|---|---|---|---|---|---|
+| P1 | Migraciones con transacción explícita (`BEGIN;` primero, `COMMIT;` último); las operaciones no transaccionales van en una migración propia marcada `-- kuota:non-transactional: …` con justificación y plan de recuperación | Alta | **Cumplida localmente**: `0001_foundation` lleva `BEGIN`/`COMMIT` (no estaba desplegada en ningún entorno persistente); fallo inyectado → rollback total; convención verificada por prueba estática | `foundation-schema.spec.ts` (bloque P1), `migration-governance.spec.ts` (unit) | Gate de CI en G12 (T048) |
+| P2 | Solo `common/tenant-context` fija `app.*` o cambia la identidad de sesión | Alta | **Parcial**: reglas de ESLint y dependency-cruiser con pruebas negativas; `withTenant` definitivo (T039) con verificación de `app.tenant_id` antes del COMMIT, que revierte escrituras pero **no evita lecturas cruzadas**. El lint no detecta concatenación de SQL, `SET search_path` ni funciones de base de datos. R3 (cliente transaccional compartido) **mitigado** el 2026-11-22: cliente protegido con vínculo de propiedad por operación comprobado antes de cada ejecución (§8 de la evaluación). Evaluación: `docs/security/p2-tenant-context-risk-assessment.md` (2026-11-22) | `tenant-context-guard.spec.ts`, `dependency-rules.spec.ts`, `tenant-prisma.spec.ts`, `tenant-transaction-ownership.spec.ts`, `rls-database.spec.ts` | Gate de CI en G12; identidad confiable en 002; lista blanca de SQL raw |
+| P3 | `_prisma_migrations` en `public` con propietario y privilegios correctos | Media | **Cumplida**: propietario `kuota_migrator`; sin privilegios para runtime, worker simulado ni PUBLIC; sin `CREATE` en `public` para ellos; `search_path` por defecto sin esquemas escribibles por el runtime | `migration-governance.spec.ts` (integración, P3) | Reverificar al crear `kuota_worker` (P6) |
+| P4 | SQL versionado como fuente de verdad; prohibidos `prisma db push`, `migrate dev` y `migrate reset` sobre esquemas compartidos; validación del esquema efectivo | Alta | **Cumplida localmente**: prohibición verificada en scripts; validación efectiva de restricciones por nombre, función, triggers, políticas, grants y propietarios; `migrate diff` vacío como complemento | `migration-governance.spec.ts` (unit e integración), `foundation-schema.spec.ts` | Gate de CI en G12 |
+| P5 | Mantenimiento de datos (backfills) por tenant con autorización humana separada | Alta | **Pendiente**: procedimiento documentado (`docs/architecture/data-architecture.md` §8); **sin** política de mantenimiento ni BYPASSRLS | Prueba de filas afectadas y auditoría en el primer backfill | Antes del primer backfill |
+| P6 | `kuota_worker` solo con permisos heredados de `kuota_app` cuando corresponda | Media | **Pendiente**: dirección aprobada; rol no creado. Herencia verificada solo con roles simulados | Pruebas reales de aislamiento y herencia en su tarea | Primera feature con jobs |
+| P7 | TypedSQL fuera del alcance aprobado | Media | **Pendiente (no adoptado)** | Evaluación independiente de tipos, transacciones, RLS y mantenibilidad | Antes de adoptarlo (p. ej. 006) |
+| P8 | Solo los scripts de instalación imprescindibles para Prisma | Media | **Cumplida**: `allowBuilds` permite solo `prisma` y `@prisma/engines`; versiones exactas 7.10.1 | Revisión de `pnpm-workspace.yaml`; escaneo de dependencias en CI | Continua; escaneo en G12 |
+
+## Enmiendas
+
+### Enmienda 1 (2026-11-23) — roles de mantenimiento de idempotencia (C4-1)
+
+- **Aprobación:** responsable del proyecto (`specs/001-platform-foundation/approvals.md`, Aprobaciones 3 y 4).
+  Documental: registra roles ya implementados y probados en bases efímeras. No cambia la elección de Prisma, P1–P8 ni
+  los roles anteriores, y no amplía los privilegios de ninguno.
+- **Propósito:**
+  - `kuota_maintenance` es el rol de privilegios para borrar claves de idempotencia vencidas (FR-024, T079);
+  - `kuota_maintenance_login` es la identidad de conexión con la que se ejecuta la purga manual
+    (`pnpm --filter backend idempotency:purge`).
+
+  Ambos están separados de la API (`kuota_app_login`) y del migrador (`kuota_migrator`).
+- **Atributos:**
+  - ninguno es `SUPERUSER`, `BYPASSRLS`, `CREATEROLE`, `CREATEDB` ni `REPLICATION`;
+  - `kuota_maintenance` es `NOLOGIN` y no pertenece a ningún rol;
+  - `kuota_maintenance_login` pertenece solo a `kuota_maintenance` (sin opción de administración) y no es miembro de
+    `kuota_app` ni de `kuota_migrator`.
+- **Privilegios mínimos** (migración `0002_idempotency_maintenance`):
+  - `USAGE` en el esquema `kuota`;
+  - `SELECT (tenant_id, key, expires_at)` y `DELETE` en `kuota.idempotency_keys`;
+  - políticas `maintenance_select_expired` y `maintenance_delete_expired`, limitadas a `expires_at <= now()`.
+
+  Sin acceso a `request_hash`, `response_body` ni al resto de columnas. Sin `INSERT`, `UPDATE`, `TRUNCATE`, `TRIGGER`
+  ni `REFERENCES`. Sin ningún privilegio en tablas de negocio (`dev_probe_items`) ni de auditoría (`audit_events`).
+  FORCE RLS y las políticas `tenant_isolation` no cambian. `db:check-rls` verifica todo esto en el catálogo.
+- **Aprovisionamiento frente a migración:**
+  - Los roles se crean en el **aprovisionamiento de plataforma**
+    (`infra/docker/postgres/init/02-maintenance-roles.sql`), que ejecuta el administrador del clúster: crear roles
+    exige `CREATEROLE`, y `kuota_migrator` no lo tiene.
+  - La **migración 0002**, aplicada por `kuota_migrator`, solo concede privilegios y crea políticas. Además verifica
+    que el rol existe con atributos mínimos y aborta sin cambios si no.
+- **Dependencia:**
+  - El aprovisionamiento debe ejecutarse **antes** de 0002.
+  - Para migrar basta con que exista `kuota_maintenance` (sin login). El login solo hace falta para ejecutar la purga.
+  - `make up` lo comprueba antes de migrar con el preflight de solo lectura `scripts/migration-preflight.ts`.
+
+## Verificación tras la implementación de 001 (2026-11-23, T090)
+
+Registro del estado real; no cambia el estado (*Aceptado con condiciones*) ni ninguna condición.
+
+| ID | Estado al 2026-11-23 |
+|---|---|
+| P1 | Cumplida localmente y con gate: `scripts/ci/db-gate.sh` (preflight → `migrate deploy` → `db:check-rls`) en el job `backend`; `0001` y `0002` con `BEGIN`/`COMMIT`. Sin ejecución en GitHub (T052) |
+| P2 | **Sigue PARCIAL**: sin cambios desde la evaluación de `docs/security/p2-tenant-context-risk-assessment.md`; la identidad confiable llega con 002 |
+| P3, P4, P8 | Cumplidas, como en la tabla anterior; P8 con el escaneo de dependencias Node bloqueante en el job `backend` |
+| P5, P6, P7 | Pendientes, como en la tabla anterior |
+
+- `db:check-rls` está probado como gate bloqueante: `scripts/ci/prove-gates.sh` (T087) aplica una tabla con
+  `tenant_id` sin `FORCE` y el gate falla por esa violación.
+- Las métricas del pool (T094) se leen con un método de solo lectura de `TenantPrismaService` (`poolStats()`); el pool
+  sigue privado y `withTenant` no cambió.
 
 ## Revisión
 
-Reevaluar si el spike falla, si el rendimiento de la extensión es inaceptable o si Prisma limita el uso de funciones
-de PostgreSQL requeridas por el ledger.
+Reevaluar si el spike falla, si S8 supera el umbral aprobado o si Prisma limita funciones de PostgreSQL que el ledger
+necesita.

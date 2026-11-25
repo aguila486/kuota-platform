@@ -1,6 +1,7 @@
 # ADR-0006: Sincronización offline por comandos idempotentes
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado como dirección arquitectónica (2026-11-22, responsable del proyecto): comandos y servidor
+  autoritativo. **No se implementa en 001.** Las condiciones C6-1…C6-6 son obligatorias para la spec de 011-offline-sync
 - **Fecha:** 2026-11-22
 - **Decisores:** Responsable técnico, líder Flutter, operaciones de cobranza
 - **Relacionado:** Constitución VI, XI; D-SYNC-01, D-SYNC-02, D-SYNC-03, D-RCP-02, D-CSH-01; features 010, 011, 012, 013
@@ -10,6 +11,9 @@
 Kuota Collector debe operar **72 horas** sin conectividad: consultar cartera asignada, registrar pagos y aportaciones y
 emitir recibos provisionales. El servidor es la autoridad contable. Riesgos: duplicados por reintentos, datos
 desactualizados, dos cobradores cobrando el mismo crédito, relojes de dispositivo manipulados y fraude.
+
+**Principio:** registrar un cobro en el dispositivo **no** es una confirmación financiera. Solo el servidor confirma
+(`CONFIRMED`) tras validar y contabilizar; hasta entonces el recibo es provisional.
 
 ## Opciones consideradas
 
@@ -68,6 +72,19 @@ stateDiagram-v2
 
 Llave de firma por dispositivo (generada en el enrolamiento, almacenada en Keystore/Keychain); base Drift cifrada;
 revocación remota del dispositivo; folios offline `{tenantPrefix}-{deviceShortId}-{seq}` (D-RCP-02).
+
+## Condiciones obligatorias para 011
+
+Ninguna fija reglas de negocio pendientes; cada una se resuelve en la spec y el plan de 011.
+
+| ID | Condición |
+|---|---|
+| C6-1 | Tratamiento contable de `REQUIRES_REVIEW`: si se contabiliza al recibirlo (p. ej. en una cuenta de pagos no aplicados, C5-5) o no; hoy la documentación es ambigua (`offline-architecture.md` §3) |
+| C6-2 | Orden de procesamiento por dispositivo según `device_monotonic_seq`, con detección de huecos |
+| C6-3 | Política para comandos pendientes firmados **antes** de revocar un dispositivo |
+| C6-4 | Mecanismo de `snapshot_version` sin una fila única de contención por tenant |
+| C6-5 | Fecha efectiva de los cobros (D-SYNC-02 / D-FIN-06) |
+| C6-6 | Política de idempotencia propia de los comandos (retención, reintentos, expiración); la de 001 no se adopta automáticamente (FR-024 de 001) |
 
 ## Consecuencias
 

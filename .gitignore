@@ -57,6 +57,8 @@ pnpm-debug.log*
 **/android/app/release/
 *.g.dart.bak
 pubspec_overrides.yaml
+# FVM: enlaces locales al SDK (solo se versiona flutter/.fvmrc)
+.fvm/
 
 # ---------- Infra / Docker local ----------
 infra/docker/volumes/
@@ -69,3 +71,13 @@ docker-compose.override.yml
 # ---------- Reportes generados ----------
 reports/
 *.lcov
+
+# Cliente Prisma generado: se regenera con `pnpm --filter backend prisma:generate` (lo hacen dev, build, typecheck,
+# lint y test); nunca se versiona.
+backend/src/generated/
+
+# Bundles del contrato OpenAPI (derivados de contracts/openapi; se regeneran con pnpm contracts:bundle).
+contracts/openapi/dist/
+
+# Estado local de scripts/dev (pid del backend de up.sh).
+.dev/

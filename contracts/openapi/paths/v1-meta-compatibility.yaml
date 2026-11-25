@@ -1,0 +1,23 @@
+# Contrato fuente de Kuota Core v1 — path /v1/meta/compatibility. Editar aquí; los bundles son derivados (T022, R-13).
+get:
+  tags:
+  - meta
+  operationId: getCompatibility
+  summary: Versión de API y versión mínima soportada por app.
+  description: Público (excepción registrada). Las apps lo consultan antes de autenticarse.
+  security: []
+  parameters:
+  - $ref: ../parameters/AppVersion.yaml
+  - $ref: ../parameters/CorrelationId.yaml
+  responses:
+    '200':
+      description: Información de compatibilidad.
+      headers:
+        X-Correlation-Id:
+          $ref: ../headers/CorrelationId.yaml
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/CompatibilityInfo.yaml
+    '400':
+      $ref: ../responses/BadRequest.yaml

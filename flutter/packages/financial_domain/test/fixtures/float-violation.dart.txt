@@ -1,0 +1,30 @@
+// Archivo defectuoso de referencia para la regla anti punto flotante de Dart (T065; R-10; Constitución IV; ADR-0007).
+//
+// NO es código del proyecto. La extensión `.dart.txt` lo excluye del analizador, de las pruebas y de la regla real
+// (que solo analiza `financial_domain/lib/**/*.dart`). `scripts/ci/check-no-float-dart-reference.sh` lo analiza como
+// si fuera un archivo de `lib/` y EXIGE que cada línea marcada con `ANTI-FLOAT` se detecte y que ninguna otra se
+// marque. Si alguna deja de detectarse, el gate falla.
+//
+// Las líneas sin marca son trampas de falsos positivos: comentarios, literales e identificadores que solo contienen
+// las palabras prohibidas.
+
+/// Nunca uses double ni num para montos.
+final class PaymentRequest {
+  const PaymentRequest(this.amount, this.reference);
+
+  final double amount; // ANTI-FLOAT: tipo double en un campo de monto
+  final String reference;
+}
+
+num total(List<num> parts) => parts.reduce((a, b) => a + b); // ANTI-FLOAT: num como tipo y genérico
+
+double parseAmount(String text) => double.parse(text); // ANTI-FLOAT: double.parse
+
+final fee = BigInt.from(150).toDouble(); // ANTI-FLOAT: toDouble() sobre un monto
+
+final rate = num.tryParse('0.15'); // ANTI-FLOAT: num.tryParse
+
+const label = 'double y num dentro de un texto no cuentan';
+final doubled = BigInt.two * BigInt.two;
+final numParts = [BigInt.one, BigInt.two];
+/* double amount = 0; dentro de un comentario de bloque */

@@ -1,0 +1,48 @@
+# Suites obligatorias del backend (T048; Constitución III, IV, VI, VII, X, XII). Rutas relativas a backend/.
+# Retirar una exige una decisión registrada: check-required-suites.mjs falla si alguna no se ejecuta.
+# Aislamiento multi-tenant y RLS (FR-013..FR-016, P2/R3)
+test/tenancy/dev-probe.tenancy.spec.ts
+test/integration/rls-database.spec.ts
+test/integration/check-rls.spec.ts
+test/integration/tenant-context.spec.ts
+test/integration/tenant-prisma.spec.ts
+test/integration/tenant-transaction-ownership.spec.ts
+test/unit/tenant-context-guard.spec.ts
+test/unit/dependency-rules.spec.ts
+# Migraciones, gobernanza y mantenimiento (ADR-0004 P1–P4; 0002)
+test/integration/foundation-schema.spec.ts
+test/integration/migration-governance.spec.ts
+test/integration/migration-preflight.spec.ts
+test/integration/idempotency-maintenance.spec.ts
+test/integration/platform-audit.spec.ts
+# Idempotencia y auditoría (US6)
+test/integration/idempotency.spec.ts
+test/integration/audit.spec.ts
+test/integration/audit-service.spec.ts
+test/unit/idempotency/request-hash.spec.ts
+# Dinero (US4, ADR-0007)
+test/unit/money/fixtures.spec.ts
+test/unit/money/money.spec.ts
+test/unit/money/anti-float-rule.spec.ts
+test/unit/money/typed-money-rule.spec.ts
+test/property/money.property.spec.ts
+# Contrato (US5, T066, T067, T095)
+test/contract/support/contract-matcher.spec.ts
+test/contract/kuota-core.contract.spec.ts
+test/contract/idempotency.contract.spec.ts
+# dev-probe y exposición (FR-017, FR-040)
+test/integration/dev-probe.spec.ts
+test/integration/dev-probe-repository.spec.ts
+test/integration/dev-probe-disabled.spec.ts
+test/integration/health.spec.ts
+# Excepciones de acceso de la Constitución §II: acceso permitido y denegado de cada una (T108; FR-040)
+test/integration/metrics.spec.ts
+test/integration/meta-compatibility.spec.ts
+test/integration/not-found.spec.ts
+test/integration/cors.spec.ts
+# Privacidad de logs HTTP (FR-009, FR-010; hotfix del 2026-11-23)
+test/integration/http-logging-privacy.spec.ts
+test/unit/logging/http-log.spec.ts
+test/unit/logging/redaction.spec.ts
+# Logs de toda la suite sin valores sensibles ficticios (SC-009, T102)
+test/unit/logging/log-privacy-scan.spec.ts

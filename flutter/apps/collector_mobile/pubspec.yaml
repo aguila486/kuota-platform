@@ -1,0 +1,33 @@
+# Kuota Collector (collector_mobile; T085; FR-031, FR-032; US7-2).
+# App de cobradores (Android e iOS): shell de 001 sin funcionalidad de negocio; offline-first llega con 011.
+# Solo declara su identidad; el arranque y la pantalla de inicio son los de app_shell (T098). Comparte código únicamente a
+# través de paquetes (tool/check_deps.dart). `version` debe coincidir con lib/src/app_info.dart (lo verifica una prueba).
+name: collector_mobile
+description: "Kuota Collector: shell de 001 (T085) sin funcionalidad de negocio."
+publish_to: none
+version: 0.1.0+1
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  # Composición compartida (T098, Aprobación 11): arranque, configuración, cliente y pantalla de inicio.
+  app_shell:
+    path: ../../packages/app_shell
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  # La prueba de la app usa el cliente y la configuración reales con un servidor falso (HttpClientAdapter de dio).
+  api_client:
+    path: ../../packages/api_client
+  dio: 5.11.1
+  flutter_test:
+    sdk: flutter
+  shared_core:
+    path: ../../packages/shared_core
+  yaml: 3.1.4
+
+flutter:
+  uses-material-design: true

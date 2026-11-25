@@ -1,0 +1,9 @@
+# Contrato fuente de Kuota Core v1 — parameter Limit. Editar aquí; los bundles son derivados (T022, R-13).
+name: limit
+in: query
+required: false
+schema:
+  type: integer
+  minimum: 1
+  maximum: 100
+  default: 50

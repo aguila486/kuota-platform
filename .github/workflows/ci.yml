@@ -1,0 +1,134 @@
+# CI de Kuota (G12/US3; T052; FR-034, FR-035, FR-037; research R-17). Los jobs solo invocan scripts/ci/*.sh, que
+# `scripts/ci/run-local.sh` reproduce en local. Acciones de terceros fijadas por SHA (verificado el 2026-11-23);
+# herramientas sin lockfile en contenedores fijados por digest (scripts/ci/lib.sh).
+# Seguridad: solo `pull_request` (nunca `pull_request_target`) y `push` a main; sin secretos; permisos mínimos;
+# checkout sin credenciales persistidas. Check requerido en main: `CI: resultado` (docs/process/git-workflow.md).
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    name: Cambios y componentes afectados
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read # dorny/paths-filter lista los archivos del PR con la API
+    outputs:
+      backend: ${{ steps.affected.outputs.backend }}
+      contracts: ${{ steps.affected.outputs.contracts }}
+      flutter: ${{ steps.affected.outputs.flutter }}
+      flutter_present: ${{ steps.affected.outputs.flutter_present }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          list-files: json
+          filters: |
+            changed:
+              - '**'
+      - id: affected
+        env:
+          CHANGED_JSON: ${{ steps.filter.outputs.changed_files }}
+        run: scripts/ci/affected-outputs.sh
+
+  general:
+    name: general
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # gitleaks revisa el historial completo
+          persist-credentials: false
+      - run: scripts/ci/general.sh
+
+  backend:
+    name: backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: pnpm del packageManager (Corepack fijado)
+        run: npm install --global corepack@0.36.0 && corepack enable pnpm
+      - run: scripts/ci/backend.sh
+
+  contracts:
+    name: contracts
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # oasdiff compara con origin/main
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: pnpm del packageManager (Corepack fijado)
+        run: npm install --global corepack@0.36.0 && corepack enable pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Flutter exacto de flutter/.fvmrc (archivo oficial verificado por sha256; T071 regenera el cliente Dart)
+        run: scripts/ci/setup-flutter.sh
+      - run: scripts/ci/contracts.sh
+        env:
+          KUOTA_CI_BREAKING_BASE: origin/main
+
+  flutter:
+    name: flutter
+    needs: changes
+    # Solo cuando exista flutter/ (US7). Toda la lógica está en scripts/ci/flutter.sh (T050): análisis, formato,
+    # pruebas, check_deps, anti-float Dart, osv-scanner sobre pubspec.lock y builds de Android y Web (iOS fuera de CI).
+    # Android SDK y JDK 17 vienen en la imagen ubuntu-24.04 del runner.
+    if: needs.changes.outputs.flutter == 'true' && needs.changes.outputs.flutter_present == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc # scripts/ci/osv-gate.mjs (mismo gate de dependencias que el backend)
+      - name: Flutter exacto de flutter/.fvmrc (archivo oficial verificado por sha256)
+        run: scripts/ci/setup-flutter.sh
+      - run: scripts/ci/flutter.sh
+
+  result:
+    name: 'CI: resultado'
+    needs: [changes, general, backend, contracts, flutter]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: scripts/ci/ci-result.sh

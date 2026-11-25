@@ -1,0 +1,3 @@
+# T059 (ADR-0007): las pruebas de financial_domain se ejecutan sobre la VM y sobre web (dart2js en Chrome), donde `int`
+# es un número de JavaScript. Así `melos run test` y `melos run test:financial` cubren ambas plataformas.
+platforms: [vm, chrome]

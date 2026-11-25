@@ -1,0 +1,13 @@
+# Contrato fuente de Kuota Core v1 — schema DevProbeItemCreate. Editar aquí; los bundles son derivados (T022, R-13).
+type: object
+required:
+- label
+additionalProperties: false
+description: No acepta tenant_id; el tenant proviene del contexto (FR-012).
+properties:
+  label:
+    type: string
+    minLength: 1
+    maxLength: 120
+  sample_amount:
+    $ref: ./Money.yaml

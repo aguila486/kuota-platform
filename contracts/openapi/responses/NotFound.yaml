@@ -1,0 +1,6 @@
+# Contrato fuente de Kuota Core v1 — response NotFound. Editar aquí; los bundles son derivados (T022, R-13).
+description: No existe en el tenant del contexto (no revela existencia en otros tenants).
+content:
+  application/problem+json:
+    schema:
+      $ref: ../schemas/Problem.yaml

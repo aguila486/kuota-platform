@@ -1,0 +1,2 @@
+# Generado por la convención de Prisma Migrate (ADR-0004, spike T014). No editar a mano.
+provider = "postgresql"

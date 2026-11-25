@@ -1,0 +1,106 @@
+// =====================================================================================================================
+// Kuota Core — esquema Prisma (ADR-0004, aceptado con condiciones; D-ARC-01 aprobada en T015).
+//
+// NO es la fuente de verdad del esquema. La fuente canónica es la migración SQL
+// prisma/migrations/0001_foundation/migration.sql (T012). Este archivo es un ESPEJO de los modelos, obtenido con
+// `prisma db pull` sobre una base con 0001 aplicada; `prisma migrate diff` contra esa base devuelve una migración vacía
+// (sin deriva). Prisma no representa los CHECK, las políticas RLS, FORCE RLS, los triggers ni los grants: viven solo en
+// el SQL. Tampoco lee los defaults de audit_events.actor_id y audit_events.correlation_id (los toma de app.actor_id y
+// app.correlation_id): existen en la base, pero aquí se omiten para no generar deriva, y el cliente exige pasarlos.
+//
+// Prohibido (condición P4): `prisma migrate dev`, `prisma db push`, `prisma migrate reset` y regenerar migraciones
+// desde este archivo. Las migraciones se escriben a mano en SQL, con BEGIN/COMMIT (P1), y se aplican con
+// `prisma migrate deploy` (kuota_migrator).
+// =====================================================================================================================
+
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "cjs"
+  importFileExtension    = "js"
+  generatedFileExtension = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["kuota"]
+}
+
+/// Append-only (triggers en SQL). RLS forzado por tenant (política en SQL).
+model audit_events {
+  id              String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenant_id       String    @default(dbgenerated("(NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid")) @db.Uuid
+  actor_id        String
+  actor_type      String
+  actor_role      String?
+  action          String
+  entity_type     String
+  entity_id       String
+  changes         Json      @default("{}")
+  occurred_at     DateTime  @default(now()) @db.Timestamptz(6)
+  device_time     DateTime? @db.Timestamptz(6)
+  origin          String
+  correlation_id  String
+  idempotency_key String?
+
+  @@index([tenant_id, occurred_at], map: "audit_events_tenant_occurred_at_idx")
+  @@schema("kuota")
+}
+
+/// Recurso técnico de 001 (solo local/testing). RLS forzado por tenant (política en SQL).
+model dev_probe_items {
+  id                  String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  tenant_id           String   @default(dbgenerated("(NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid")) @db.Uuid
+  label               String
+  sample_amount_minor BigInt?
+  sample_currency     String?  @db.Char(3)
+  version             Int      @default(1)
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([tenant_id, id], map: "dev_probe_items_tenant_id_key")
+  @@schema("kuota")
+}
+
+/// Claves de idempotencia por tenant. RLS forzado por tenant (política en SQL).
+model idempotency_keys {
+  tenant_id       String   @default(dbgenerated("(NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid")) @db.Uuid
+  key             String
+  request_hash    String
+  method          String
+  path            String
+  status          String
+  response_status Int?
+  response_body   Json?
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  expires_at      DateTime @default(dbgenerated("(now() + '30 days'::interval)")) @db.Timestamptz(6)
+
+  @@id([tenant_id, key])
+  @@index([expires_at])
+  @@schema("kuota")
+}
+
+/// Auditoría de operaciones de plataforma (T099; migración 0003). Sin tenant: solo la escribe kuota_maintenance (INSERT)
+/// y ningún rol de runtime tiene privilegios sobre ella. Append-only por triggers. La API no la usa.
+model platform_audit_events {
+  id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  run_id         String   @db.Uuid
+  operation      String
+  status         String
+  executed_by    String   @default(dbgenerated("SESSION_USER"))
+  occurred_at    DateTime @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  correlation_id String   @db.Uuid
+  dry_run        Boolean
+  batch_size     Int?
+  max_batches    Int?
+  expired_before BigInt?
+  affected_rows  BigInt?
+  batches        Int?
+  result_code    String?
+
+  @@unique([run_id, status], map: "platform_audit_events_run_status_unique")
+  @@index([operation, occurred_at], map: "platform_audit_events_occurred_at_idx")
+  @@schema("kuota")
+}
+

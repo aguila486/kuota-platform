@@ -1,0 +1,24 @@
+{
+  "name": "kuota-platform",
+  "private": true,
+  "description": "Monorepo de Kuota (ADR-0001). Scripts agregadores que delegan en los paquetes del workspace.",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=26.13.1 <27",
+    "pnpm": ">=12.21.0 <13"
+  },
+  "scripts": {
+    "doctor": "scripts/dev/doctor.sh",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test",
+    "contracts:lint": "redocly lint --config contracts/openapi/redocly.yaml core",
+    "contracts:bundle": "redocly bundle --config contracts/openapi/redocly.yaml core -o contracts/openapi/dist/kuota-core.v1.bundle.yaml",
+    "contracts:bundle:client": "redocly bundle --config contracts/openapi/redocly.yaml client -o contracts/openapi/dist/kuota-core.v1.client.bundle.yaml",
+    "contracts:breaking": "scripts/contracts/breaking.sh",
+    "contracts:test": "scripts/contracts/tests/lint-rules.test.sh && scripts/contracts/tests/breaking.test.sh"
+  },
+  "devDependencies": {
+    "@redocly/cli": "2.82.0"
+  }
+}

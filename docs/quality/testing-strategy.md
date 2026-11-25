@@ -25,12 +25,12 @@ flowchart TB
 
 | Componente | Herramientas propuestas | Cobertura mínima |
 |---|---|---|
-| Backend – dominio financiero (`loans`, `payments`, `savings`, `collateral`, `ledger`) | Jest o Vitest (a decidir en plan 001), fast-check | **90 % líneas y ramas** |
-| Backend – resto | Jest/Vitest, Supertest, Testcontainers (PostgreSQL) | 80 % |
+| Backend – dominio financiero (`loans`, `payments`, `savings`, `collateral`, `ledger`, `common/money`) | Vitest 5 (research R-03 de 001), fast-check | **90 % líneas y ramas** |
+| Backend – resto | Vitest, Supertest, Testcontainers (PostgreSQL) | 80 % |
 | `flutter/packages/financial_domain` | `package:test`, `glados` (property-based) o generadores propios | **90 %** |
 | Otros paquetes Flutter | `package:test`, `flutter_test` | 80 % |
 | Apps Flutter | `flutter_test`, golden tests, `integration_test` | Flujos críticos cubiertos (sin umbral de líneas en UI) |
-| Contratos | Spectral (lint), oasdiff (breaking changes), validación de respuestas | 100 % endpoints con prueba de contrato |
+| Contratos | Redocly CLI 2 (lint), oasdiff (breaking changes), validación de respuestas con Ajv | 100 % endpoints con prueba de contrato |
 
 ## 2. Tipos de prueba
 

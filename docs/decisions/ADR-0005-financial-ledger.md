@@ -1,9 +1,11 @@
 # ADR-0005: Ledger financiero de partida doble, append-only
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado como dirección arquitectónica (2026-11-22, responsable del proyecto). **No se implementa en
+  001.** Las condiciones C5-1…C5-6 son obligatorias para la spec de 006-financial-ledger
 - **Fecha:** 2026-11-22
 - **Decisores:** Responsable técnico, responsable financiero/contable
-- **Relacionado:** Constitución IV, V, VI, VII; D-FIN-01, D-FIN-02, D-LED-01; feature 006-financial-ledger
+- **Relacionado:** Constitución IV, V, VI, VII; D-FIN-01 (aprobada, ADR-0007), D-FIN-02, D-FIN-07, D-LED-01, D-LED-02,
+  D-LED-03; feature 006-financial-ledger
 
 ## Contexto
 
@@ -62,7 +64,8 @@ erDiagram
   }
 ```
 
-- **Montos:** `BIGINT` en unidades mínimas + `currency` ISO 4217 (D-FIN-01). Tasas y factores: `NUMERIC(18,10)`.
+- **Montos:** `BIGINT` en unidades mínimas + `currency` ISO 4217; tasas y factores `NUMERIC(18,10)` (D-FIN-01,
+  ADR-0007).
 - **Código:** TypeScript `bigint` para montos; `decimal.js` para cálculos intermedios con precisión y modo de redondeo
   explícitos (D-FIN-02). Dart: paquete `decimal` / centavos.
 - **Invariante:** por asiento y moneda, Σ débitos = Σ créditos; verificado en la capa de dominio y por trigger diferido o
@@ -92,6 +95,21 @@ erDiagram
 | Diferencias de caja | ASSET/EXPENSE | Faltantes/sobrantes de cortes (D-CSH-02) |
 
 El criterio de reconocimiento de intereses (devengo vs cobro) es decisión contable pendiente (**D-LED-02**) y se define en 006.
+
+## Condiciones obligatorias para 006
+
+La spec y el plan de 006 DEBEN resolver cada condición; ninguna fija reglas financieras pendientes.
+
+| ID | Condición |
+|---|---|
+| C5-1 | Estrategia de concurrencia en proyecciones de saldo para cuentas muy usadas (orden de bloqueo determinista por `account_id` o proyección diferida), con prueba de concurrencia sin interbloqueos |
+| C5-2 | "Un asiento solo se revierte una vez" impuesto por la base de datos (`UNIQUE (tenant_id, reverses_entry_id)`) |
+| C5-3 | La moneda de cada línea coincide con la de su cuenta (restricción o trigger) |
+| C5-4 | Tratamiento de periodos contables y de asientos con fecha valor en periodos cerrados (decisión D-LED-03, pendiente) |
+| C5-5 | Cuenta para pagos no aplicados o saldo a favor en el catálogo plantilla (alineada con D-FIN-07 y con el tratamiento offline de ADR-0006, C6-1) |
+| C5-6 | Relación entre `idempotency_keys` (HTTP, 30 días en 001) y `journal_entries.idempotency_key` (permanente, derivada de la operación de origen) |
+
+Además: validación del catálogo de cuentas por un contador y aprobación de D-LED-01 y D-LED-02 antes de implementar 006.
 
 ## Consecuencias
 

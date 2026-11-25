@@ -1,0 +1,8 @@
+# Contrato fuente de Kuota Core v1 — parameter CorrelationId. Editar aquí; los bundles son derivados (T022, R-13).
+name: X-Correlation-Id
+in: header
+required: false
+description: UUID de correlación; si falta, el servidor genera uno y lo devuelve.
+schema:
+  type: string
+  format: uuid

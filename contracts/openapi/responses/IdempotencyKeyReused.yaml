@@ -1,0 +1,6 @@
+# Contrato fuente de Kuota Core v1 — response IdempotencyKeyReused. Editar aquí; los bundles son derivados (T022, R-13).
+description: Clave reutilizada con contenido distinto (code `idempotency-key-reused`).
+content:
+  application/problem+json:
+    schema:
+      $ref: ../schemas/Problem.yaml

@@ -1,0 +1,45 @@
+# CODEOWNERS de kuota-platform (T053; R-20; FR-036).
+#
+# Mantenedor único: `@aguila486`, usuario de GitHub confirmado por el responsable (2026-11-25; approvals.md de 001).
+# La asignación automática de revisores (US3-8) se verifica al existir el remoto. Ser CODEOWNER no es una aprobación:
+# con mantenedor único, la protección de `main` no exige reviews y la aprobación humana se registra aparte
+# (docs/process/git-workflow.md §5).
+#
+# No añadir un segundo dueño sin decisión expresa: con dos mantenedores se activa la regla de 2 aprobaciones en áreas
+# sensibles (Constitución, excepción de mantenedor único) y cambia la política de revisión de git-workflow.md §5.
+# La última regla que coincide gana: las áreas específicas van después de la regla general.
+
+# Por defecto
+*                                         @aguila486
+
+# Backend (Kuota Core)
+/backend/                                 @aguila486
+
+# Áreas sensibles: aislamiento multi-tenant (RLS, withTenant, R3)
+/backend/src/common/tenant-context/       @aguila486
+/backend/scripts/check-rls.ts             @aguila486
+
+# Áreas sensibles: dinero (ADR-0007)
+/backend/src/common/money/                @aguila486
+
+# Áreas sensibles: migraciones, esquema y mantenimiento (ADR-0004)
+/backend/prisma/                          @aguila486
+/backend/scripts/migration-preflight.ts   @aguila486
+/backend/scripts/purge-idempotency.ts     @aguila486
+
+# Contrato de API (fuente de verdad) y fixtures compartidos
+/contracts/                               @aguila486
+/scripts/contracts/                       @aguila486
+
+# Paquetes Flutter compartidos (se crean en US7)
+/flutter/packages/                        @aguila486
+
+# Infraestructura: roles de PostgreSQL, compose
+/infra/                                   @aguila486
+
+# CI y gobernanza del repositorio
+/.github/                                 @aguila486
+/scripts/ci/                              @aguila486
+
+# Constitución (cambios con enmienda formal)
+/.specify/memory/                         @aguila486

@@ -1,0 +1,14 @@
+# Contrato fuente de Kuota Core v1 — schema DevProbeItemPage. Editar aquí; los bundles son derivados (T022, R-13).
+type: object
+required:
+- data
+- next_cursor
+properties:
+  data:
+    type: array
+    items:
+      $ref: ./DevProbeItem.yaml
+  next_cursor:
+    type:
+    - string
+    - 'null'

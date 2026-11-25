@@ -1,0 +1,7 @@
+# Contrato fuente de Kuota Core v1 — parameter Cursor. Editar aquí; los bundles son derivados (T022, R-13).
+name: cursor
+in: query
+required: false
+schema:
+  type: string
+  maxLength: 512

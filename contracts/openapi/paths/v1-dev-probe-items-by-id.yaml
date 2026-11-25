@@ -1,0 +1,79 @@
+# Contrato fuente de Kuota Core v1 — path /v1/dev/probe-items/{id}. Editar aquí; los bundles son derivados (T022, R-13).
+x-kuota-non-production: true
+parameters:
+- name: id
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
+- $ref: ../parameters/CorrelationId.yaml
+- $ref: ../parameters/DevActor.yaml
+get:
+  tags:
+  - dev-probe
+  operationId: getDevProbeItem
+  security:
+  - devTenantContext: []
+  summary: Obtiene un registro del tenant del contexto.
+  x-kuota-non-production: true
+  responses:
+    '200':
+      description: Registro.
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/DevProbeItem.yaml
+    '401':
+      $ref: ../responses/MissingTenantContext.yaml
+    '404':
+      $ref: ../responses/NotFound.yaml
+patch:
+  tags:
+  - dev-probe
+  operationId: updateDevProbeItem
+  security:
+  - devTenantContext: []
+  summary: Actualiza la etiqueta (bloqueo optimista).
+  x-kuota-non-production: true
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: ../schemas/DevProbeItemUpdate.yaml
+  responses:
+    '200':
+      description: Actualizado.
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/DevProbeItem.yaml
+    '400':
+      $ref: ../responses/BadRequest.yaml
+    '401':
+      $ref: ../responses/MissingTenantContext.yaml
+    '404':
+      $ref: ../responses/NotFound.yaml
+    '409':
+      $ref: ../responses/VersionConflict.yaml
+delete:
+  tags:
+  - dev-probe
+  operationId: deleteDevProbeItem
+  security:
+  - devTenantContext: []
+  summary: Elimina un registro del tenant del contexto.
+  description: >-
+    Operación auditada (US6): exige un actor explícito (`X-Kuota-Dev-Actor` en 001). Sin actor, o con un actor
+    inválido, responde 400 `validation-error` sin modificar datos (añadido el 2026-11-23, cierre de US6).
+  x-kuota-non-production: true
+  responses:
+    '204':
+      description: Eliminado.
+    '400':
+      $ref: ../responses/BadRequest.yaml
+    '401':
+      $ref: ../responses/MissingTenantContext.yaml
+    '404':
+      $ref: ../responses/NotFound.yaml

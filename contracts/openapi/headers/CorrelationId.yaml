@@ -1,0 +1,5 @@
+# Contrato fuente de Kuota Core v1 — header CorrelationId. Editar aquí; los bundles son derivados (T022, R-13).
+description: Identificador de correlación de la solicitud.
+schema:
+  type: string
+  format: uuid

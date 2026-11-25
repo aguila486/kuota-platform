@@ -1,0 +1,30 @@
+# Redocly CLI 2 para el contrato de Kuota Core (T023; research R-13).
+# Uso desde la raíz: `pnpm contracts:lint`, `pnpm contracts:bundle` y `pnpm contracts:bundle:client`.
+apis:
+  core:
+    root: ./kuota-core.v1.yaml
+  # Contrato distribuible a las apps (T070; FR-040): el mismo contrato fuente SIN las rutas ni operaciones técnicas
+  # `x-kuota-non-production: true` (dev-probe) ni los componentes que solo ellas usaban (esquemas, `devTenantContext`).
+  # Las apps no pueden invocar endpoints técnicos porque el cliente Dart se genera desde este bundle
+  # (`pnpm contracts:bundle:client`, scripts/contracts/generate-dart-client.sh).
+  client:
+    root: ./kuota-core.v1.yaml
+    decorators:
+      filter-out:
+        property: x-kuota-non-production
+        value: true
+      remove-unused-components: on
+
+extends:
+  - recommended
+
+plugins:
+  - ./plugins/kuota-rules.mjs
+
+rules:
+  # Reglas propias (plugin kuota): idempotencia, errores RFC 9457 y dinero vía Money.
+  kuota/idempotency-key-required: error
+  kuota/problem-json-errors: error
+  kuota/money-via-ref: error
+# Excepciones justificadas del preset recommended (servidor localhost y 4xx en health): en .redocly.lint-ignore.yaml,
+# acotadas a las ubicaciones concretas para que la regla siga activa en el resto del contrato.

@@ -1,6 +1,6 @@
 # ADR-0001: Estrategia de repositorio — monorepo único `kuota-platform`
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado (2026-11-22, responsable del proyecto)
 - **Fecha:** 2026-11-22
 - **Decisores:** Responsable técnico (arquitectura), responsable de producto
 - **Relacionado:** Constitución §Restricciones de stack, ADR-0002, ADR-0003, `docs/architecture/monorepo-strategy.md`
@@ -47,6 +47,10 @@ Razones principales:
 3. El equipo es pequeño; la sobrecarga de coordinar 3–5 repositorios no se justifica.
 
 No se crean repositorios Git anidados, submódulos ni instalaciones adicionales de `.specify/`.
+
+Cada aplicación y el backend se construyen, prueban y publican de forma independiente: la CI ejecuta solo los
+componentes afectados (filtros por ruta, `specs/001-platform-foundation/research.md` §R-17) y cada componente tiene su
+propia etiqueta de release.
 
 ## Consecuencias
 

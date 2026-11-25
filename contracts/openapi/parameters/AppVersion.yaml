@@ -1,0 +1,8 @@
+# Contrato fuente de Kuota Core v1 — parameter AppVersion. Editar aquí; los bundles son derivados (T022, R-13).
+name: X-App-Version
+in: header
+required: false
+description: Formato `<app>/<semver>+<build>`, p. ej. `collector/1.4.2+120`.
+schema:
+  type: string
+  pattern: ^(admin|collector|client)/\d+\.\d+\.\d+(\+\d+)?$

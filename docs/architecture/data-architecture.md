@@ -1,6 +1,6 @@
 # Arquitectura de datos
 
-> Estado: Propuesto (2026-11-22). ADR-0004 (PostgreSQL 17 + Prisma, D-ARC-01), ADR-0005 (ledger, D-FIN-01, D-LED-01).
+> Estado: Propuesto (2026-11-22). ADR-0004 (PostgreSQL 18 + Prisma, D-ARC-01), ADR-0005 (ledger, D-FIN-01, D-LED-01).
 > El modelo detallado de cada capacidad se define en `specs/NNN-*/data-model.md`; este documento fija las reglas.
 
 ## 1. Estrategia de multi-tenancy
@@ -19,11 +19,14 @@ Política estándar aplicada a cada tabla con datos de tenant:
 ALTER TABLE loans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE loans FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON loans
-  USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+  USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)
+  WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid);
 ```
 
-CI verifica (consulta a `pg_class`/`pg_policies`) que toda tabla con columna `tenant_id` tiene RLS habilitado,
+`nullif` es obligatorio: si la conexión ya usó `set_config(..., true)` en una transacción anterior, la variable vale
+`''` (no `NULL`) y un cast directo a `uuid` fallaría en vez de devolver 0 filas (ADR-0004, criterio S1).
+
+CI verifica en el esquema `kuota` (consulta a `pg_class`/`pg_policies`) que toda tabla con columna `tenant_id` tiene RLS habilitado,
 forzado y con política. Claves foráneas compuestas `(tenant_id, id)` en relaciones entre tablas de tenant para
 impedir referencias cruzadas.
 
@@ -32,8 +35,9 @@ impedir referencias cruzadas.
 | Rol | Uso | Privilegios |
 |---|---|---|
 | `kuota_migrator` | Pipeline de migraciones | Owner de esquemas/tablas. Nunca usado por la app |
-| `kuota_app` | API | DML limitado; **sin** `BYPASSRLS`; sin `UPDATE/DELETE` en ledger y auditoría |
-| `kuota_worker` | Worker | Igual que `kuota_app` + tablas de cola |
+| `kuota_app` | API (`NOLOGIN`) | DML limitado; **sin** `BYPASSRLS`; sin `UPDATE/DELETE` en ledger y auditoría |
+| `kuota_app_login` | Credencial de la API | `LOGIN`, miembro de `kuota_app` |
+| `kuota_worker` | Worker (ADR-0002, C2-3) | Igual que `kuota_app` + tablas de cola; se crea con la primera feature con jobs |
 | `kuota_platform` | platform-admin | Acceso a `tenants`/`memberships`; acceso cross-tenant solo vía funciones `SECURITY DEFINER` auditadas |
 | `kuota_readonly` | Reportes/soporte | `SELECT` con RLS |
 
@@ -110,7 +114,7 @@ ledger_accounts(tenant_id, id, code, name, type[ASSET|LIABILITY|INCOME|EXPENSE|E
                 owner_type, owner_id)           -- p.ej. cartera del préstamo X, ahorro del cliente Y, caja del cobrador Z
 journal_entries(tenant_id, id, entry_type, effective_date, posted_at, idempotency_key UNIQUE per tenant,
                 reverses_entry_id NULL, source_type, source_id, actor_id, correlation_id)
-journal_lines(tenant_id, id, entry_id, account_id, side[DEBIT|CREDIT], amount_minor BIGINT CHECK (>0), currency)
+journal_lines(tenant_id, id, entry_id, account_id, direction[DEBIT|CREDIT], amount_minor BIGINT CHECK (>0), currency)
 account_balances(tenant_id, account_id, balance_minor, last_entry_id)  -- proyección reconstruible
 ```
 
@@ -122,29 +126,55 @@ account_balances(tenant_id, account_id, balance_minor, last_entry_id)  -- proyec
 
 | Concepto | Tipo PostgreSQL | TypeScript | Dart |
 |---|---|---|---|
-| Montos | `BIGINT` unidades mínimas + `CHAR(3)` moneda | `bigint` | `int` (64-bit nativo) / `BigInt` en web* |
-| Tasas, factores | `NUMERIC(18,10)` + `rate_basis` | `Decimal` (decimal.js) | `Decimal` (paquete `decimal`) |
+| Montos | `BIGINT` unidades mínimas + `CHAR(3)` moneda | `bigint` | `BigInt` (móvil y web; nunca `int`)* |
+| Tasas, factores | `NUMERIC(18,10)` + `rate_basis` (D-FIN-03) | `Decimal` (decimal.js) | `Decimal` (paquete `decimal`) |
 | Fechas de negocio | `DATE` + zona horaria del tenant | `Temporal`/lib de fechas sin hora | `DateTime` fecha pura |
 | Instantes | `TIMESTAMPTZ` | — | UTC |
 | IDs | `UUID` (v7 para ordenabilidad) | string | string |
 
-\* En Flutter Web `int` es double de JS: montos se manejan como `BigInt`/`Decimal` en el paquete `financial_domain`,
-nunca como `int` crudo. En JSON se transportan como string (ver [api-contracts.md](api-contracts.md)).
+\* Representación, rangos, escalas, forma canónica en JSON y conversión de presentación: **ADR-0007** (D-FIN-01,
+aprobada). En Flutter Web `int` es un número de JavaScript; por eso los montos son `BigInt` en todas las plataformas.
 
 ## 7. Auditoría
 
-`audit_log(tenant_id, id, occurred_at, actor_id, actor_role, action, entity_type, entity_id, before JSONB, after JSONB,
-device_id, device_time, ip_hash, correlation_id)` — append-only (mismos controles que el ledger). `before/after` excluyen
-secretos y minimizan PII.
+`audit_events` — append-only (mismos controles que el ledger), escrita por `common/audit` en la misma transacción del
+caso de uso. Definición canónica en `specs/001-platform-foundation/data-model.md` (incluye `actor_role`, nulo en 001 y
+derivado del contexto de autorización desde 002). `changes` excluye secretos y minimiza PII. El módulo `audit` (015)
+solo la consulta (ADR-0002).
 
 ## 8. Migraciones
 
-- Prisma Migrate genera SQL; RLS, grants, triggers y funciones se agregan como SQL manual en la misma migración.
+- **Fuente de verdad (ADR-0004, P4):** migraciones SQL escritas a mano, versionadas y revisadas, aplicadas con
+  `prisma migrate deploy` por `kuota_migrator`. `schema.prisma` es un espejo derivado. Prohibido usar `prisma db push`,
+  `prisma migrate dev` o `prisma migrate reset` sobre esquemas compartidos. El esquema efectivo (RLS, FORCE, políticas,
+  triggers, CHECK, índices, grants y propietarios) se verifica con pruebas sobre una base migrada; `prisma migrate diff`
+  es solo un complemento.
+- **Transacción explícita (P1):** `prisma migrate deploy` no envuelve las migraciones en una transacción. Cada migración
+  empieza con `BEGIN;` y termina con `COMMIT;`. Las operaciones que PostgreSQL no admite dentro de una transacción
+  (p. ej. `CREATE INDEX CONCURRENTLY`) van en una migración propia marcada `-- kuota:non-transactional: <justificación y
+  plan de recuperación>`, con revisión explícita. Una migración fallida queda registrada y bloquea despliegues (`P3009`):
+  se corrige y se resuelve con un procedimiento revisado, nunca marcándola como aplicada sin ejecutarla.
 - Patrón **expand → migrate → contract**: agregar columnas nullable/tablas nuevas, desplegar código compatible,
   backfill, y solo en un release posterior eliminar lo viejo. Cambios destructivos requieren fase de contract aprobada.
-- Migraciones se aplican en pipeline con `kuota_migrator` antes de desplegar la nueva versión; `/health/ready`
-  falla si el esquema esperado no está aplicado.
+- Migraciones se aplican en pipeline con `kuota_migrator` antes de desplegar la nueva versión. Si `/health/ready`
+  también verifica las migraciones aplicadas es la decisión pendiente D-ARC-06; en 001 solo verifica la base de datos.
 - Prueba de CI: aplicar todas las migraciones sobre BD vacía + sobre snapshot del esquema de `main`.
+
+### Mantenimiento de datos por tenant (backfills) — ADR-0004, condición P5
+
+Con FORCE RLS y las políticas limitadas a `kuota_app`, `kuota_migrator` **no ve filas de tenant**: un `UPDATE` suyo
+termina con 0 filas y sin error. Por eso un backfill nunca se da por bueno por "no fallar". Procedimiento (no hay
+todavía política de mantenimiento ni BYPASSRLS; implementarla exige aprobación separada):
+
+1. **Autorización humana** por cambio sensible, registrada con el motivo, los tenants afectados y el conteo esperado.
+2. **Tenant explícito:** se ejecuta tenant a tenant, con el contexto fijado como lo hace `withTenant`; el tenant
+   objetivo se valida contra la lista autorizada antes de escribir.
+3. **Conteo previo y posterior:** se mide cuántas filas cumplen la condición antes del cambio y se compara con las
+   afectadas; si no coinciden o el resultado es 0 cuando se esperaban cambios, la transacción se revierte.
+4. **Auditoría:** cada cambio genera eventos en `audit_events` con `actor_type = 'SYSTEM'`, la acción del backfill y la
+   correlación del procedimiento.
+5. **Recuperación:** todo dentro de una transacción por tenant; ante fallo se revierte ese tenant y el proceso se detiene
+   con un informe de los tenants completados y pendientes.
 
 ## 9. Respaldos y retención
 

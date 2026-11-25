@@ -16,20 +16,20 @@
 
 ```text
 infra/docker/compose.yaml
-  postgres:17     # con script init: roles kuota_migrator, kuota_app, kuota_worker, kuota_platform, kuota_readonly
+  postgres:18     # digest fijado; script init: kuota_migrator, kuota_app, kuota_app_login (resto de roles: ADR-0004)
   minio           # object storage S3-compatible (cuando una feature lo necesite)
   mailpit / otp-mock  # captura de OTP/mensajes en local (cuando 002 lo necesite)
 ```
 
-El backend corre en el host (`pnpm dev`) o en contenedor; las apps Flutter apuntan al flavor `dev`. Solo se agregan
+El backend corre en el host (`pnpm dev`) o en contenedor; las apps Flutter usan el entorno `local`. Solo se agregan
 servicios cuando una tarea aprobada los requiera (Redis no está en v1).
 
 ## 3. Configuración y secretos
 
 | Tipo | Ejemplos | Dónde vive |
 |---|---|---|
-| Configuración no secreta | `APP_ENV`, `LOG_LEVEL`, `PORT`, `MIN_COLLECTOR_VERSION` | Variables de entorno; valores por entorno en `infra/environments/<env>.env.example` |
-| Secretos | `DATABASE_URL_APP`, `DATABASE_URL_MIGRATOR`, `JWT_SIGNING_KEY`, `RECEIPT_SIGNING_KEY`, API keys OTP | Local: `.env` no versionado. CI: GitHub Actions secrets por *environment*. Staging/prod: gestor de secretos del proveedor (D-ARC-04) |
+| Configuración no secreta | `KUOTA_ENV`, `LOG_LEVEL`, `PORT`, versiones mínimas por app, `KUOTA_METRICS_HOST/PORT` | Variables de entorno; valores por entorno en `infra/environments/<env>.env.example` |
+| Secretos | `DATABASE_URL_APP`, `DATABASE_URL_MIGRATOR`, `KUOTA_METRICS_TOKEN`, `JWT_SIGNING_KEY`, `RECEIPT_SIGNING_KEY`, API keys OTP | Local: `.env` no versionado. CI: GitHub Actions secrets por *environment*. Staging/prod: gestor de secretos del proveedor (D-ARC-04) |
 
 - El arranque valida la configuración y falla ante faltantes.
 - Llaves de firma (JWT, recibos) con rotación planificada (`kid` en tokens/firmas).
@@ -54,11 +54,12 @@ sin revertir migraciones.
 | Endpoint | Verifica | Uso |
 |---|---|---|
 | `GET /health/live` | Proceso responde | Reinicio del contenedor |
-| `GET /health/ready` | Conexión a BD, migraciones esperadas aplicadas | Enrutamiento de tráfico |
+| `GET /health/ready` | Conexión a BD (migraciones aplicadas: decisión pendiente D-ARC-06) | Enrutamiento de tráfico |
 
 - **Logs:** JSON estructurado (pino) a stdout; campos y redacción definidos en
   [backend-architecture.md](backend-architecture.md).
-- **Trazas y métricas:** OpenTelemetry SDK; exportador OTLP configurable (backend de observabilidad pendiente D-ARC-04).
+- **Trazas y métricas:** OpenTelemetry SDK. En 001, exportador Prometheus *pull* en un listener interno con token del
+  recolector (research R-21; Constitución §II). Exportador OTLP y backend de observabilidad: D-ARC-04.
 - **Métricas mínimas:** latencia/errores por ruta, tamaño de cola de jobs, comandos de sync por estado, operaciones
   `REQUIRES_REVIEW` abiertas, resultado de reconciliación del ledger, edad de última sincronización por dispositivo.
 - **Alertas críticas:** desbalance de ledger, falla de reconciliación, error de RLS (consulta sin contexto en ruta de
@@ -66,16 +67,16 @@ sin revertir migraciones.
 
 ## 6. CI/CD (GitHub Actions)
 
-Workflows previstos en `.github/workflows/` (se crean en tareas de 001):
+Diseño vigente (research R-17 de 001): un workflow `ci.yml` con `dorny/paths-filter` y jobs por componente; toda la
+lógica vive en `scripts/ci/*.sh`, reproducible localmente con `scripts/ci/run-local.sh <job>`.
 
-| Workflow | Disparador (path filters) | Jobs |
+| Job | Disparador (path filters) | Verificaciones |
 |---|---|---|
-| `backend.yml` | `backend/**`, `contracts/**`, `pnpm-lock.yaml` | lint, typecheck, dependency-cruiser, unit, integración (PostgreSQL), aislamiento multi-tenant, cobertura, build |
-| `contracts.yml` | `contracts/**` | Spectral, `oasdiff breaking` vs `main`, regenerar cliente Dart y verificar diff |
-| `flutter.yml` | `flutter/**`, `contracts/**` | `dart format --set-exit-if-changed`, analyze, test por paquete/app afectado (Melos `--diff`) |
-| `security.yml` | todo PR + programado | gitleaks, auditoría de dependencias (pnpm audit / OSV) |
-| `specs.yml` | `specs/**`, ramas `feature/*` | valida nombre de rama y existencia de `specs/NNN-*` |
-| `release-*.yml` | tags `backend-v*`, `admin-v*`, `collector-v*`, `client-v*` | build y publicación del artefacto del componente (destino pendiente D-ARC-04) |
+| `general` | siempre | gitleaks, editorconfig, nombre de rama ↔ `specs/NNN-*`, actionlint |
+| `backend` | `backend/**`, `contracts/**`, `pnpm-lock.yaml` | lint, typecheck, dependency-cruiser, unit, integración (PostgreSQL), aislamiento multi-tenant, `db:check-rls`, cobertura, osv-scanner |
+| `contracts` | `contracts/**` | Redocly lint, `oasdiff breaking` vs `main`, regenerar cliente Dart y verificar diff |
+| `flutter` | `flutter/**`, `contracts/**` | format, analyze, test, `check_deps`, build Android y Web (iOS local) |
+| `release-*.yml` | tags `backend-v*`, `admin-v*`, `collector-v*`, `client-v*` | build y publicación del artefacto (destino pendiente D-ARC-04; no se crea en 001) |
 
 Un PR que modifica `contracts/` dispara backend y Flutter porque ambos dependen del contrato. Los checks requeridos
 para merge se configuran como *required status checks* en la protección de `main` (acción remota que requiere aprobación).

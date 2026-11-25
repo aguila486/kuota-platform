@@ -1,0 +1,68 @@
+# Contrato fuente de Kuota Core v1 — path /v1/dev/probe-items. Editar aquí; los bundles son derivados (T022, R-13).
+x-kuota-non-production: true
+post:
+  tags:
+  - dev-probe
+  operationId: createDevProbeItem
+  security:
+  - devTenantContext: []
+  summary: Crea un registro técnico (idempotente y auditado).
+  x-kuota-non-production: true
+  x-kuota-idempotent: true
+  parameters:
+  - $ref: ../parameters/IdempotencyKey.yaml
+  - $ref: ../parameters/CorrelationId.yaml
+  - $ref: ../parameters/DevActor.yaml
+  requestBody:
+    required: true
+    content:
+      application/json:
+        schema:
+          $ref: ../schemas/DevProbeItemCreate.yaml
+  responses:
+    '201':
+      description: Creado (o respuesta reproducida si `Idempotent-Replayed`).
+      headers:
+        X-Correlation-Id:
+          $ref: ../headers/CorrelationId.yaml
+        Idempotent-Replayed:
+          $ref: ../headers/IdempotentReplayed.yaml
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/DevProbeItem.yaml
+    '400':
+      $ref: ../responses/BadRequest.yaml
+    '401':
+      $ref: ../responses/MissingTenantContext.yaml
+    '409':
+      $ref: ../responses/IdempotencyInProgress.yaml
+    '422':
+      $ref: ../responses/IdempotencyKeyReused.yaml
+get:
+  tags:
+  - dev-probe
+  operationId: listDevProbeItems
+  security:
+  - devTenantContext: []
+  summary: Lista registros del tenant del contexto (paginación por cursor).
+  x-kuota-non-production: true
+  parameters:
+  - $ref: ../parameters/CorrelationId.yaml
+  - $ref: ../parameters/DevActor.yaml
+  - $ref: ../parameters/Limit.yaml
+  - $ref: ../parameters/Cursor.yaml
+  responses:
+    '200':
+      description: Página de resultados.
+      headers:
+        X-Correlation-Id:
+          $ref: ../headers/CorrelationId.yaml
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/DevProbeItemPage.yaml
+    '400':
+      $ref: ../responses/BadRequest.yaml
+    '401':
+      $ref: ../responses/MissingTenantContext.yaml

@@ -1,0 +1,19 @@
+# Dominio financiero compartido de las apps (T082; ADR-0007; flutter-architecture.md §3). Dart puro: NO depende de
+# `flutter` (tool/check_deps.dart, FR-033) y no admite `double`/`num` en lib/ (scripts/ci/check-no-float-dart.sh, R-10).
+# Money con BigInt (T063) en lib/src/money/; los fixtures compartidos (T059) se ejecutan en la VM y en Chrome.
+name: financial_domain
+description: Dominio financiero de Kuota en Dart puro (Money con BigInt, ADR-0007). Proyecciones, nunca autoridad contable.
+publish_to: none
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  # Racional exacto para factores y tasas (ADR-0007, R-08: `decimal` 3.x). Fijada en la versión aprobada en research.
+  decimal: 3.2.6
+
+dev_dependencies:
+  test: 1.32.0
+  yaml: 3.1.4

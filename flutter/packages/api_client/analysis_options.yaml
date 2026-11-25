@@ -1,0 +1,8 @@
+# Análisis de api_client: el del workspace, salvo el código GENERADO (lib/src/generated/), que no se edita a mano y
+# contiene avisos propios del generador (p. ej. imports sin usar). Ese código se valida compilándolo (build_runner y
+# las pruebas que lo importan) y regenerándolo (T071). Todo lo escrito a mano sigue con el análisis estricto.
+include: ../../analysis_options.yaml
+
+analyzer:
+  exclude:
+    - lib/src/generated/**

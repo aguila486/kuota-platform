@@ -1,6 +1,8 @@
-# ADR-0003: Flutter — Dart pub workspaces, Melos 7 y Riverpod
+# ADR-0003: Flutter — Dart pub workspaces, Melos 8 y Riverpod
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado con condiciones (2026-11-22, responsable del proyecto). D-ARC-02 cerrada (Riverpod).
+  **Condición: D-ARC-03 (tecnología definitiva de `admin_web`) sigue pendiente**; Flutter Web solo está autorizado de
+  forma provisional para el shell de 001
 - **Fecha:** 2026-11-22
 - **Decisores:** Responsable técnico, líder Flutter
 - **Relacionado:** Constitución IX, XI, XII; D-ENV-01, D-ARC-02, D-ARC-03; ADR-0006
@@ -11,13 +13,15 @@ Tres aplicaciones Flutter (`admin_web`, `collector_mobile`, `client_mobile`) com
 componentes visuales y lógica de simulación. Collector es offline-first (Drift/SQLite). La Constitución prohíbe duplicar
 código entre apps (IX) y exige que el cliente HTTP se genere desde OpenAPI (XII).
 
-**Hallazgo de entorno (2026-11-22):** Flutter instalado 3.24.3 con **Dart 3.5.3**. Los *pub workspaces* requieren
-**Dart ≥ 3.6**. El entorno actual es **incompatible** y debe actualizarse antes de crear `flutter/` (D-ENV-01).
+**Entorno (D-ENV-01, aprobada):** la instalación global (Flutter 3.24.3 / Dart 3.5.3) no admite *pub workspaces*
+(Dart ≥ 3.6) y **no se modifica**. El proyecto fija **Flutter 3.50.1 / Dart 3.14** con **FVM ≥ 3.2** en
+`flutter/.fvmrc`. Ese archivo aún no existe: lo crea la tarea T080 de 001. Los comandos del workspace se ejecutan con
+`fvm flutter …` / `fvm dart …`.
 
 ## Opciones consideradas
 
 ### Gestión del workspace
-1. **Dart pub workspaces (nativo) + Melos 7** solo para scripts/versionado.
+1. **Dart pub workspaces (nativo) + Melos 8** solo para scripts/versionado.
 2. Melos clásico (≤ 6) con `melos bootstrap` y `pubspec_overrides.yaml`.
 3. Paquetes con `path:` dependencies sin herramienta.
 
@@ -34,13 +38,13 @@ código entre apps (IX) y exige que el cliente HTTP se genere desde OpenAPI (XII
 
 - **Dart pub workspaces**: `flutter/pubspec.yaml` raíz con `workspace:` y cada paquete con `resolution: workspace`.
   Un solo `pubspec.lock` y resolución compartida.
-- **Melos 7.x** con configuración en la sección `melos:` del `pubspec.yaml` raíz de `flutter/`, usado **solo** para
+- **Melos 8.x** con configuración en la sección `melos:` del `pubspec.yaml` raíz de `flutter/`, usado **solo** para
   scripts (`analyze`, `test`, `format`, generación), filtros por paquete afectado y versionado/changelog. No se usa
   `melos bootstrap` para enlazar paquetes (lo hace pub workspaces) ni `pubspec_overrides.yaml`.
-- **Riverpod** como gestión de estado e inyección de dependencias (D-ARC-02, recomendación). Si el equipo prefiere
-  eventos explícitos para auditoría de UI, Bloc es la alternativa aceptable; la decisión se cierra antes de la
-  primera feature con UI.
-- **admin_web en Flutter Web** inicialmente (D-ARC-03), reevaluar tras el MVP por SEO irrelevante pero rendimiento de
+- **Riverpod** como gestión de estado e inyección de dependencias (**D-ARC-02 aprobada el 2026-11-22**). Bloc queda
+  descartado; reevaluarlo requiere un ADR nuevo (ver *Revisión*).
+- **admin_web en Flutter Web, de forma provisional** (D-ARC-03 pendiente; ver *Condición D-ARC-03*). Reevaluar
+  por SEO irrelevante pero rendimiento de
   tablas grandes y accesibilidad.
 
 ### Paquetes
@@ -88,16 +92,105 @@ Reglas de separación:
 - Persistencia local: Drift/SQLite con cifrado (SQLCipher o equivalente evaluado en la spec de 011).
 - Credenciales: `flutter_secure_storage` (Keychain/Keystore).
 
+### Condición D-ARC-03: tecnología de `admin_web`
+
+**Autorización provisional (2026-11-22, responsable del proyecto), exclusiva para 001:** Flutter Web para el
+scaffolding, la configuración de entorno, el arranque, la validación del build Web y la integración con el monorepo
+(T085, T050, T052). **No** aprueba la tecnología definitiva del administrador funcional. D-ARC-03 debe decidirse
+**antes de construir pantallas administrativas complejas** (tablas de cartera, formularios de originación, reportes).
+No se realiza ninguna migración tecnológica hasta entonces.
+
+Criterios de la decisión definitiva (evaluación con prototipos medibles, no por popularidad):
+
+| Criterio | Flutter Web | Angular | React | Cómo se mide |
+|---|---|---|---|---|
+| Tablas de datos grandes | Requiere virtualización propia o paquetes de terceros; el render en canvas complica copiar, buscar y seleccionar | Componentes de tabla maduros con virtualización (CDK) | Ecosistema amplio de grids virtualizados | Tabla de 10 000 filas: tiempo de render, scroll sin saltos, ordenar y filtrar |
+| Formularios administrativos | Correctos, con validación en Dart compartida con el dominio | Formularios reactivos maduros y tipados | Librerías maduras de formularios | Formulario de originación representativo: tiempo de construcción y defectos |
+| Accesibilidad | Árbol semántico generado; el soporte de lectores de pantalla y teclado debe verificarse | DOM nativo; buen soporte | DOM nativo; buen soporte | Auditoría WCAG 2.2 AA con lector de pantalla y teclado |
+| Rendimiento web | Carga inicial más pesada (motor de render) | Bundles más ligeros | Bundles más ligeros | Tiempo de carga e interactividad en un equipo de oficina de gama media |
+| Reportes | Exportación e impresión requieren trabajo adicional | Impresión y HTML nativos | Impresión y HTML nativos | Reporte de cartera exportado a PDF/CSV e impreso |
+| Mantenibilidad | Un lenguaje y un equipo para las 3 apps | Segundo lenguaje y segunda cadena de herramientas | Segundo lenguaje y segunda cadena de herramientas | Habilidades del equipo y costo de CI |
+| Reutilización de dominio | Total: `financial_domain`, `design_system`, `api_client` | Ninguna directa: cliente TS generado; simuladores duplicados o en el backend | Igual que Angular | Número de reglas duplicadas (Constitución IX) |
+| Costo de migración | Ninguno si se mantiene | Alto si se cambia tarde: reescritura de pantallas | Igual que Angular | Pantallas construidas al decidir: decidir antes de las complejas lo mantiene bajo |
+
+Regla de reevaluación: si Flutter Web no cumple las metas de tablas, accesibilidad o reportes que fije la spec del
+primer administrador funcional, se abre un ADR nuevo para el administrador.
+
+### Estado de UI frente a lógica de negocio
+
+- Riverpod solo orquesta el estado de presentación y la inyección de dependencias. Los providers no contienen reglas
+  financieras.
+- Reglas y cálculos: `financial_domain` (Dart puro, sin Flutter ni Riverpod). Acceso a datos: repositorios en
+  `features/*/data`, que mapean DTOs de `api_client` a modelos de dominio.
+- Dinero en Dart: `Money` con `BigInt` según ADR-0007, en móvil y en web.
+
+### Offline-first
+
+- Los estados de operación local y el motor de sincronización viven en el paquete `offline_sync` (ADR-0006), separados
+  de la UI. La UI los observa (`StreamProvider`) y no cambia estados; las transiciones las hace solo el motor.
+
+### Clave de idempotencia
+
+- La clave (UUIDv7) se genera **al crear la operación** (comando offline u operación en línea), se persiste con ella
+  (outbox en Collector; registro local de la operación pendiente en las demás apps) y se **reutiliza en cada
+  reintento**.
+- `api_client` y sus interceptores nunca generan ni reemplazan `Idempotency-Key`. Una escritura idempotente sin clave
+  falla en el cliente antes de enviarse. En Collector, `operation_id` es la clave (ADR-0006).
+
+### Entornos (FR-032 de 001)
+
+- `local`, `testing`, `staging` y `production` mediante `--dart-define-from-file=config/<entorno>.json` (sin secretos).
+  Los identificadores de app por entorno, para instalar varias versiones en paralelo, se definen al distribuir
+  (D-ARC-04).
+
 ## Consecuencias
 
 - **Positivas:** resolución de dependencias única, sin enlaces frágiles; código compartido real; tests de dominio sin Flutter.
-- **Negativas:** requiere actualizar Flutter (impacto global en la máquina; mitigado con FVM, D-ENV-01).
+- **Negativas:** requiere FVM y una versión de Flutter por proyecto (sin cambios en la instalación global).
 - **Riesgos:** algunos paquetes de terceros podrían no soportar workspaces → validar en la tarea de scaffolding.
 
 ## Validación
 
-- `dart pub get` en la raíz de `flutter/` resuelve todos los paquetes; `melos run analyze` y `melos run test` verdes.
+- `fvm flutter pub get` en la raíz de `flutter/` resuelve todos los paquetes; `melos run analyze` y `melos run test`
+  verdes.
 - Lint que impide importar `package:flutter` desde `financial_domain`.
+
+## Verificación tras la implementación de 001 (2026-11-23, T090)
+
+Registro del estado real; **no reaprueba** este ADR ni cambia su estado (*Aceptado con condiciones*).
+
+- **Condición D-ARC-03 vigente:** `admin_web` existe solo como shell provisional en Flutter Web (pantalla de inicio,
+  build Web en CI). No hay pantallas administrativas y la tecnología definitiva sigue sin decidir.
+- **Validación de este ADR, cumplida en local:** un solo `flutter/pubspec.lock` para 3 apps y 4 paquetes
+  (`scripts/ci/check-single-lockfile.sh`, T086); `melos run analyze` (`--fatal-infos`) y `melos run test` en verde
+  (124 pruebas, incluidas las de `financial_domain` en VM y Chrome); `tool/check_deps.dart` impide que
+  `financial_domain` y `shared_core` dependan de `flutter` y que una app dependa de otra.
+- **iOS:** validación local DIFERIDA por decisión arquitectónica (Aprobación 9 de 001, falta de espacio en disco); no
+  probado. Android y Web compilan en el job `flutter`.
+
+## Enmiendas
+
+### Enmienda 1 (2026-11-23) — quinto paquete `app_shell`
+
+- **Origen:** hallazgo C2 de T092 (Constitución IX: código idéntico de arranque en las tres apps). Aprobación 11 de
+  `specs/001-platform-foundation/approvals.md`.
+- **Cambio:** se añade `flutter/packages/app_shell`, capa de **composición** (no un dominio): identidad de la app,
+  providers Riverpod de configuración, cliente y compatibilidad, traducción a estados de arranque, shell y página de
+  inicio. Depende solo de `shared_core`, `api_client` y `design_system`. Cada app depende de `app_shell` y conserva su
+  `main.dart` e identidad. El diagrama de la Decisión se lee con estas aristas adicionales:
+
+```mermaid
+flowchart TD
+  admin[admin_web] --> shell[app_shell]
+  col[collector_mobile] --> shell
+  cli[client_mobile] --> shell
+  shell --> api[api_client]
+  shell --> ds[design_system]
+  shell --> sc[shared_core]
+```
+
+- **Sin cambios:** los cuatro paquetes fundamentales y su propósito; la condición D-ARC-03; `financial_domain` y
+  `shared_core` siguen en Dart puro; el HTTP sigue solo en `api_client` (ahora verificado por `check_deps.dart`).
 
 ## Revisión
 

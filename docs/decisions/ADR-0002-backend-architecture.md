@@ -1,9 +1,12 @@
 # ADR-0002: Backend — NestJS monolito modular con pnpm workspaces
 
-- **Estado:** Propuesto
+- **Estado:** Aceptado con condiciones (2026-11-22, responsable del proyecto). C2-1 y C2-3 documentados en este ADR;
+  **C2-2 (propiedad de tablas, D-ARC-07) debe resolverse antes de 002**. Enmienda 1 (2026-11-22): la API pública de
+  un módulo es su `index.ts`. Enmienda 2 (2026-11-22): aclaración de C2-1 sobre dónde viven el contexto y la
+  transacción (ver §Enmiendas).
 - **Fecha:** 2026-11-22
 - **Decisores:** Responsable técnico
-- **Relacionado:** Constitución VIII (Clean Architecture), IX (Modularidad); ADR-0004, ADR-0005; D-ARC-04
+- **Relacionado:** Constitución VIII (Clean Architecture), IX (Modularidad); ADR-0004, ADR-0005; D-ARC-04, D-ARC-07
 
 ## Contexto
 
@@ -31,7 +34,7 @@ préstamo → recibo), aislamiento multi-tenant y alta trazabilidad. El equipo e
 
 ## Decisión
 
-- **Monolito modular NestJS** sobre **Node.js 24 LTS** y **TypeScript `strict`**.
+- **Monolito modular NestJS** sobre **Node.js 26 LTS** y **TypeScript `strict`**.
 - **pnpm workspaces** sin Nx ni Turborepo. Raíz con `pnpm-workspace.yaml` que incluye `backend` (y `tooling/*` si
   aparece). pnpm se activa con `corepack` (oficial de Node).
 - **Redis no se incluye en la iteración 1.** Colas/jobs y outbox de eventos sobre PostgreSQL (tabla outbox o pg-boss).
@@ -40,8 +43,8 @@ préstamo → recibo), aislamiento multi-tenant y alta trazabilidad. El equipo e
 ### Módulos (límites de dominio)
 
 `identity`, `tenancy`, `customers`, `products`, `loans` (originación + servicing), `payments`, `savings`, `collateral`,
-`ledger`, `collection` (operación de campo, rutas), `sync`, `receipts`, `cash-reconciliation`, `reporting`, `audit`,
-`notifications`, `platform-admin`.
+`ledger`, `collection` (operación de campo, rutas), `sync`, `receipts`, `cash-reconciliation`, `reporting`, `audit`
+(solo consulta; ver *Auditoría*), `notifications`, `platform-admin`. Los módulos se crean cuando una spec los requiere.
 
 Cada módulo:
 
@@ -68,6 +71,61 @@ Reglas:
   (p. ej. `payments` → `ledger`); eventos internos (outbox) para efectos secundarios (notificaciones, reportes).
 - El módulo `platform-admin` es el único con operaciones cross-tenant y usa un rol de base de datos distinto.
 
+### Propagación transaccional entre módulos (C2-1)
+
+- Un caso de uso abre **una** transacción con `withTenant` (ADR-0004). El contexto de la solicitud (tenant, actor,
+  correlación) se guarda en CLS (nestjs-cls); la transacción activa y su cliente protegido, en un `AsyncLocalStorage`
+  privado de `common/tenant-context` (enmienda 2). Ese cliente es el único acceso a datos de los repositorios.
+- Los servicios de la API pública (`index.ts`, enmienda 1) **no abren transacciones propias**: participan en la del llamador. Si se invocan sin
+  transacción activa, la abren mediante `withTenant`.
+- `withTenant` anidado:
+
+| Situación | Comportamiento |
+|---|---|
+| Transacción activa con el mismo tenant | Reutiliza la transacción: sin transacción nueva ni *savepoint* |
+| Transacción activa con otro tenant | Error `TenantContextMismatch` y rollback de toda la transacción |
+| Sin transacción activa | Abre una nueva |
+| Excepción en un callback anidado | Se propaga y revierte la transacción completa; no hay rollback parcial en v1 |
+
+- Implementación: `@nestjs-cls/transactional` 4.x con `@nestjs-cls/transactional-adapter-prisma` 2.x (existencia y
+  compatibilidad con nestjs-cls 7 y Prisma verificadas en npm el 2026-11-22) o un equivalente propio en
+  `common/tenant-context`. Se elige y verifica en el spike (criterio S5 de ADR-0004) y se registra en research R-04 de 001.
+- Ninguna llamada HTTP externa dentro de la transacción; los efectos secundarios van por outbox.
+
+### Propiedad de tablas (C2-2) — decisión D-ARC-07, antes de 002
+
+La Constitución IX prohíbe que un módulo acceda a tablas de otro; dependency-cruiser solo controla *imports* y no lo
+impide con un único cliente Prisma. Mecanismo propuesto (pendiente de aprobación):
+
+1. Manifiesto `backend/db/table-ownership.json` (tabla → módulo propietario). Un verificador de catálogo, junto a
+   `db:check-rls`, falla si una tabla del esquema `kuota` no tiene exactamente un propietario.
+2. Modelos Prisma agrupados por módulo (esquema multiarchivo `prisma/schema/<módulo>.prisma`; soporte a verificar en la
+   versión fijada) y regla de lint: en `modules/<m>/infrastructure/**` solo se accede a modelos de `<m>`. El SQL crudo
+   vive en archivos por módulo y un script rechaza referencias a tablas de otros propietarios.
+3. Los datos de otro módulo solo se obtienen por su API pública (`index.ts`, enmienda 1).
+
+Alternativa más fuerte, no recomendada para v1: un esquema PostgreSQL y un rol por módulo con `SET LOCAL ROLE` en cada
+llamada. Aísla en la base de datos, pero complica las transacciones entre módulos y multiplica los permisos.
+Mientras D-ARC-07 esté pendiente, 001 solo crea tablas de `common` (`idempotency_keys`, `audit_events`) y del módulo
+técnico `dev-probe`.
+
+### Proceso worker y rol `kuota_worker` (C2-3)
+
+- Proceso `main.worker.ts` del mismo paquete (`docs/architecture/c4-containers.md`). Responsabilidades: publicar el
+  outbox, jobs programados (reconciliación del ledger, cierres de ciclo, devengos si se aprueban, purga de
+  idempotencias) y envío de OTP y push.
+- Rol `kuota_worker` con credencial propia: los mismos privilegios que `kuota_app` sobre tablas de tenant (sujeto a RLS,
+  sin `BYPASSRLS`) más DML en las tablas de cola y outbox. Cada job ejecuta en `withTenant` con el `tenant_id` de su
+  registro. Para recorrer tenants usa una función `SECURITY DEFINER` que solo devuelve IDs de tenants activos.
+- No existe en 001 (research R-16: sin cola). Se crea con la primera feature que introduzca jobs.
+
+### Auditoría: mecanismo frente a consulta
+
+- `common/audit`: mecanismo transversal (`AuditService.record()` y tabla `audit_events`, propiedad de `common`), que
+  escribe en la misma transacción del caso de uso (implementado en 001).
+- Módulo `audit` (feature 015): casos de uso de consulta y exportación, de solo lectura, a través de la API pública de
+  `common/audit`. No escribe ni redefine la tabla.
+
 ## Consecuencias
 
 - **Positivas:** transacciones ACID entre módulos sin sagas; un despliegue; refactor sencillo de límites mientras el
@@ -80,6 +138,67 @@ Reglas:
 
 - Lint de dependencias activo y bloqueante desde la feature 001.
 - Tiempo de CI del backend medido en cada PR.
+
+## Enmiendas
+
+### Enmienda 1 (2026-11-22) — nombre del punto de entrada público de un módulo
+
+- **Decisión original:** este ADR llamaba `public-api.ts` al único archivo de un módulo que otros módulos pueden
+  importar (§Propagación transaccional, C2-1, y regla 3 de límites).
+- **Enmienda:** ese archivo es **`index.ts`**. Aprobada por el responsable del proyecto (instrucción de revisión de P2 y
+  US4 backend, 2026-11-22), tras proponerla en G7a de 001.
+- **Justificación:** es la convención que dependency-cruiser aplica desde T010 (`modulos-solo-api-publica`); mantener
+  dos nombres obligaba a sostener dos convenciones. Compatible con la Constitución IX, que exige interfaces públicas sin
+  fijar el nombre del archivo.
+- **Controles asociados:** un módulo solo importa el `index.ts` de otro; un módulo no importa su propio `index.ts`
+  (evita ciclos por el barrel); sin ciclos. Las tres reglas tienen pruebas que las disparan
+  (`backend/test/unit/dependency-rules.spec.ts`).
+- **Alcance:** solo el nombre del archivo. No cambia C2-1, C2-3 ni el resto de condiciones. **C2-2 / D-ARC-07 sigue
+  pendiente y debe resolverse antes de 002.**
+- **Documentos alineados:** `docs/architecture/backend-architecture.md`, `docs/architecture/c4-components.md`.
+
+### Enmienda 2 (2026-11-22) — aclaración de C2-1: contexto en CLS, propiedad transaccional en ALS privado
+
+- **Texto original de C2-1:** "El cliente transaccional se guarda en CLS (nestjs-cls) y es el único acceso a datos de
+  los repositorios", con la implementación prevista en `@nestjs-cls/transactional` "o un equivalente propio en
+  `common/tenant-context`".
+- **Aclaración:**
+  1. **CLS** guarda el contexto de negocio de la solicitud: tenant, actor, tipo y rol de actor, y correlación. Es la
+     única fuente autorizada de ese contexto, y solo lo escribe `common/tenant-context` (T038).
+  2. Un **`AsyncLocalStorage` privado** de `TenantPrismaService` en `common/tenant-context` guarda la transacción
+     activa, su vínculo de propiedad y el cliente transaccional protegido. No es accesible desde fuera del servicio.
+  3. Las operaciones de base de datos de negocio se obtienen **solo** mediante `withTenant`: el cliente que recibe el
+     callback o el que devuelve `transaction()` dentro de él.
+  4. El cliente transaccional **no puede usarse fuera de la operación propietaria**. Antes de cada ejecución se
+     comprueban la misma cadena asíncrona de `withTenant`, que la transacción esté abierta y dentro de su plazo, y que
+     coincidan el tenant y el actor. Una violación falla de forma cerrada y revierte la transacción.
+  5. `withTenant` anidado con el mismo tenant y en la misma operación **reutiliza** la transacción y el cliente
+     aprobados (tabla de anidamiento sin cambios).
+  6. El `PrismaClient` global no se expone a los repositorios funcionales: es un campo privado del servicio, y el lint
+     y dependency-cruiser prohíben importar el cliente generado fuera de `common/tenant-context`.
+- **Justificación:** el hardening de T039 contra el riesgo R3 de P2 (`docs/security/p2-tenant-context-risk-assessment.md`,
+  §8; commits `1f6057e`, `d19bb14`) movió la propiedad de la transacción del CLS a un ALS privado. Con una clave en el
+  CLS, cualquier código puede leer el almacén completo (`cls.get()`) y sustituir el vínculo. Es el mismo mecanismo en
+  que se basa nestjs-cls y encaja en el "equivalente propio" que C2-1 ya admitía. Aprobada por el responsable del
+  proyecto (instrucción de G7b, 2026-11-22).
+- **Alcance:** solo la redacción de dónde viven el contexto y la transacción. **La intención de C2-1 no cambia:** una
+  transacción por caso de uso, servicios públicos que participan en la del llamador y la misma tabla de anidamiento.
+  No cambia C2-2, C2-3 ni otras decisiones. **P2 (ADR-0004) sigue parcial.**
+- **Documentos alineados:** `docs/architecture/backend-architecture.md`.
+
+## Verificación tras la implementación de 001 (2026-11-23, T090)
+
+Registro del estado real; **no reaprueba** este ADR ni cambia su estado (*Aceptado con condiciones*).
+
+- **C2-1 verificado** por el criterio S5 del spike T014 (ADR-0004, §Resultado del spike: anidamiento con el mismo tenant
+  reutiliza la transacción; con otro tenant, error y rollback total) y, sobre la implementación definitiva, por
+  `backend/test/integration/tenant-prisma.spec.ts` y `tenant-transaction-ownership.spec.ts`.
+- **C2-2 (D-ARC-07) sigue PENDIENTE.** No existe manifiesto de propiedad de tablas ni verificador. Debe resolverse antes
+  de la primera tabla de negocio (002), como exige este ADR. 001 solo creó tablas de `common` y la tabla técnica de
+  `dev-probe`.
+- **Lint de dependencias activo y bloqueante** (dependency-cruiser en el job `backend`; T087 demuestra que un import de
+  framework en `domain/` lo hace fallar).
+- **Tiempo de CI del backend:** medido solo en local; GitHub Actions no se ha ejecutado (T052).
 
 ## Revisión
 

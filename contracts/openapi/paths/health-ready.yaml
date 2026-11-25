@@ -1,0 +1,25 @@
+# Contrato fuente de Kuota Core v1 — path /health/ready. Editar aquí; los bundles son derivados (T022, R-13).
+get:
+  tags:
+  - health
+  operationId: getReadiness
+  summary: Listo para recibir tráfico (verifica dependencias).
+  description: 'Público (excepción registrada). Solo devuelve el estado agregado y `up`/`down` por dependencia lógica; nunca
+
+    hosts, puertos, versiones ni mensajes de error (el detalle del fallo va solo al log).
+
+    '
+  security: []
+  responses:
+    '200':
+      description: Listo.
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/ReadinessStatus.yaml
+    '503':
+      description: No listo; indica qué dependencia lógica está caída.
+      content:
+        application/json:
+          schema:
+            $ref: ../schemas/ReadinessStatus.yaml

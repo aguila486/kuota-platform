@@ -1,0 +1,76 @@
+openapi: 3.1.0
+info:
+  title: Fixture
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Kuota-Proprietary
+servers:
+- url: https://api.example.org
+security: []
+tags:
+- name: things
+  description: Recurso de prueba.
+paths:
+  /v1/things:
+    post:
+      tags:
+      - things
+      operationId: createThing
+      summary: Crea un recurso.
+      x-kuota-idempotent: true
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Thing'
+      responses:
+        '201':
+          description: Creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Thing'
+        '400':
+          description: Inválido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  schemas:
+    Money:
+      type: object
+      required:
+      - amount_minor
+      - currency
+      properties:
+        amount_minor:
+          type: string
+        currency:
+          type: string
+    Problem:
+      type: object
+      required:
+      - code
+      properties:
+        code:
+          type: string
+    Thing:
+      type: object
+      properties:
+        label:
+          type: strng
+        amount:
+          $ref: '#/components/schemas/Money'
+        refund_amount:
+          oneOf:
+          - $ref: '#/components/schemas/Money'
+          - type: 'null'

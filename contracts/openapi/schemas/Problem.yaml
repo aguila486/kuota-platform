@@ -1,0 +1,50 @@
+# Contrato fuente de Kuota Core v1 — schema Problem. Editar aquí; los bundles son derivados (T022, R-13).
+type: object
+description: RFC 9457 Problem Details con extensiones Kuota.
+required:
+- type
+- title
+- status
+- code
+- correlation_id
+properties:
+  type:
+    type: string
+    format: uri-reference
+  title:
+    type: string
+  status:
+    type: integer
+    minimum: 400
+    maximum: 599
+  detail:
+    type: string
+  instance:
+    type: string
+  code:
+    type: string
+    description: Código estable legible por máquina.
+    examples:
+    - validation-error
+    - tenant-context-required
+    - not-found
+    - idempotency-key-reused
+    - idempotency-request-in-progress
+    - version-conflict
+    - app-version-unsupported
+    - internal-error
+  correlation_id:
+    type: string
+    format: uuid
+  errors:
+    type: array
+    items:
+      type: object
+      required:
+      - field
+      - message
+      properties:
+        field:
+          type: string
+        message:
+          type: string

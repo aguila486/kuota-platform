@@ -1,0 +1,11 @@
+{
+  "Exclude": [
+    "^\\.claude/",
+    "^\\.specify/(extensions|integrations|scripts|templates|workflows)/",
+    "^\\.specify/(extensions\\.yml|feature\\.json|init-options\\.json|integration\\.json)$",
+    "^pnpm-lock\\.yaml$"
+  ],
+  "Disable": {
+    "IndentSize": true
+  }
+}

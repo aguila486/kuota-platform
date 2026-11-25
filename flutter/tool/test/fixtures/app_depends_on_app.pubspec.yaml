@@ -1,0 +1,17 @@
+# pubspec DEFECTUOSO de referencia (T084; US7-4; FR-033). NO es un miembro del workspace: el nombre de archivo no es
+# `pubspec.yaml`, así que pub y el analizador lo ignoran. check_deps_test.dart lo copia como pubspec de una app en un
+# workspace temporal y exige que tool/check_deps.dart falle.
+#
+# Defecto: la app de cobradores depende directamente de la app de clientes (las apps solo comparten vía paquetes).
+name: collector_mobile
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  client_mobile:
+    path: ../client_mobile
+  shared_core:
+    path: ../../packages/shared_core

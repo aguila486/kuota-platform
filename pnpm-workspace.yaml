@@ -1,0 +1,28 @@
+# Workspace TypeScript de Kuota (ADR-0002): pnpm workspaces sin Nx ni Turborepo.
+packages:
+  - backend
+
+# Falla la instalación si Node o pnpm no cumplen `engines` (FR-003).
+engineStrict: true
+
+# Scripts de instalación de dependencias: denegados explícitamente (política por defecto de pnpm 12).
+# - @swc/core: el binario nativo llega como dependencia opcional por plataforma; su postinstall no es necesario.
+# - ssh2, cpu-features: aceleradores nativos opcionales de Testcontainers (docker-modem); tienen respaldo en JS.
+# - protobufjs: sin script necesario para su uso en Testcontainers.
+# Permitir un build requiere justificarlo en research.md de la feature.
+# - prisma (preinstall) y @prisma/engines (postinstall: descarga el binario schema-engine que usa `prisma migrate`):
+#   permitidos porque Prisma es el ORM aprobado con condiciones (ADR-0004, condición P8). Ningún otro script.
+# Overrides de seguridad (cada uno con decisión registrada en docs/security/; se retiran cuando el consumidor lo resuelva).
+# - effect: GHSA-7589-6fvf-x4pw / CVE-2026-121707 (ReDoS en Schema.TemplateLiteral, afecta <3.22.1). @prisma/config
+#   7.10.1 fija effect 3.20.0 exacto y no hay Prisma 7.x estable posterior. Limitado a ese consumidor y a la versión
+#   corregida que el propio Prisma adopta en 7.11.0-dev. Decisión: docs/security/SEC-2026-001-effect-ghsa-7589.md.
+overrides:
+  '@prisma/config>effect': 3.22.1
+
+allowBuilds:
+  '@prisma/engines': true
+  prisma: true
+  '@swc/core': false
+  cpu-features: false
+  protobufjs: false
+  ssh2: false

@@ -579,3 +579,38 @@ Consecuencias que se asumen:
 - Sin licencia, el código conserva todos los derechos reservados; la licencia es una decisión pendiente.
 - El CI de un repositorio público no consume minutos del plan.
 - R1–R9 siguen necesitando autorización expresa.
+
+## Registro 2026-11-25 (9) — Publicación R1–R6, primer CI real y tres defectos de portabilidad
+
+Autorización del responsable: «Publicación controlada en GitHub de 001» (R1, R2, R4, R5, R6; sin merge ni otras ramas),
+«Autorizo cerrar y reabrir el PR #1 para disparar el CI» y «Autorizo corregir los tres defectos de portabilidad y
+publicarlos en el PR».
+
+Estado verificado por API (solo lectura) antes de publicar las correcciones:
+
+| Paso | Hecho |
+|---|---|
+| R1 | `aguila486/kuota-platform` creado **público** (2026-11-25T07:44:04Z); rama por defecto `main` |
+| R2 | `main` publicada (`b63f9a4`) |
+| R4 | Protección de `main`: check obligatorio `CI: resultado` (strict), `enforce_admins`, historial lineal, resolución de conversaciones, 0 aprobaciones requeridas (mantenedor único), sin force push ni borrado |
+| R5 | Rama `feature/001-platform-foundation-baseline` publicada en `1d9914e` (sin protección) |
+| R6 | PR #1 (`feature/001-platform-foundation-baseline` → `main`) abierto 07:45:37Z; el CI no se disparó y, con autorización, se cerró y reabrió |
+
+Ajustes del repositorio observados y **no modificados**: merge commit deshabilitado, squash y rebase habilitados,
+borrado de la rama al fusionar. El método de fusión («Rebase and merge») sigue pendiente de decisión del responsable.
+
+**Primer CI real** (run `45572631758`, `pull_request`, `1d9914e`): **failure**. `changes` y `flutter` en verde;
+`general`, `contracts` y `backend` fallaron por tres defectos de portabilidad a Linux (no de producto). T052 no se cierra.
+
+| Tarea | Defecto | Causa confirmada (reproducida en `node:26.13.1-bookworm` antes del cambio) | Commit |
+|---|---|---|---|
+| T107 | `doctor.test.sh` «Docker ausente» → exit 0 | El PATH de la prueba incluía `/usr/bin`, que en el runner contiene docker real | `fc8ef05` |
+| T023 | `lint-rules.test.sh`: 6 negativos «fallidos» | Con `CI` y `GITHUB_ACTIONS`, Redocly colorea el nombre de la regla (ANSI) y el texto esperado no coincide; el lint sí rechazaba (exit 1) | `1e9003d` |
+| T025 (y T096) | `main-process.spec.ts`: 2/758 con error interno de Node | `nest build` (`deleteOutDir`) en dos suites paralelas borraba el `dist/main.js` de la otra. La hipótesis previa (escritura síncrona de logs) era errónea | `c504fb6` |
+
+Sin cambios de código de producción, `nest-cli.json`, `vitest.config.ts`, workflow ni protección.
+
+Regresión local completa sobre `c504fb6` (macOS, Node 26.13.1): `general` 0, `contracts` 0, `backend` 0 (758/758),
+`flutter` 0, `prove-gates` 0. Único OMITIDO: oasdiff sin baseline en `main` (pendiente conocido; **no es PASS**).
+
+Siguiente paso autorizado: publicar solo esta rama en el PR #1 y esperar `CI: resultado`. Sin merge.
